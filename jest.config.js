@@ -11,6 +11,7 @@ module.exports = {
     '<rootDir>/packages/platform-registry/jest.config.js',
     '<rootDir>/packages/procurement/jest.config.js',
     '<rootDir>/packages/proxy/jest.config.js',
+    '<rootDir>/packages/scraping/jest.config.js',
     '<rootDir>/packages/shared/jest.config.js',
     '<rootDir>/packages/validation/jest.config.js',
     '<rootDir>/packages/whatsapp-infra/jest.config.js',
