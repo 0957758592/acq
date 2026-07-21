@@ -51,3 +51,13 @@ export {
   TELEGRAM_SUPPORTED_ACTIONS
 } from './telegram/ui-flows.js';
 export { telegramAdapter } from './telegram/adapter.js';
+export { anyTextPresent, runConfirmedAction } from './shared/confirmed-action.js';
+export {
+  DISCORD_PACKAGE,
+  DISCORD_HOME_TEXTS,
+  DISCORD_BAN_TEXTS,
+  DISCORD_JOIN_TEXTS,
+  DISCORD_DISMISS_TEXTS
+} from './discord/constants.js';
+export { checkDiscordState, runDiscordAction, DISCORD_SUPPORTED_ACTIONS } from './discord/ui-flows.js';
+export { discordAdapter } from './discord/adapter.js';

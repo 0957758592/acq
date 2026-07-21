@@ -5,9 +5,9 @@
 // FLOW and ban/confirm classification against a fake controller with canned XML
 // — NOT that any given label is correct on a real device. Re-capture the real
 // UI and reconcile constants.js before trusting these flows in production.
-import { findElement, getAllText, parseUIDump } from '@acq/device-control';
+import { parseUIDump } from '@acq/device-control';
 
-import { createHumanActor } from '../human-actor.js';
+import { anyTextPresent, runConfirmedAction } from '../shared/confirmed-action.js';
 import {
   TELEGRAM_BAN_TEXTS,
   TELEGRAM_CHECKPOINT_TEXTS,
@@ -31,20 +31,11 @@ class TelegramFlowError extends Error {
   }
 }
 
-async function elements(controller) {
-  return parseUIDump(await controller.getUIDump());
-}
-
-function anyTextPresent(nodes, texts) {
-  const haystack = getAllText(nodes).join('\n').toLowerCase();
-  return texts.some((t) => haystack.includes(String(t).toLowerCase()));
-}
-
 // Classify the current screen into a probe state (maps to engine-domain via the
 // registry stateVocabulary: logged_in->online, banned->banned,
 // checkpoint->checkpointed, logged_out->logged_out).
 export async function checkTelegramState(controller) {
-  const nodes = await elements(controller);
+  const nodes = parseUIDump(await controller.getUIDump());
   if (anyTextPresent(nodes, TELEGRAM_BAN_TEXTS)) return 'banned';
   if (anyTextPresent(nodes, TELEGRAM_CHECKPOINT_TEXTS)) return 'checkpoint';
   if (anyTextPresent(nodes, TELEGRAM_HOME_TEXTS)) return 'logged_in';
@@ -65,37 +56,6 @@ export async function bringTelegramOnline(controller, { sessionRef } = {}) {
   );
 }
 
-async function dismissPopups(controller, actor, rounds = 2) {
-  for (let i = 0; i < rounds; i += 1) {
-    const found = findElement(await elements(controller), ...TELEGRAM_DISMISS_TEXTS);
-    if (!found) break;
-    await actor.tapElement(found, { afterMs: 500 });
-  }
-}
-
-// Shared confirm-by-fact action runner (DRY across join/report/dm/view). Taps
-// the action control, then verifies a confirmation signal is present. Detects a
-// mid-flow ban and returns it instead of a false success. Success is claimed
-// ONLY on a confirmation signal — never a blind tap (TZ §9.5).
-async function runConfirmedAction(controller, { triggerTexts, confirmTexts, actor }) {
-  const activeActor = actor || createHumanActor({ controller });
-  await dismissPopups(controller, activeActor);
-
-  const preNodes = await elements(controller);
-  if (anyTextPresent(preNodes, TELEGRAM_BAN_TEXTS)) return { ok: false, banned: true };
-  if (anyTextPresent(preNodes, TELEGRAM_CHECKPOINT_TEXTS)) return { ok: false, checkpointed: true };
-
-  if (triggerTexts) {
-    await activeActor.findAndTap(triggerTexts, { rounds: 3 });
-  }
-
-  const postNodes = await elements(controller);
-  if (anyTextPresent(postNodes, TELEGRAM_BAN_TEXTS)) return { ok: false, banned: true };
-  if (anyTextPresent(postNodes, confirmTexts)) return { ok: true };
-
-  throw new TelegramFlowError('ACTION_NOT_CONFIRMED', 'no confirmation signal after action');
-}
-
 const ACTION_CONFIG = {
   join: { triggerTexts: TELEGRAM_JOIN_TEXTS, confirmTexts: TELEGRAM_JOIN_CONFIRM_TEXTS },
   report: { triggerTexts: TELEGRAM_REPORT_TEXTS, confirmTexts: TELEGRAM_REPORT_CONFIRM_TEXTS },
@@ -110,7 +70,13 @@ export async function runTelegramAction(controller, action, { actor } = {}) {
   if (!config) {
     throw new TelegramFlowError('ACTION_TYPE_UNSUPPORTED', `telegram does not support action '${action?.type}'`);
   }
-  return runConfirmedAction(controller, { ...config, actor });
+  return runConfirmedAction(controller, {
+    banTexts: TELEGRAM_BAN_TEXTS,
+    checkpointTexts: TELEGRAM_CHECKPOINT_TEXTS,
+    dismissTexts: TELEGRAM_DISMISS_TEXTS,
+    ...config,
+    actor
+  });
 }
 
 export { TelegramFlowError };
