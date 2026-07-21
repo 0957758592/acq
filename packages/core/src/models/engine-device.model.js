@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const PROVIDERS = ['vmos', 'duoplus'];
+const PROVIDERS = ['vmos', 'duoplus', 'geelark'];
 const DEVICE_STATUSES = ['provisioning', 'stopped', 'starting', 'running', 'unhealthy', 'retired'];
 
 const deviceRuntimeSchema = new mongoose.Schema(
