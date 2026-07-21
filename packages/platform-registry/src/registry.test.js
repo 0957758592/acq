@@ -32,8 +32,18 @@ describe('getPlatformCapabilities', () => {
 });
 
 describe('listPlatforms', () => {
-  test('includes whatsapp', () => {
-    expect(listPlatforms()).toContain('whatsapp');
+  test('includes the built-in platforms', () => {
+    expect(listPlatforms()).toEqual(expect.arrayContaining(['whatsapp', 'telegram']));
+  });
+});
+
+describe('built-in telegram descriptor', () => {
+  test('is registered with the expected capabilities', () => {
+    const caps = getPlatformCapabilities('telegram');
+    expect(caps.appPackage).toBe('org.telegram.messenger');
+    expect(caps.identifierVO).toBe('msisdn');
+    expect(caps.supportedActions).toEqual(expect.arrayContaining(['join', 'dm', 'report', 'view']));
+    expect(caps.scrapeTargets).toEqual(expect.arrayContaining(['channel', 'group', 'members']));
   });
 });
 
@@ -54,23 +64,24 @@ describe('resolveAppPackage', () => {
 });
 
 describe('registerPlatform (Open/Closed extension)', () => {
+  // A platform that is NOT a built-in, to exercise dynamic registration.
   const descriptor = {
-    platform: 'telegram',
+    platform: 'signal',
     accountKind: 'phone',
     identifierVO: 'msisdn',
-    appPackage: 'org.telegram.messenger',
-    appCatalogName: 'Telegram',
-    supportedActions: ['join', 'dm'],
+    appPackage: 'org.thoughtcrime.securesms',
+    appCatalogName: 'Signal',
+    supportedActions: ['dm'],
     onlineMethod: 'login',
     signupVia: 'phone',
     maxAccountsPerDevice: 1,
     stateVocabulary: { logged_in: 'online', banned: 'banned', logged_out: 'logged_out' },
-    scrapeTargets: ['channel', 'members']
+    scrapeTargets: ['members']
   };
 
   test('registers a new platform without touching existing ones', () => {
     registerPlatform(descriptor);
-    expect(getPlatformCapabilities('telegram').appPackage).toBe('org.telegram.messenger');
+    expect(getPlatformCapabilities('signal').appPackage).toBe('org.thoughtcrime.securesms');
     expect(getPlatformCapabilities('whatsapp').platform).toBe('whatsapp');
   });
 
