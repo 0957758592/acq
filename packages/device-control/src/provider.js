@@ -2,6 +2,8 @@ import { VmosClient } from './vmos-client.js';
 import { VmosDirectController } from './vmos-direct-controller.js';
 import { DuoplusClient, listFromDuoPlusResponse, resolveDuoPlusAppIds } from './duoplus-client.js';
 import { DuoplusDirectController } from './duoplus-direct-controller.js';
+import { GeeLarkClient } from './geelark-client.js';
+import { AdbClient } from './adb-client.js';
 import { DeviceControlError } from './errors.js';
 
 function listFromInstanceResponse(result = {}) {
@@ -198,6 +200,62 @@ export class DuoplusCloudPhoneProvider {
   }
 }
 
+export class GeeLarkCloudPhoneProvider {
+  constructor({ client }) {
+    if (!client) throw new DeviceControlError('GeeLark client is required', { code: 'PROVIDER_CONFIG' });
+    this.type = 'geelark';
+    this.client = client;
+    // GeeLark installs from its app catalog (AppVersionId) and is driven over
+    // network ADB. Catalog-name provisioning and proxy config are not yet wired
+    // (verify-by-fact response shapes), so those capabilities read false here.
+    this.capabilities = Object.freeze({ provisionApps: false, pushFileByUrl: false, tikTokTask: false });
+  }
+
+  listDevices(options) {
+    return this.client.listDevices(options);
+  }
+
+  describeInstance(providerDeviceId) {
+    return this.client.describeInstance(providerDeviceId);
+  }
+
+  async startDevice(providerDeviceId) {
+    const result = await this.client.startDevice(providerDeviceId);
+    return { success: true, result };
+  }
+
+  async stopDevice(providerDeviceId) {
+    const result = await this.client.stopDevice(providerDeviceId);
+    return { success: true, result };
+  }
+
+  getAdbConnection(providerDeviceId) {
+    return this.client.getAdbConnection(providerDeviceId);
+  }
+
+  installApp(providerDeviceId, appVersionId) {
+    return this.client.installApp(providerDeviceId, appVersionId);
+  }
+
+  // GeeLark is controlled via network ADB; the composition resolves the adb
+  // serial from getAdbConnection and passes it here.
+  createDirectController(providerDeviceId, { serial = '', adbPath } = {}) {
+    return new AdbClient({ serial, ...(adbPath ? { adbPath } : {}) });
+  }
+
+  screenshot(providerDeviceId) {
+    return this.client.screenshot(providerDeviceId);
+  }
+
+  // Proxy/SmartIP wiring for GeeLark is not confirmed against the live API —
+  // fail-safe verify-by-fact seam (never a silent guess).
+  setSmartIp() {
+    throw new DeviceControlError('GeeLark proxy/SmartIP wiring is unverified', {
+      code: 'GEELARK_SETSMARTIP_UNVERIFIED'
+    });
+  }
+}
+
 // Generalized DeviceProvider factory (TZ §5.1). Selects an adapter by `type`
 // and normalizes construction; new providers (+geelark, +matt-duo, emulators)
 // register here without touching callers (Open/Closed).
@@ -211,6 +269,12 @@ export function createDeviceProvider({ type = 'vmos', ...config } = {}) {
   if (type === 'duoplus') {
     return new DuoplusCloudPhoneProvider({
       client: new DuoplusClient(config)
+    });
+  }
+
+  if (type === 'geelark') {
+    return new GeeLarkCloudPhoneProvider({
+      client: new GeeLarkClient(config)
     });
   }
 

@@ -13,6 +13,7 @@ function stubProvider(overrides = {}) {
 
 const vmosCfg = { type: 'vmos', accessKey: 'ak', secretKey: 'sk', fetch: async () => ({}) };
 const duoplusCfg = { type: 'duoplus', apiKey: 'key', fetchImpl: async () => ({}) };
+const geelarkCfg = { type: 'geelark', appId: 'app', apiKey: 'key', fetchImpl: async () => ({}) };
 
 describe('DEVICE_PROVIDER_REQUIRED_METHODS', () => {
   test('declares the core port surface every adapter must implement', () => {
@@ -69,6 +70,12 @@ describe('createDeviceProvider (generalized factory)', () => {
   test('builds a duoplus provider that satisfies the contract', () => {
     const provider = createDeviceProvider(duoplusCfg);
     expect(provider.type).toBe('duoplus');
+    expect(() => assertDeviceProviderContract(provider)).not.toThrow();
+  });
+
+  test('builds a geelark provider that satisfies the contract', () => {
+    const provider = createDeviceProvider(geelarkCfg);
+    expect(provider.type).toBe('geelark');
     expect(() => assertDeviceProviderContract(provider)).not.toThrow();
   });
 

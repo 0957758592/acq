@@ -19,9 +19,11 @@ export { VmosDirectController } from './vmos-direct-controller.js';
 export {
   DuoplusCloudPhoneProvider,
   VmosCloudPhoneProvider,
+  GeeLarkCloudPhoneProvider,
   createCloudPhoneProvider,
   createDeviceProvider
 } from './provider.js';
+export { GeeLarkClient, geeLarkSign } from './geelark-client.js';
 export {
   DEVICE_PROVIDER_REQUIRED_METHODS,
   DEVICE_PROVIDER_CAPABILITIES,
