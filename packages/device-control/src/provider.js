@@ -278,6 +278,15 @@ export function createDeviceProvider({ type = 'vmos', ...config } = {}) {
     });
   }
 
+  if (type === 'matt-duo') {
+    // Known provider, unverified auth (TZ §5.8). Fail-safe: block construction
+    // with a coded seam until a real matt-duo cloud-phone auth is confirmed by
+    // fact — never guess endpoints/credentials in production.
+    throw new DeviceControlError('matt-duo cloud-phone auth is unverified', {
+      code: 'MATT_DUO_AUTH_UNVERIFIED'
+    });
+  }
+
   throw new DeviceControlError(`Unsupported device provider: ${type}`, {
     code: 'UNSUPPORTED_PROVIDER'
   });
