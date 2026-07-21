@@ -36,3 +36,18 @@ export {
 } from './whatsapp/constants.js';
 export { checkWhatsappState, reportTarget, bringWhatsappOnline, detectBanScreen } from './whatsapp/ui-flows.js';
 export { whatsappAdapter } from './whatsapp/adapter.js';
+export {
+  TELEGRAM_PACKAGE,
+  TELEGRAM_LAUNCHER_ACTIVITY,
+  TELEGRAM_HOME_TEXTS,
+  TELEGRAM_BAN_TEXTS,
+  TELEGRAM_JOIN_TEXTS,
+  TELEGRAM_DISMISS_TEXTS
+} from './telegram/constants.js';
+export {
+  checkTelegramState,
+  bringTelegramOnline,
+  runTelegramAction,
+  TELEGRAM_SUPPORTED_ACTIONS
+} from './telegram/ui-flows.js';
+export { telegramAdapter } from './telegram/adapter.js';
