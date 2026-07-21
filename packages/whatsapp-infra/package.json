@@ -21,6 +21,7 @@
   "dependencies": {
     "@acq/whatsapp": "0.1.0",
     "@acq/automation": "*",
+    "@acq/platform-registry": "*",
     "@acq/core": "*",
     "@acq/shared": "*",
     "@acq/config": "*",

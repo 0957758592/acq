@@ -70,11 +70,11 @@ describe('duoplusDeviceRegistrationAdapter', () => {
     expect(client.calls.installApp).toEqual([[['dev1'], 'team-wa']]);
   });
 
-  it('throws WHATSAPP_TEAM_APP_NOT_FOUND when no id is found anywhere', async () => {
+  it('throws DEVICE_APP_NOT_FOUND when no id is found anywhere', async () => {
     const client = fakeClient({ installed: [], teamApps: [] });
     const adapter = createDuoplusDeviceRegistrationAdapter({ client });
 
-    await expect(adapter.ensureReady(device)).rejects.toThrow('WHATSAPP_TEAM_APP_NOT_FOUND');
+    await expect(adapter.ensureReady(device)).rejects.toThrow('DEVICE_APP_NOT_FOUND');
     expect(client.calls.installApp).toHaveLength(0);
   });
 
@@ -100,5 +100,42 @@ describe('duoplusDeviceRegistrationAdapter', () => {
     // but no proxy call of any kind
     expect(client.calls.setSmartIp).toHaveLength(0);
     expect(client.calls.initProxy).toHaveLength(0);
+  });
+
+  it('resolves the app package from the platform registry, not a hardcoded com.whatsapp', async () => {
+    // Injected resolver stands in for @acq/platform-registry (DI, no global mutation).
+    const resolveAppPackage = (platform) => {
+      if (platform === 'telegram') return 'org.telegram.messenger';
+      throw new Error(`unexpected platform ${platform}`);
+    };
+    // Device already has Telegram installed under its registry package -> no install.
+    const client = fakeClient({ installed: [{ packageName: 'org.telegram.messenger' }] });
+    const adapter = createDuoplusDeviceRegistrationAdapter({ client, resolveAppPackage });
+
+    await adapter.ensureReady(device, 'telegram');
+
+    expect(client.calls.installApp).toHaveLength(0);
+  });
+
+  it('detects a not-installed app by the resolved package and installs it', async () => {
+    const resolveAppPackage = () => 'org.telegram.messenger';
+    const client = fakeClient({
+      installed: [{ packageName: 'com.whatsapp' }], // whatsapp present, telegram absent
+      teamApps: [{ packageName: 'org.telegram.messenger', appId: 'team-tg' }]
+    });
+    const adapter = createDuoplusDeviceRegistrationAdapter({ client, resolveAppPackage });
+
+    await adapter.ensureReady(device, 'telegram');
+
+    expect(client.calls.installApp).toEqual([[['dev1'], 'team-tg']]);
+  });
+
+  it('defaults to whatsapp when no platform is passed (backward compatible)', async () => {
+    const client = fakeClient({ installed: [{ packageName: 'com.whatsapp' }] });
+    const adapter = createDuoplusDeviceRegistrationAdapter({ client });
+
+    await adapter.ensureReady(device);
+
+    expect(client.calls.installApp).toHaveLength(0);
   });
 });
