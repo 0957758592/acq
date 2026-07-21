@@ -7,6 +7,8 @@ module.exports = {
     '<rootDir>/packages/device-control/jest.config.js',
     '<rootDir>/packages/integrations/jest.config.js',
     '<rootDir>/packages/logger/jest.config.js',
+    '<rootDir>/packages/platform-registry/jest.config.js',
+    '<rootDir>/packages/proxy/jest.config.js',
     '<rootDir>/packages/shared/jest.config.js',
     '<rootDir>/packages/validation/jest.config.js',
     '<rootDir>/packages/whatsapp-infra/jest.config.js',
