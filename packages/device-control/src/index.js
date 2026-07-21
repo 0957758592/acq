@@ -16,7 +16,17 @@ export {
 } from './duoplus-internal-client.js';
 export { VmosClient } from './vmos-client.js';
 export { VmosDirectController } from './vmos-direct-controller.js';
-export { DuoplusCloudPhoneProvider, VmosCloudPhoneProvider, createCloudPhoneProvider } from './provider.js';
+export {
+  DuoplusCloudPhoneProvider,
+  VmosCloudPhoneProvider,
+  createCloudPhoneProvider,
+  createDeviceProvider
+} from './provider.js';
+export {
+  DEVICE_PROVIDER_REQUIRED_METHODS,
+  DEVICE_PROVIDER_CAPABILITIES,
+  assertDeviceProviderContract
+} from './device-provider-contract.js';
 export { RtcTransport, DirectDeviceController } from './rtc-transport.js';
 export { DeviceControlError, toDeviceControlError } from './errors.js';
 export { delay, withTimeout } from './timing.js';

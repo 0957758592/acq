@@ -29,6 +29,10 @@ export class VmosCloudPhoneProvider {
     if (!client) throw new DeviceControlError('VMOS client is required', { code: 'PROVIDER_CONFIG' });
     this.type = 'vmos';
     this.client = client;
+    // VMOS ships files via pushFileByUrl and runs server-side RPA (createTKTask);
+    // native app provisioning (installApp/APK push) is not yet wired — the
+    // registration path uses pushFileByUrl until a verified VMOS install call lands.
+    this.capabilities = Object.freeze({ provisionApps: false, pushFileByUrl: true, tikTokTask: true });
   }
 
   listDevices() {
@@ -91,6 +95,9 @@ export class DuoplusCloudPhoneProvider {
     if (!client) throw new DeviceControlError('DuoPlus client is required', { code: 'PROVIDER_CONFIG' });
     this.type = 'duoplus';
     this.client = client;
+    // DuoPlus provisions from its hosted catalog (/app/install); it does not
+    // expose pushFileByUrl or direct task automation (those throw).
+    this.capabilities = Object.freeze({ provisionApps: true, pushFileByUrl: false, tikTokTask: false });
   }
 
   listDevices(options) {
@@ -191,7 +198,10 @@ export class DuoplusCloudPhoneProvider {
   }
 }
 
-export function createCloudPhoneProvider({ type = 'vmos', ...config } = {}) {
+// Generalized DeviceProvider factory (TZ §5.1). Selects an adapter by `type`
+// and normalizes construction; new providers (+geelark, +matt-duo, emulators)
+// register here without touching callers (Open/Closed).
+export function createDeviceProvider({ type = 'vmos', ...config } = {}) {
   if (type === 'vmos') {
     return new VmosCloudPhoneProvider({
       client: new VmosClient(config)
@@ -204,7 +214,10 @@ export function createCloudPhoneProvider({ type = 'vmos', ...config } = {}) {
     });
   }
 
-  throw new DeviceControlError(`Unsupported cloud phone provider: ${type}`, {
+  throw new DeviceControlError(`Unsupported device provider: ${type}`, {
     code: 'UNSUPPORTED_PROVIDER'
   });
 }
+
+// Backward-compatible alias — existing callers use createCloudPhoneProvider.
+export const createCloudPhoneProvider = createDeviceProvider;
