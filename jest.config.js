@@ -7,6 +7,7 @@ module.exports = {
     '<rootDir>/packages/device-control/jest.config.js',
     '<rootDir>/packages/engine-domain/jest.config.js',
     '<rootDir>/packages/integrations/jest.config.js',
+    '<rootDir>/packages/intelligence/jest.config.js',
     '<rootDir>/packages/logger/jest.config.js',
     '<rootDir>/packages/platform-registry/jest.config.js',
     '<rootDir>/packages/procurement/jest.config.js',
