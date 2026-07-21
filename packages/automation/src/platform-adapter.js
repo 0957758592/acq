@@ -4,6 +4,7 @@ import { whatsappAdapter } from './whatsapp/adapter.js';
 import { youtubeAdapter } from './youtube/adapter.js';
 import { telegramAdapter } from './telegram/adapter.js';
 import { discordAdapter } from './discord/adapter.js';
+import { facebookAdapter } from './facebook/adapter.js';
 
 const ADAPTERS = {
   instagram: instagramAdapter,
@@ -11,7 +12,8 @@ const ADAPTERS = {
   youtube: youtubeAdapter,
   whatsapp: whatsappAdapter,
   telegram: telegramAdapter,
-  discord: discordAdapter
+  discord: discordAdapter,
+  facebook: facebookAdapter
 };
 
 export function getPlatformAdapter(platform) {

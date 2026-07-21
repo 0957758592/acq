@@ -56,6 +56,15 @@ describe('built-in discord descriptor', () => {
   });
 });
 
+describe('built-in facebook descriptor', () => {
+  test('is registered with the expected capabilities', () => {
+    const caps = getPlatformCapabilities('facebook');
+    expect(caps.appPackage).toBe('com.facebook.katana');
+    expect(caps.supportedActions).toEqual(expect.arrayContaining(['post', 'join', 'report', 'like']));
+    expect(caps.scrapeTargets).toEqual(expect.arrayContaining(['page', 'group', 'friends']));
+  });
+});
+
 describe('isSupportedAction', () => {
   test('true for a declared action', () => {
     expect(isSupportedAction('whatsapp', 'report')).toBe(true);

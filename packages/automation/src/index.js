@@ -61,3 +61,6 @@ export {
 } from './discord/constants.js';
 export { checkDiscordState, runDiscordAction, DISCORD_SUPPORTED_ACTIONS } from './discord/ui-flows.js';
 export { discordAdapter } from './discord/adapter.js';
+export { FACEBOOK_PACKAGE, FACEBOOK_HOME_TEXTS, FACEBOOK_BAN_TEXTS } from './facebook/constants.js';
+export { checkFacebookState, runFacebookAction, FACEBOOK_SUPPORTED_ACTIONS } from './facebook/ui-flows.js';
+export { facebookAdapter } from './facebook/adapter.js';
