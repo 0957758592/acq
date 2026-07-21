@@ -1,47 +1,106 @@
-# @acq — Account-Lifecycle & Mass-Action Orchestrator
+# @acq — Universal Account & Device Lifecycle Platform
 
-Standalone, self-contained platform for **buying accounts across stores, provisioning them onto cloud devices, and running mass actions at scale** — controlled by an external AI brain over MCP, or via CLI / HTTP / npm.
+Self-contained platform that **buys (or generates) accounts across many shops, provisions them onto cloud-phone devices from many providers, keeps a healthy pool, and runs mass actions and scraping at scale** — centralized, modular, horizontally scalable, controlled by an AI brain over MCP, or via CLI / HTTP-API / npm.
 
-**Status:** **WhatsApp** (mass report) is fully implemented (335 tests green). **Telegram, Discord, TikTok, Instagram** are planned via the same buy → connect → queue → act lifecycle (per the WhatsApp specs + `docs/REQUIREM.md`).
+**Status:** **WhatsApp** (mass report) is fully implemented and is the reference vertical (335 tests green). The platform is being generalized along four independent axes; the full design is the foundational spec **`docs/TZ.md`** (local design doc, kept out of git by design).
 
-> Extracted from the `julio` monorepo as an independent repo (scope `@acq/*`), fully vendored — it runs with zero dependency on that monorepo.
+> `docs/` (the TZ, runbook, plans, REQUIREM) is intentionally **not tracked in git** — it is the working design corpus. This README is the tracked entry point.
 
-## What it does (WhatsApp today)
-Keeps a **pool** of ready accounts on **DuoPlus cloud phones** as per-device **queues**, brings them online under a device **lease**, monitors **health** (ban detection), **auto-replaces** banned and **auto-buys** new accounts, and executes **report campaigns** against targets. Self-healing, idempotent, observable. See [`WA_FEAT.md`](WA_FEAT.md) (feature overview, RU/EN) and [`docs/whatsapp-runbook.md`](docs/whatsapp-runbook.md) (full runbook + go-live).
+---
 
-## Structure
+## 🇬🇧 English
+
+### The four axes of universality
+Adding a value on any axis is a plugin — **no core changes** (Open/Closed):
+
+| Axis | Values (extensible) | Abstraction |
+|---|---|---|
+| **Platform** | whatsapp, telegram, discord, tiktok, instagram, facebook, gmail, youtube | `PlatformDriver` + `PlatformCapabilities` registry |
+| **Device provider** | duoplus, vmos, geelark, matt-duo | `DeviceProvider` + `Controller` |
+| **Shop** | dark.shopping, djekxa.ru, `<any URL>` | `PurchaseAdapter` (declarative `ShopAdapterSpec` + engine) |
+| **How to get an account** | purchase, on-device generation (gmail / google-auth) | `AcquisitionSource` (`purchase | generate`) |
+
+### What it does
+Keeps a **pool** of ready accounts, provisions **devices** (install the platform app + proxy/SmartIP + verify subscription), fills per-device **queues**, brings accounts **online** (session-import or login), **probes health**, **auto-replaces** banned and **auto-buys/generates** new ones, runs **action campaigns** (report / publish / warmup / follow / like / comment / join / dm) exactly-once, and **scrapes** data (groups, channels, followers, follows, likes, members, posts) via a hybrid `ScrapeProvider` (off-device headless browser + on-device + APIs). Self-healing, idempotent, observable, secure.
+
+### Architecture at a glance
+Clean Architecture + Hexagonal (Ports & Adapters) + tactical DDD, per `docs/REQUIREM.md`. The domain is pure and dependency-free; infrastructure implements ports; a `reconcile(snapshot) → intents` pure function drives idempotent jobs through RabbitMQ (+ DLQ, retry ledger, opt-lock, exactly-once). Every unknown external fact is a **verify-by-fact seam** — a fail-safe coded error, never a guess.
+
+```
+Presentation   apps/control-plane (MCP tools/resources · REST · CLI)
+Application     use-cases (acquire · enroll · createCampaign · runScrape …)
+Domain          aggregates · VOs · policies · reconcile() · events · PORTS
+Infrastructure  Mongo · RabbitMQ · Redis · DeviceProvider · PurchaseAdapter
+                · PlatformDriver · ScrapeProvider · SecretResolver · vault
+```
+
+### Package map (`@acq/*`, yarn workspaces, Node 20 ESM)
 ```
 packages/
-  whatsapp/          pure domain (state machine, reconciler, policies) — zero deps
-  whatsapp-infra/    adapters (Mongo repos, DLQ, dispatcher, event bus, procurement, device, automation)
-  core/              vendored engine infra (Mongo/Redis/RabbitMQ, job ledger, lease, models, auth)
-  device-control/    DuoPlus cloud-phone control
-  automation/        on-device UI flows (whatsapp + instagram/tiktok/youtube) + human-actor
-  integrations/      vendor HTTP clients (dark.shopping, …)
+  engine-domain*    generic domain (account state-machine, queue, pool, campaign/action, reconcile, ports)
+  engine-infra*     generic adapters (Mongo repos, DLQ, dispatcher, event bus)
+  platform-registry* PlatformCapabilities descriptors
+  core              engine infra (Mongo/Redis/RabbitMQ, job ledger, lease, models, auth)
+  device-control    DeviceProvider + Controller: duoplus, vmos, +geelark, +matt-duo (3 channels)
+  automation        PlatformDriver: whatsapp/ig/tiktok/yt +telegram/discord/facebook/gmail; human-actor
+  integrations      vendor HTTP clients (dark.shopping, djekxa, email-code, totp, llm, proxy)
+  procurement*      declarative purchase-adapter engine, approval, cookie sessions
+  scraping*         hybrid ScrapeProvider (browser / on-device / api)
+  account-gen*      on-device account generation (gmail / google-auth)
+  control*          generalized MCP surface + REST + CLI + RAG + RBAC
   config, logger, validation, humanizer, shared
 apps/
-  whatsapp/          the running process: orchestrator (cron + consumers) + MCP surface
+  engine*           reconciler (cron) + queue consumers, parameterized by active platforms
+  control-plane*    MCP (stdio+http) + REST API + CLI
+  scrape-worker*    scrape-queue consumers
+  whatsapp          current orchestrator (migrates into apps/engine as a platform module)
 ```
+`*` = to be built per the phased plan (`docs/TZ.md` §19). Everything else exists today.
 
-## Quickstart
+### Quickstart
 ```bash
 yarn install
-yarn test           # 335 tests, 9 projects — proves self-containment
+yarn test           # proves self-containment (currently 335 tests, 9 projects)
 cp .env.example .env && $EDITOR .env
-# run (two long-lived processes; Procfile-ready):
-yarn start:whatsapp   # orchestrator worker (cron reconciler + queue consumers + /health)
+yarn start:whatsapp   # orchestrator worker (cron reconciler + consumers + /health)
 yarn mcp:http         # MCP over HTTP (the brain connects here, bearer-authed)
-# per-connection stdio MCP:
-yarn mcp:stdio
+yarn mcp:stdio        # per-connection stdio MCP
 ```
 
-## How it's controlled — brain / AI / manual, one MCP surface
-- **Autonomous:** the cron reconciler + consumers run a continuous loop (buy, fill, bring-online, probe, replace, report) — no human needed.
-- **AI brain (Obsidian):** drives goals over **MCP** — tools like `pool.buy`, `device.enroll`, `campaign.create/pause/resume/stop`, `reconcile.now`; receives event notifications.
-- **Manual / CLI / HTTP / npm:** the same tools are callable from any MCP client; the packages are consumable as `@acq/*` npm workspaces; the MCP-HTTP surface is a plain bearer-authed HTTP endpoint. (A dedicated CLI is on the roadmap.)
+### How it's controlled — one facade, many surfaces
+Every operation is one application use-case exposed to all surfaces (no duplicated logic):
+- **AI brain (Obsidian) over MCP** — `pool.acquire`, `device.enroll`, `campaign.create`, `scrape.run`, `reconcile.now`, plus event notifications.
+- **CLI** on any server, **REST/HTTP API** (contract-first OpenAPI, `{data,error,meta}` envelope, versioned, idempotent), **npm** (import `@acq/*` and build your own composition), **RAG/AI** over read-models.
 
-## Go-live (WhatsApp)
-Before real production, capture the external "verify-by-fact" facts (dark.shopping delivery format + auth, WhatsApp on-device selectors, on-device session import, DuoPlus team-APK id) and set env/secrets — the full checklist is in [`docs/whatsapp-runbook.md`](docs/whatsapp-runbook.md). Every un-captured fact **fails safe** (a coded error / hard block), never a guess.
+### Roadmap (phases, full detail in `docs/TZ.md` §19)
+0 Extraction ✅ · 1 DeviceProvider generalization · 2 Domain generalization · 3 Declarative purchase + cookie sessions · 4 Telegram end-to-end · 5 Remaining platform drivers · 6 ScrapeProvider · 7 On-device account generation · 8 Control plane (CLI + REST + RAG) · 9 Hardening (observability, scale, compliance).
 
-## Roadmap
-Multi-platform account purchase (per-store adapters: REST API / login+cookie session / bearer token) → connect to devices → queue → act, all centralized/modular/scalable per `docs/REQUIREM.md`; brain(Obsidian)/MCP + CLI on multiple servers; consumable as npm / standalone / MCP / CLI / HTTP / API.
+---
+
+## 🇷🇺 Русский
+
+### Четыре оси универсальности
+Добавление значения по любой оси — плагин, **без правок ядра** (Open/Closed):
+
+| Ось | Значения (расширяемо) | Абстракция |
+|---|---|---|
+| **Платформа** | whatsapp, telegram, discord, tiktok, instagram, facebook, gmail, youtube | `PlatformDriver` + registry `PlatformCapabilities` |
+| **Провайдер устройств** | duoplus, vmos, geelark, matt-duo | `DeviceProvider` + `Controller` |
+| **Магазин** | dark.shopping, djekxa.ru, `<любой URL>` | `PurchaseAdapter` (декларативный `ShopAdapterSpec` + движок) |
+| **Способ получить аккаунт** | покупка, генерация на устройстве (gmail / google-auth) | `AcquisitionSource` (`purchase | generate`) |
+
+### Что делает
+Держит **пул** готовых аккаунтов, провижит **устройства** (ставит приложение платформы + прокси/SmartIP + верифицирует подписку), наполняет **очереди** на устройствах, выводит в **онлайн** (импорт сессии или логин), следит за **здоровьем**, **авто-заменяет** забаненные и **авто-докупает/генерирует** новые, исполняет **кампании действий** (report / publish / warmup / follow / like / comment / join / dm) exactly-once и **скрапит** данные (группы, каналы, подписчики, подписки, лайки, участники, посты) через гибридный `ScrapeProvider` (off-device браузер + on-device + API). Самовосстанавливается, идемпотентно, наблюдаемо, секьюрно.
+
+### Архитектура вкратце
+Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, по `docs/REQUIREM.md`. Домен чист и без зависимостей; инфраструктура реализует порты; чистая функция `reconcile(snapshot) → intents` гонит идемпотентные джобы через RabbitMQ (+ DLQ, retry-ledger, opt-lock, exactly-once). Каждый неизвестный внешний факт — **verify-by-fact-шов**: fail-safe кодированная ошибка, а не догадка.
+
+### Как управляется — один фасад, много поверхностей
+Каждая операция — один application use-case, экспонированный во все поверхности (без дублирования логики):
+- **ИИ-мозг (Obsidian) по MCP** — `pool.acquire`, `device.enroll`, `campaign.create`, `scrape.run`, `reconcile.now` + события.
+- **CLI** на любом сервере, **REST/HTTP API** (contract-first OpenAPI, envelope `{data,error,meta}`, версионирование, идемпотентность), **npm** (импорт `@acq/*` и свой composition root), **RAG/ИИ** поверх read-моделей.
+
+### Запуск и roadmap
+Быстрый старт — см. блок Quickstart выше. Полный фундамент проекта — **`docs/TZ.md`** (супер-детальное ТЗ по всем фазам, локальный дизайн-документ вне гита). Фазы: 0 Экстракция ✅ · 1 DeviceProvider · 2 Обобщение домена · 3 Декларативные закупки + cookie-сессии · 4 Telegram end-to-end · 5 Остальные драйверы · 6 ScrapeProvider · 7 Генерация аккаунтов · 8 Control plane · 9 Hardening.
+
+> ⚠️ До реального прода нужно снять внешние факты «по факту» (форматы поставки/авторизации магазинов, on-device селекторы, импорт сессии, matt-duo auth) — все они fail-safe заблокированы кодированными ошибками. Каталог швов — `docs/TZ.md` §22.2.
