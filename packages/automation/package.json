@@ -1,0 +1,21 @@
+{
+  "name": "@acq/automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.config.js",
+    "lint": "eslint .",
+    "build": "node -e \"console.log('automation: no build step')\""
+  },
+  "dependencies": {
+    "@acq/device-control": "0.1.0",
+    "@acq/humanizer": "0.1.0",
+    "@acq/integrations": "0.1.0",
+    "@acq/whatsapp": "0.1.0"
+  }
+}

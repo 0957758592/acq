@@ -1,0 +1,35 @@
+{
+  "name": "@acq/whatsapp-infra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./models/*": "./src/models/*.model.js",
+    "./repositories/*": "./src/repositories/*.js",
+    "./messaging/*": "./src/messaging/*.js",
+    "./procurement/*": "./src/procurement/*.js",
+    "./device/*": "./src/device/*.js",
+    "./automation/*": "./src/automation/*.js"
+  },
+  "scripts": {
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.config.js",
+    "lint": "eslint .",
+    "build": "node -e \"console.log('whatsapp-infra: no build step')\""
+  },
+  "dependencies": {
+    "@acq/whatsapp": "0.1.0",
+    "@acq/automation": "*",
+    "@acq/core": "*",
+    "@acq/shared": "*",
+    "@acq/config": "*",
+    "@acq/logger": "0.1.0",
+    "mongoose": "^8.7.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "eslint": "^9.17.0",
+    "jest": "^29.7.0"
+  }
+}

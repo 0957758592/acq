@@ -1,0 +1,15 @@
+{
+  "name": "@acq/device-control",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.config.js",
+    "lint": "eslint .",
+    "build": "node -e \"console.log('device-control: no build step')\""
+  }
+}

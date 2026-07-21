@@ -1,0 +1,23 @@
+{
+  "name": "acq",
+  "private": true,
+  "packageManager": "yarn@1.22.22",
+  "engines": { "node": ">=18" },
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.config.js",
+    "lint": "eslint . && yarn workspaces run lint",
+    "build": "yarn workspaces run build",
+    "dev:whatsapp": "yarn workspace @acq/whatsapp-app dev",
+    "start:whatsapp": "yarn workspace @acq/whatsapp-app start",
+    "mcp:http": "yarn workspace @acq/whatsapp-app mcp:http",
+    "mcp:stdio": "yarn workspace @acq/whatsapp-app mcp:stdio"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^9.17.0",
+    "globals": "^15.13.0",
+    "jest": "^29.7.0"
+  }
+}

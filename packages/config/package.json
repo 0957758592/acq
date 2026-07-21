@@ -1,0 +1,19 @@
+{
+  "name": "@acq/config",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./env": "./src/load-env.js"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "build": "node -e \"console.log('config: no build step')\""
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
+

@@ -1,0 +1,20 @@
+{
+  "name": "@acq/integrations",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.config.js",
+    "build": "node -e \"console.log('integrations: no build step')\""
+  },
+  "dependencies": {
+    "@acq/whatsapp": "0.1.0",
+    "https-proxy-agent": "latest",
+    "socks-proxy-agent": "latest"
+  }
+}
