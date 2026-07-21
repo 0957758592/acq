@@ -9,6 +9,7 @@ module.exports = {
     '<rootDir>/packages/integrations/jest.config.js',
     '<rootDir>/packages/logger/jest.config.js',
     '<rootDir>/packages/platform-registry/jest.config.js',
+    '<rootDir>/packages/procurement/jest.config.js',
     '<rootDir>/packages/proxy/jest.config.js',
     '<rootDir>/packages/shared/jest.config.js',
     '<rootDir>/packages/validation/jest.config.js',
