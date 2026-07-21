@@ -1,6 +1,7 @@
 import { platformRegistryError } from './errors.js';
 import { whatsappCapabilities } from './descriptors/whatsapp.js';
 import { telegramCapabilities } from './descriptors/telegram.js';
+import { discordCapabilities } from './descriptors/discord.js';
 
 // Required fields every PlatformCapabilities descriptor must declare (TZ §3.6).
 const REQUIRED_FIELDS = [
@@ -71,3 +72,4 @@ export function resolveAppPackage(platform) {
 // Built-in descriptors registered at module load (single source of truth).
 registerPlatform(whatsappCapabilities);
 registerPlatform(telegramCapabilities);
+registerPlatform(discordCapabilities);

@@ -3,13 +3,15 @@ import { tiktokAdapter } from './tiktok/adapter.js';
 import { whatsappAdapter } from './whatsapp/adapter.js';
 import { youtubeAdapter } from './youtube/adapter.js';
 import { telegramAdapter } from './telegram/adapter.js';
+import { discordAdapter } from './discord/adapter.js';
 
 const ADAPTERS = {
   instagram: instagramAdapter,
   tiktok: tiktokAdapter,
   youtube: youtubeAdapter,
   whatsapp: whatsappAdapter,
-  telegram: telegramAdapter
+  telegram: telegramAdapter,
+  discord: discordAdapter
 };
 
 export function getPlatformAdapter(platform) {

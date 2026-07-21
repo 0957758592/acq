@@ -47,6 +47,15 @@ describe('built-in telegram descriptor', () => {
   });
 });
 
+describe('built-in discord descriptor', () => {
+  test('is registered with the expected capabilities', () => {
+    const caps = getPlatformCapabilities('discord');
+    expect(caps.appPackage).toBe('com.discord');
+    expect(caps.supportedActions).toEqual(expect.arrayContaining(['join', 'dm', 'report']));
+    expect(caps.scrapeTargets).toEqual(expect.arrayContaining(['server', 'channel', 'members']));
+  });
+});
+
 describe('isSupportedAction', () => {
   test('true for a declared action', () => {
     expect(isSupportedAction('whatsapp', 'report')).toBe(true);
