@@ -62,6 +62,7 @@ apps/
   engine*           reconciler (cron) + queue consumers, parameterized by active platforms
   control-plane*    MCP (stdio+http) + REST API + CLI
   scrape-worker*    scrape-queue consumers
+  dashboard*        operator control panel (feature-based SPA, WCAG/CSP) — REQUIREM §7
   whatsapp          current orchestrator (migrates into apps/engine as a platform module)
 ```
 `*` = to be built per the phased plan (`docs/TZ.md` §19). Everything else exists today.
@@ -83,7 +84,10 @@ Maximal set of management gateways (all over one facade):
 - **Sync APIs**: **REST/HTTP** (contract-first OpenAPI, `{data,error,meta}`, versioned, idempotent), **gRPC**, **GraphQL**.
 - **Realtime/streaming**: **WebSocket**, **SSE**, **Webhooks** (in+out), **event-stream** (Kafka/AMQP/Redis Streams).
 - **Local/embed**: **CLI** (multi-server), **npm/SDK**.
+- **UI**: operator **dashboard** (feature-based SPA, WCAG/CSP) — REQUIREM §7.
 - **Gateways/pipelines**: **API Gateway**, **iPaaS** (n8n/Zapier/Make), **cron**.
+
+Multi-tenant: every record carries a `tenantId` with per-tenant isolation, RBAC, and quotas.
 
 ### Roadmap (phases, full detail in `docs/TZ.md` §19)
 0 Extraction ✅ · 1 DeviceProvider generalization · 2 Domain generalization · 3 Declarative purchase + cookie sessions · 4 Telegram end-to-end · 5 Remaining platform drivers · 6 ScrapeProvider · 7 On-device account generation · 8 Control plane (CLI + REST + RAG) · 9 Hardening (observability, scale, compliance).
@@ -119,7 +123,10 @@ Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, 
 - **Синхронные API**: **REST/HTTP** (contract-first OpenAPI, envelope `{data,error,meta}`, версионирование, идемпотентность), **gRPC**, **GraphQL**.
 - **Реалтайм/стриминг**: **WebSocket**, **SSE**, **Webhooks** (in+out), **event-stream** (Kafka/AMQP/Redis Streams).
 - **Локальные/встраиваемые**: **CLI** (multi-server), **npm/SDK**.
+- **UI**: панель оператора — **dashboard** (feature-based SPA, WCAG/CSP) — REQUIREM §7.
 - **Шлюзы/пайплайны**: **API Gateway**, **iPaaS** (n8n/Zapier/Make), **cron**.
+
+Мультитенантность: каждая запись несёт `tenantId` с изоляцией, RBAC и квотами per-tenant.
 
 ### Запуск и roadmap
 Быстрый старт — см. блок Quickstart выше. Полный фундамент проекта — **`docs/TZ.md`** (супер-детальное ТЗ по всем фазам, локальный дизайн-документ вне гита). Фазы: 0 Экстракция ✅ · 1 DeviceProvider · 2 Обобщение домена · 3 Декларативные закупки + cookie-сессии · 4 Telegram end-to-end · 5 Остальные драйверы · 6 ScrapeProvider · 7 Генерация аккаунтов · 8 Control plane · 9 Hardening.
