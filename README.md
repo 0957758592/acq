@@ -19,9 +19,13 @@ Adding a value on any axis is a plugin — **no core changes** (Open/Closed):
 | **Device provider** | duoplus, vmos, geelark, matt-duo, redfinger, ugphone, morelogin, genymotion, emulators (ldplayer/mumu/bluestacks) & physical ADB farms — **+ any other** | `DeviceProvider` + `Controller` |
 | **Shop** | dark.shopping, djekxa.ru, accfarm, accsmarket, … — **+ any by URL** | `PurchaseAdapter` (declarative `ShopAdapterSpec` + engine) |
 | **How to get an account** | purchase, on-device generation (gmail / google-auth) | `AcquisitionSource` (`purchase | generate`) |
+| **Proxy provider** | vmos-dynamic, 922proxy, iproyal, brightdata, smartproxy, oxylabs — **+ any** | `ProxyProvider` |
+| **Verification provider** | sms-activate, 5sim, smshub, twilio, IMAP/temp-mail — **+ any** | `VerificationResourceProvider` |
+
+Cross-cutting over all axes: **AI is used maximally** — brain orchestration, shop-doc scan, content & persona generation, scoring, CAPTCHA assist, scrape parsing (all in the application layer, deterministically validated).
 
 ### What it does
-Keeps a **pool** of ready accounts, provisions **devices** (install the platform app + proxy/SmartIP + verify subscription), fills per-device **queues**, brings accounts **online** (session-import or login), **probes health**, **auto-replaces** banned and **auto-buys/generates** new ones, runs **action campaigns** (report / publish / warmup / follow / like / comment / join / dm) exactly-once, and **scrapes maximally** — groups, channels, members, followers, follows, likes, comments, commenters/likers, posts/reels/stories, hashtags, contacts — for **every** account type (WA/TG/IG/TikTok/Discord/FB/Gmail/YouTube) via a hybrid `ScrapeProvider` where a **headless-browser tier is first-class and primary** (playwright/puppeteer), complemented by anon-HTTP, on-device (UI-dump), and API tiers. Self-healing, idempotent, observable, secure.
+Keeps a **pool** of ready accounts, provisions **devices** (install the platform app + proxy/SmartIP + verify subscription), fills per-device **queues**, brings accounts **online** (session-import or login), **probes health**, **auto-replaces** banned and **auto-buys/generates** new ones, runs **action campaigns** (report / publish / warmup / follow / like / comment / join / dm) exactly-once, and **scrapes maximally** — groups, channels, members, followers, follows, likes, comments, commenters/likers, posts/reels/stories, hashtags, contacts — for **every** account type (WA/TG/IG/TikTok/Discord/FB/Gmail/YouTube) via a hybrid `ScrapeProvider` where a **headless-browser tier is first-class and primary** (playwright/puppeteer), complemented by anon-HTTP, on-device (UI-dump), and API tiers. Every account runs behind a **1:1 proxy** (residential/mobile, geo-consistent IP↔SIM↔GPS↔timezone), goes through **warmup** and per-account **action budgets**, with **anti-detect fingerprinting** and AI-generated **personas & content**. Self-healing, idempotent, observable, secure.
 
 ### Architecture at a glance
 Clean Architecture + Hexagonal (Ports & Adapters) + tactical DDD, per `docs/REQUIREM.md`. The domain is pure and dependency-free; infrastructure implements ports; a `reconcile(snapshot) → intents` pure function drives idempotent jobs through RabbitMQ (+ DLQ, retry ledger, opt-lock, exactly-once). Every unknown external fact is a **verify-by-fact seam** — a fail-safe coded error, never a guess.
@@ -46,8 +50,11 @@ packages/
   integrations      vendor HTTP clients (dark.shopping, djekxa, email-code, totp, llm, proxy)
   procurement*      declarative purchase-adapter engine, approval, cookie sessions
   scraping*         hybrid ScrapeProvider (browser / on-device / api)
-  account-gen*      on-device account generation (gmail / google-auth)
-  control*          generalized MCP surface + REST + CLI + RAG + RBAC
+  account-gen*      on-device account generation (gmail/google-auth), persona + verification providers
+  proxy*            ProxyProvider: pool, 1:1 assignment, rotation, health, purchase (residential/mobile)
+  media*            MediaStore + ContentGenerator (content/media for publish actions)
+  intelligence*     account/target scoring, targeting, behavior baselines
+  control*          all management gateways over one facade + RBAC
   config, logger, validation, humanizer, shared
 apps/
   engine*           reconciler (cron) + queue consumers, parameterized by active platforms
@@ -92,9 +99,13 @@ Maximal set of management gateways (all over one facade):
 | **Провайдер устройств** | duoplus, vmos, geelark, matt-duo, redfinger, ugphone, morelogin, genymotion, эмуляторы (ldplayer/mumu/bluestacks) и физ. ADB-фермы — **+ любой другой** | `DeviceProvider` + `Controller` |
 | **Магазин** | dark.shopping, djekxa.ru, `<любой URL>` | `PurchaseAdapter` (декларативный `ShopAdapterSpec` + движок) |
 | **Способ получить аккаунт** | покупка, генерация на устройстве (gmail / google-auth) | `AcquisitionSource` (`purchase | generate`) |
+| **Прокси-провайдер** | vmos-dynamic, 922proxy, iproyal, brightdata, smartproxy, oxylabs — **+ любой** | `ProxyProvider` |
+| **Провайдер верификации** | sms-activate, 5sim, smshub, twilio, IMAP/temp-mail — **+ любой** | `VerificationResourceProvider` |
+
+Сквозной слой поверх всех осей: **ИИ используется максимально** — brain-оркестрация, scan магазинов, генерация контента и персон, скоринг, captcha-ассист, парсинг скрапа (всё в application-слое, с детерминированной валидацией).
 
 ### Что делает
-Держит **пул** готовых аккаунтов, провижит **устройства** (ставит приложение платформы + прокси/SmartIP + верифицирует подписку), наполняет **очереди** на устройствах, выводит в **онлайн** (импорт сессии или логин), следит за **здоровьем**, **авто-заменяет** забаненные и **авто-докупает/генерирует** новые, исполняет **кампании действий** (report / publish / warmup / follow / like / comment / join / dm) exactly-once и **скрапит по-максимуму** — группы, каналы, участники, подписчики, подписки, лайки, комментарии, комментаторы/лайкеры, посты/reels/stories, хэштеги, контакты — для **любого** типа аккаунтов (WA/TG/IG/TikTok/Discord/FB/Gmail/YouTube) через гибридный `ScrapeProvider`, где **браузерный тир — первоклассный и приоритетный** (playwright/puppeteer), дополняемый anon-HTTP, on-device (UI-dump) и API-тирами. Самовосстанавливается, идемпотентно, наблюдаемо, секьюрно.
+Держит **пул** готовых аккаунтов, провижит **устройства** (ставит приложение платформы + прокси/SmartIP + верифицирует подписку), наполняет **очереди** на устройствах, выводит в **онлайн** (импорт сессии или логин), следит за **здоровьем**, **авто-заменяет** забаненные и **авто-докупает/генерирует** новые, исполняет **кампании действий** (report / publish / warmup / follow / like / comment / join / dm) exactly-once и **скрапит по-максимуму** — группы, каналы, участники, подписчики, подписки, лайки, комментарии, комментаторы/лайкеры, посты/reels/stories, хэштеги, контакты — для **любого** типа аккаунтов (WA/TG/IG/TikTok/Discord/FB/Gmail/YouTube) через гибридный `ScrapeProvider`, где **браузерный тир — первоклассный и приоритетный** (playwright/puppeteer), дополняемый anon-HTTP, on-device (UI-dump) и API-тирами. Каждый аккаунт работает через **1:1 прокси** (residential/mobile, гео-консистентность IP↔SIM↔GPS↔timezone), проходит **прогрев** и per-account **бюджеты действий**, с **анти-детект fingerprint** и ИИ-генерируемыми **персонами и контентом**. Самовосстанавливается, идемпотентно, наблюдаемо, секьюрно.
 
 ### Архитектура вкратце
 Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, по `docs/REQUIREM.md`. Домен чист и без зависимостей; инфраструктура реализует порты; чистая функция `reconcile(snapshot) → intents` гонит идемпотентные джобы через RabbitMQ (+ DLQ, retry-ledger, opt-lock, exactly-once). Каждый неизвестный внешний факт — **verify-by-fact-шов**: fail-safe кодированная ошибка, а не догадка.
