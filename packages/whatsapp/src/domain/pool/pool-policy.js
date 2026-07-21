@@ -1,10 +1,3 @@
-export function needsReplenish({ available, threshold }) {
-  return available < threshold;
-}
-
-export function buyQuantity({ available, threshold, batchSize }) {
-  if (available >= threshold) return 0;
-  const gap = threshold - available;
-  const batches = Math.ceil(gap / batchSize);
-  return batches * batchSize;
-}
+// WhatsApp reuses the generic pool-replenish policy (TZ §3.4). Single
+// implementation lives in @acq/engine-domain — no duplication (REQUIREM DRY).
+export { needsReplenish, buyQuantity } from '@acq/engine-domain';
