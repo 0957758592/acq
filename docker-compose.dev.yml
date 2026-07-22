@@ -1,13 +1,19 @@
-# Local development infrastructure for @acq end-to-end runs.
-# Usage: docker compose -f docker-compose.dev.yml up -d
+# Local dev + full-platform run for @acq.
+#   docker compose -f docker-compose.dev.yml up -d           # infra + all apps
+#   docker compose -f docker-compose.dev.yml up -d redis rabbitmq   # infra only
 # Mongo: reuse an existing local mongo on 27017 with a dedicated `acq` database
-# (mongodb://127.0.0.1:27017/acq). Add a mongo service here only if none exists.
+# (host.docker.internal:27017 from containers). Add a mongo service if none exists.
+x-app-env: &app-env
+  MONGODB_URI: mongodb://host.docker.internal:27017/acq
+  REDIS_URL: redis://redis:6379
+  RABBITMQ_URL: amqp://rabbitmq:5672
+  LOG_LEVEL: info
+
 services:
   redis:
     image: redis:7-alpine
     container_name: acq-redis
-    ports:
-      - '6379:6379'
+    ports: ['6379:6379']
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -17,11 +23,51 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: acq-rabbitmq
-    ports:
-      - '5672:5672'
-      - '15672:15672'
+    ports: ['5672:5672', '15672:15672']
     healthcheck:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
       interval: 5s
       timeout: 10s
       retries: 20
+
+  engine:
+    build: .
+    image: acq:latest
+    container_name: acq-engine
+    command: yarn workspace @acq/engine-app start
+    environment:
+      <<: *app-env
+      ENGINE_HEALTH_PORT: '7401'
+    extra_hosts: ['host.docker.internal:host-gateway']
+    ports: ['7401:7401']
+    depends_on: [redis, rabbitmq]
+
+  api:
+    image: acq:latest
+    container_name: acq-api
+    command: yarn workspace @acq/control-plane-app start
+    environment:
+      <<: *app-env
+      CONTROL_PORT: '7500'
+      CONTROL_ADMIN_TOKEN: ${CONTROL_ADMIN_TOKEN:-admin-dev-token}
+    extra_hosts: ['host.docker.internal:host-gateway']
+    ports: ['7500:7500']
+    depends_on: [engine]
+
+  scrape:
+    image: acq:latest
+    container_name: acq-scrape
+    command: yarn workspace @acq/scrape-worker-app start
+    environment: *app-env
+    extra_hosts: ['host.docker.internal:host-gateway']
+    depends_on: [redis, rabbitmq]
+
+  dashboard:
+    image: acq:latest
+    container_name: acq-dashboard
+    command: yarn workspace @acq/dashboard-app start
+    environment:
+      DASHBOARD_PORT: '7600'
+      CONTROL_ORIGIN: http://localhost:7500
+    ports: ['7600:7600']
+    depends_on: [api]
