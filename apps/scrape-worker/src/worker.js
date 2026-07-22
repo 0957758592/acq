@@ -1,6 +1,8 @@
 // worker.js — process entrypoint for @acq/scrape-worker-app (TZ §2.3/§10.3).
 // Consumes engine.scrape jobs, routes them through the hybrid ScrapeProvider and
 // idempotently persists normalized read-models. No I/O at import.
+import http from 'node:http';
+
 import { createScrapeProvider } from '@acq/scraping';
 
 import { consumeJsonWithDlq, createMongoScrapeResultRepo } from '@acq/engine-infra';
@@ -13,6 +15,20 @@ import { createStructuredLogger } from '@acq/logger';
 import { scrapeTaskHandler } from './scrape-handler.js';
 
 const QUEUE = 'engine.scrape';
+
+// Liveness endpoint (TZ §13/§16) — every process exposes /health.
+export function startHealthServer(port) {
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', service: 'scrape-worker' }));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise((resolve) => server.listen(port, () => resolve(server)));
+}
 
 // Minimal event bus: mirror each domain event to a durable Rabbit queue and a
 // Redis pub/sub channel (TZ §3.9). Injectable so tests substitute a fake.
@@ -47,16 +63,18 @@ export async function main({ env, deps = {} } = {}) {
     clock: ctx.clock,
     logger
   });
-  logger.info?.('scrape-worker up', { queue: QUEUE });
+  const server = await startHealthServer(env.healthPort || 7700);
+  logger.info?.('scrape-worker up', { queue: QUEUE, healthPort: env.healthPort || 7700 });
 
   const shutdown = async () => {
+    server.close();
     await disconnectRabbitmq();
     await disconnectRedis();
     await disconnectMongo();
   };
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
-  return { ctx, shutdown };
+  return { ctx, server, shutdown };
 }
 
 if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
@@ -64,7 +82,8 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
     env: {
       mongoUri: process.env.MONGODB_URI,
       rabbitUrl: process.env.RABBITMQ_URL,
-      redisUrl: process.env.REDIS_URL
+      redisUrl: process.env.REDIS_URL,
+      healthPort: Number(process.env.SCRAPE_HEALTH_PORT || 7700)
     }
   }).catch((err) => {
     console.error('scrape-worker failed to start', err);

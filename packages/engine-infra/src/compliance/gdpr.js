@@ -1,11 +1,17 @@
 // GDPR right-to-delete (TZ §14.7). Cascade-erases an account and every record
 // derived from it (action tasks, proxy assignment), and records the erasure in
 // the immutable audit trail. Models injected; optional ones are skipped safely.
-export function createGdprService({ accountModel, actionTaskModel, proxyAssignmentModel = null, audit = null } = {}) {
+export function createGdprService({
+  accountModel,
+  actionTaskModel,
+  proxyAssignmentModel = null,
+  scrapeResultModel = null,
+  audit = null
+} = {}) {
   if (!accountModel) throw new Error('createGdprService requires an account model');
 
   return {
-    async deleteAccount(accountId, { tenantId = 'default', actor = null } = {}) {
+    async deleteAccount(accountId, { tenantId = 'default', identifier = null, actor = null } = {}) {
       const scope = { _id: accountId, tenantId };
       const account = await accountModel.deleteOne(scope);
       const actionTasks = actionTaskModel
@@ -14,11 +20,16 @@ export function createGdprService({ accountModel, actionTaskModel, proxyAssignme
       const proxyAssignment = proxyAssignmentModel
         ? await proxyAssignmentModel.deleteMany({ accountId, tenantId })
         : { deletedCount: 0 };
+      // Scrape records where THIS account is the subject (by its identifier).
+      const scrapeResults = scrapeResultModel && identifier
+        ? await scrapeResultModel.deleteMany({ tenantId, 'data.handle': identifier })
+        : { deletedCount: 0 };
 
       const deleted = {
         account: account.deletedCount ?? 0,
         actionTasks: actionTasks.deletedCount ?? 0,
-        proxyAssignment: proxyAssignment.deletedCount ?? 0
+        proxyAssignment: proxyAssignment.deletedCount ?? 0,
+        scrapeResults: scrapeResults.deletedCount ?? 0
       };
 
       if (audit?.record) {

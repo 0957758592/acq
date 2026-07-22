@@ -43,6 +43,7 @@ const deviceProviderMetaSchema = new mongoose.Schema(
 
 const engineDeviceSchema = new mongoose.Schema(
   {
+    tenantId: { type: String, trim: true, default: 'default', index: true },
     provider: { type: String, enum: PROVIDERS, default: 'vmos', index: true },
     providerDeviceId: { type: String, trim: true, required: true },
     name: { type: String, trim: true, default: '' },

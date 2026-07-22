@@ -78,12 +78,22 @@ describe('promoteNext', () => {
 });
 
 describe('evict', () => {
-  test('removes an account from both lists', () => {
+  test('removes a member account from both lists', () => {
     let q = createQueue({ deviceId: 'd1', platform: 'tg' });
     q = enqueueWaiting(q, 'a1');
     q = promoteNext(q).queue;
     q = evict(q, 'a1');
     expect(q.activeAccountIds).toEqual([]);
     expect(q.waitingAccountIds).toEqual([]);
+  });
+
+  test('throws NOT_FOUND when evicting a non-member (TZ §3.10)', () => {
+    const q = createQueue({ deviceId: 'd1', platform: 'tg' });
+    try {
+      evict(q, 'ghost');
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err.code).toBe('NOT_FOUND');
+    }
   });
 });

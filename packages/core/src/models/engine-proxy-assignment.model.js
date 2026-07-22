@@ -7,7 +7,8 @@ const engineProxyAssignmentSchema = new mongoose.Schema(
   {
     tenantId: { type: String, trim: true, default: 'default', index: true },
     deviceId: { type: mongoose.Schema.Types.Mixed, required: true },
-    proxyId: { type: mongoose.Schema.Types.Mixed, required: true }
+    proxyId: { type: mongoose.Schema.Types.Mixed, required: true },
+    version: { type: Number, default: 0 }
   },
   { collection: 'engine_proxy_assignments', timestamps: true }
 );

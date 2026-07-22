@@ -4,6 +4,9 @@ import { telegramCapabilities } from './descriptors/telegram.js';
 import { discordCapabilities } from './descriptors/discord.js';
 import { facebookCapabilities } from './descriptors/facebook.js';
 import { gmailCapabilities } from './descriptors/gmail.js';
+import { tiktokCapabilities } from './descriptors/tiktok.js';
+import { instagramCapabilities } from './descriptors/instagram.js';
+import { youtubeCapabilities } from './descriptors/youtube.js';
 
 // Required fields every PlatformCapabilities descriptor must declare (TZ §3.6).
 const REQUIRED_FIELDS = [
@@ -77,3 +80,6 @@ registerPlatform(telegramCapabilities);
 registerPlatform(discordCapabilities);
 registerPlatform(facebookCapabilities);
 registerPlatform(gmailCapabilities);
+registerPlatform(tiktokCapabilities);
+registerPlatform(instagramCapabilities);
+registerPlatform(youtubeCapabilities);

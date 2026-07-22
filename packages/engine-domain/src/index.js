@@ -20,7 +20,8 @@ export {
   needsFill,
   enqueueWaiting,
   promoteNext,
-  evict
+  evict,
+  isMember
 } from './device-queue/device-queue.js';
 
 // Campaign + action

@@ -11,7 +11,8 @@ const engineScrapeResultSchema = new mongoose.Schema(
     target: { type: String, trim: true, default: '' },
     key: { type: String, trim: true, required: true },
     data: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
-    capturedAt: { type: Date, default: null }
+    capturedAt: { type: Date, default: null },
+    version: { type: Number, default: 0 }
   },
   { collection: 'engine_scrape_results', timestamps: true }
 );

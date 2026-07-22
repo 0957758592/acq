@@ -14,6 +14,7 @@ const engineActionTaskSchema = new mongoose.Schema(
     actionType: { type: String, trim: true, required: true },
     status: { type: String, enum: ACTION_TASK_STATUSES, default: 'pending', index: true },
     attempts: { type: Number, default: 0 },
+    version: { type: Number, default: 0 },
     lastError: { type: String, trim: true, default: null }
   },
   { collection: 'engine_action_tasks', timestamps: true }

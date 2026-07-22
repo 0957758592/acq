@@ -32,8 +32,12 @@ describe('getPlatformCapabilities', () => {
 });
 
 describe('listPlatforms', () => {
-  test('includes the built-in platforms', () => {
-    expect(listPlatforms()).toEqual(expect.arrayContaining(['whatsapp', 'telegram']));
+  test('covers all 8 built-in platforms (registry is the single source of truth)', () => {
+    expect(listPlatforms()).toEqual(
+      expect.arrayContaining([
+        'whatsapp', 'telegram', 'discord', 'facebook', 'gmail', 'tiktok', 'instagram', 'youtube'
+      ])
+    );
   });
 });
 

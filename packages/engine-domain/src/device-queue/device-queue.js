@@ -52,7 +52,15 @@ export function promoteNext(queue) {
   return { queue: after, promotedId };
 }
 
+export function isMember(queue, accountId) {
+  return queue.activeAccountIds.includes(accountId) || queue.waitingAccountIds.includes(accountId);
+}
+
+// Invariant (TZ §3.10): evict is only valid for an account that is IN the queue.
 export function evict(queue, accountId) {
+  if (!isMember(queue, accountId)) {
+    throw domainError('NOT_FOUND', `account ${accountId} is not in queue ${queue.deviceId}/${queue.platform}`);
+  }
   return bump(queue, {
     activeAccountIds: queue.activeAccountIds.filter((id) => id !== accountId),
     waitingAccountIds: queue.waitingAccountIds.filter((id) => id !== accountId)

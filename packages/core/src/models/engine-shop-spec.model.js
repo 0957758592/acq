@@ -17,7 +17,8 @@ const engineShopSpecSchema = new mongoose.Schema(
     unitPriceUsdCents: { type: Number, default: null },
     available: { type: Boolean, default: true },
     approvedBy: { type: String, trim: true, default: null },
-    approvedAt: { type: Date, default: null }
+    approvedAt: { type: Date, default: null },
+    version: { type: Number, default: 0 }
   },
   { collection: 'engine_shop_specs', timestamps: true }
 );
