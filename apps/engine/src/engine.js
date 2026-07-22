@@ -15,10 +15,11 @@ import { connectRabbitmq, disconnectRabbitmq } from '@acq/core/queue/rabbitmq';
 
 import { buildEngineContext } from './composition.js';
 import { planForPlatform } from './snapshot.js';
+import { dispatchIntents } from './intents.js';
 
 // One reconcile pass across every active platform. Pure-ish: only the repo reads
 // and the (optional) dispatch touch I/O. Returns the intents it planned.
-export async function reconcileTick(ctx, { planFn = planForPlatform } = {}) {
+export async function reconcileTick(ctx, { planFn = planForPlatform, dispatchFn = dispatchIntents } = {}) {
   const all = [];
   for (const platform of ctx.activePlatforms) {
     let intents = [];
@@ -29,9 +30,7 @@ export async function reconcileTick(ctx, { planFn = planForPlatform } = {}) {
       continue;
     }
     if (ctx.jobDispatcher) {
-      for (const intent of intents) {
-        await ctx.jobDispatcher.dispatch(`engine.${intent.type}`, intent).catch(() => {});
-      }
+      await dispatchFn(intents, { jobDispatcher: ctx.jobDispatcher, clock: ctx.clock }).catch(() => {});
     }
     ctx.logger.info?.('reconcile tick', { platform, intents: intents.length });
     all.push(...intents);

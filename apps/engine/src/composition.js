@@ -45,6 +45,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     clock: D.clock,
     accountRepo,
     actionTaskRepo,
+    jobDispatcher: D.jobDispatcher ?? null,
     reconcile: D.reconcile,
     capabilitiesOf: D.getPlatformCapabilities,
     activePlatforms,

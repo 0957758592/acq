@@ -6,6 +6,7 @@ function fakeCtx({ platforms = ['telegram'], dispatcher = null } = {}) {
   return {
     activePlatforms: platforms,
     jobDispatcher: dispatcher,
+    clock: { now: () => new Date('2026-07-22T09:00:00.000Z') },
     logger: { info: () => {}, error: () => {} }
   };
 }
