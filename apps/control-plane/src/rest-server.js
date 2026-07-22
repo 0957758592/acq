@@ -3,6 +3,7 @@ import helmet from 'helmet';
 
 import { httpStatusFor, authenticate } from './http-mapping.js';
 import { attachEventStream } from './sse.js';
+import { correlationMiddleware } from './correlation.js';
 
 // REST surface over the single command facade (TZ §11.4). Thin presentation:
 // auth + envelope + status mapping only, zero business logic. Every operation
@@ -13,6 +14,7 @@ export function createRestServer({ facade, tokens = {}, logger = null, eventSour
   app.use(helmet());
   // Capture the raw body so inbound webhooks can verify their HMAC signature.
   app.use(express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); } }));
+  app.use(correlationMiddleware());
 
   // Health is unauthenticated (liveness).
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'control-plane' }));
@@ -54,7 +56,7 @@ export function createRestServer({ facade, tokens = {}, logger = null, eventSour
 
   app.post('/v1/op/:operation', async (req, res) => {
     const operation = req.params.operation;
-    const correlationId = req.headers['x-correlation-id'] || null;
+    const correlationId = req.correlationId;
     const envelope = await facade.execute(operation, {
       role: req.auth.role,
       actor: req.auth.actor,
