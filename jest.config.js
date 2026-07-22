@@ -2,6 +2,7 @@
 module.exports = {
   projects: [
     '<rootDir>/apps/whatsapp/jest.config.js',
+    '<rootDir>/packages/account-gen/jest.config.js',
     '<rootDir>/packages/automation/jest.config.js',
     '<rootDir>/packages/browser/jest.config.js',
     '<rootDir>/packages/control/jest.config.js',
