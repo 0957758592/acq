@@ -3,4 +3,5 @@ export { createMongoActionTaskRepo } from './repositories/mongo-action-task-repo
 export { createMongoDeviceQueueRepo } from './repositories/mongo-device-queue-repo.js';
 export { createMongoScrapeResultRepo } from './repositories/mongo-scrape-result-repo.js';
 export { consumeJsonWithDlq } from './messaging/dlq.js';
+export { createGdprService } from './compliance/gdpr.js';
 export { conflictError } from './errors.js';
