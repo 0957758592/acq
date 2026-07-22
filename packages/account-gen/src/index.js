@@ -12,3 +12,5 @@
  * @property {(input: { platform: string, niche?: string, locale?: string }) => Promise<Object>} generate
  */
 export { generatePersona, personaKey } from './persona.js';
+export { createAccountGenerator } from './generator.js';
+export { createVerificationResourceProvider } from './verification-provider.js';
