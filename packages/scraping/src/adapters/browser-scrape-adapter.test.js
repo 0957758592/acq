@@ -68,6 +68,29 @@ describe('createBrowserScrapeAdapter (primary tier)', () => {
     expect(page.opened).toMatchObject({ proxy: 'http://p', userAgent: 'UA', cookies: [{ name: 'sid', value: '1' }] });
   });
 
+  it('resolves per-platform url + extractor from an injected selectorRegistry (generic, one adapter)', async () => {
+    const page = fakePage({ batches: [[{ id: 'z' }], []] });
+    const registry = {
+      forPlatform: (platform) => (platform === 'instagram'
+        ? { resolveUrl: (req) => `https://ig/${req.target}`, extractItems: () => [] }
+        : null)
+    };
+    const adapter = createBrowserScrapeAdapter({ browserProvider: providerReturning(page), selectorRegistry: registry, keyOf: (it) => it.id });
+    const res = await adapter.scrape({ platform: 'instagram', targetType: 'followers', target: 'acme', params: {} });
+    expect(res.rawItems).toEqual([{ id: 'z' }]);
+    expect(page.events).toContainEqual(['goto', 'https://ig/acme']);
+  });
+
+  it('fails safe (coded) when the platform has no verified selectors — without launching a browser', async () => {
+    const page = fakePage();
+    let opened = false;
+    const provider = { openPage: async () => { opened = true; return page; } };
+    const adapter = createBrowserScrapeAdapter({ browserProvider: provider, selectorRegistry: { forPlatform: () => null } });
+    await expect(adapter.scrape({ platform: 'unknown', targetType: 'followers', target: 'a', params: {} }))
+      .rejects.toMatchObject({ code: 'SCRAPE_SELECTORS_UNVERIFIED' });
+    expect(opened).toBe(false);
+  });
+
   it('closes the page even when navigation throws', async () => {
     const page = fakePage();
     page.goto = async () => { throw new Error('nav failed'); };

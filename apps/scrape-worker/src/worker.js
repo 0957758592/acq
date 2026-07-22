@@ -13,6 +13,7 @@ import { EngineScrapeResult } from '@acq/core/models/engine-scrape-result';
 import { createStructuredLogger } from '@acq/logger';
 
 import { scrapeTaskHandler } from './scrape-handler.js';
+import { buildScrapeAdapters } from './composition.js';
 
 const QUEUE = 'engine.scrape';
 
@@ -47,12 +48,22 @@ export async function main({ env, deps = {} } = {}) {
   const redis = getRedis(env.redisUrl);
   const logger = createStructuredLogger({ level: env.logLevel || 'info', base: { service: 'scrape-worker' } });
 
+  // Real hybrid tiers by default (browser primary via Playwright + optional
+  // http/device), assembled by the composition. deps.scrapeAdapters still
+  // overrides for tests. Per-platform selectors are the verify-by-fact seam.
+  const wired = deps.scrapeAdapters
+    ? { adapters: deps.scrapeAdapters, browserProvider: null }
+    : buildScrapeAdapters({
+        browserSelectors: deps.browserSelectors,
+        httpSelectors: deps.httpSelectors,
+        deviceScrape: deps.deviceScrape,
+        maxConcurrency: env.browserConcurrency
+      });
+
   const ctx = {
     clock: { now: () => new Date() },
     logger,
-    // Tier adapters are injected by config; without them, scrape() surfaces a
-    // coded SCRAPE_TIER_UNAVAILABLE (verify-by-fact — no blind guessing).
-    scrapeProvider: createScrapeProvider({ adapters: deps.scrapeAdapters ?? {} }),
+    scrapeProvider: createScrapeProvider({ adapters: wired.adapters }),
     scrapeResultRepo: createMongoScrapeResultRepo({ model: EngineScrapeResult }),
     eventBus: deps.eventBus ?? makeEventBus(redis)
   };
@@ -68,6 +79,7 @@ export async function main({ env, deps = {} } = {}) {
 
   const shutdown = async () => {
     server.close();
+    if (wired.browserProvider) await wired.browserProvider.close();
     await disconnectRabbitmq();
     await disconnectRedis();
     await disconnectMongo();
