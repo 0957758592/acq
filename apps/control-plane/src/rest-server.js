@@ -8,13 +8,29 @@ import { attachEventStream } from './sse.js';
 // auth + envelope + status mapping only, zero business logic. Every operation
 // is POST /v1/op/:operation with a JSON args body; the facade enforces RBAC,
 // validation, error mapping and audit.
-export function createRestServer({ facade, tokens = {}, logger = null, eventSource = null } = {}) {
+export function createRestServer({ facade, tokens = {}, logger = null, eventSource = null, webhookProcessor = null } = {}) {
   const app = express();
   app.use(helmet());
-  app.use(express.json({ limit: '1mb' }));
+  // Capture the raw body so inbound webhooks can verify their HMAC signature.
+  app.use(express.json({ limit: '1mb', verify: (req, _res, buf) => { req.rawBody = buf.toString('utf8'); } }));
 
   // Health is unauthenticated (liveness).
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'control-plane' }));
+
+  // Inbound webhooks (TZ §11.5) — authenticated by HMAC signature (not bearer),
+  // with replay protection + idempotency in the processor.
+  if (webhookProcessor) {
+    app.post('/webhooks/inbound', async (req, res) => {
+      const result = await webhookProcessor.process(req.body || {}, {
+        timestamp: req.headers['x-acq-timestamp'],
+        signature: req.headers['x-acq-signature'],
+        rawBody: req.rawBody
+      });
+      if (result.ok) return res.json({ data: { accepted: true }, error: null, meta: {} });
+      const status = result.reason === 'duplicate' ? 200 : 401;
+      return res.status(status).json({ data: null, error: { code: 'WEBHOOK_REJECTED', message: result.reason }, meta: {} });
+    });
+  }
 
   // Bearer auth (fail-closed) for everything under /v1.
   app.use('/v1', (req, res, next) => {
