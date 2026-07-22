@@ -16,6 +16,8 @@ import { connectRabbitmq, disconnectRabbitmq } from '@acq/core/queue/rabbitmq';
 import { buildEngineContext } from './composition.js';
 import { planForPlatform } from './snapshot.js';
 import { dispatchIntents } from './intents.js';
+import { createRabbitJobDispatcher } from './rabbit-dispatcher.js';
+import { registerConsumers } from './consumers.js';
 
 // One reconcile pass across every active platform. Pure-ish: only the repo reads
 // and the (optional) dispatch touch I/O. Returns the intents it planned.
@@ -64,8 +66,12 @@ export async function main({ env } = {}) {
       buyBatchSize: env.buyBatchSize,
       autobuyEnabled: env.autobuyEnabled,
       pid: process.pid
-    }
+    },
+    deps: { jobDispatcher: createRabbitJobDispatcher() }
   });
+
+  // Register job consumers (DLQ-wrapped) so dispatched work is processed.
+  registerConsumers(ctx);
 
   const server = await startHealthServer(env.healthPort, {
     onHealth: () => ({ status: 'ok', service: 'engine', platforms: ctx.activePlatforms })
