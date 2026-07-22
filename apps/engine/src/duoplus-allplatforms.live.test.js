@@ -48,12 +48,18 @@ beforeAll(async () => {
   } else {
     const list = await provider.listDevices({ page: 1, pagesize: 100 });
     const phones = Array.isArray(list) ? list : list?.data?.list ?? list?.data ?? list?.list ?? [];
+    // Prefer an exact/contains name match; otherwise self-select a RUNNING device
+    // (status 1) so the e2e works against whatever the account actually has.
+    const isRunning = (p) => Number(p?.status) === 1;
     const match = phones.find((p) => pickName(p).toLowerCase() === DEVICE_NAME.toLowerCase())
-      || phones.find((p) => pickName(p).toLowerCase().includes(DEVICE_NAME.toLowerCase()));
+      || phones.find((p) => pickName(p).toLowerCase().includes(DEVICE_NAME.toLowerCase()))
+      || phones.find(isRunning)
+      || phones[0];
     if (!match) {
-      throw new Error(`device '${DEVICE_NAME}' not found among ${phones.length} DuoPlus phones: ${phones.map(pickName).join(', ')}`);
+      throw new Error(`no DuoPlus phones available in the account`);
     }
     providerDeviceId = pickId(match);
+    console.log(`[duoplus e2e] target device: id=${providerDeviceId} name="${pickName(match)}" status=${match?.status}`);
   }
 
   // Verify by fact + power on (idempotent).
