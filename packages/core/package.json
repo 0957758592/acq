@@ -12,6 +12,7 @@
     "./services/*": "./src/services/*.service.js",
     "./utils/*": "./src/utils/*.js",
     "./observability/*": "./src/observability/*.js",
+    "./reliability/*": "./src/reliability/*.js",
     "./auth/*": "./src/auth/*.js",
     "./config/*": "./src/config/*.js"
   },
