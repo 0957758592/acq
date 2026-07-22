@@ -1,7 +1,7 @@
 import { buildMcpToolDefs, createMcpToolRouter } from './mcp-tools.js';
 
 const facade = {
-  async execute(operation, { role, args, correlationId }) {
+  async execute(operation, { correlationId }) {
     if (operation === 'pool.status') {
       return { data: { available: 5 }, error: null, meta: { operation, correlationId } };
     }
