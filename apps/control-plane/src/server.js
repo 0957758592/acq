@@ -3,8 +3,10 @@
 // command facade, and serves the REST surface. No I/O at import; main() runs
 // on direct execution or when a test calls it with injected env.
 import { createFacade } from '@acq/control';
+import { createMongoAuditLog } from '@acq/engine-infra';
 
 import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
+import { EngineAuditLog } from '@acq/core/models/engine-audit-log';
 import { createStructuredLogger } from '@acq/logger';
 
 import { buildEngineContext } from '../../engine/src/composition.js';
@@ -16,7 +18,9 @@ export async function main({ env } = {}) {
   const logger = createStructuredLogger({ level: env.logLevel || 'info', base: { service: 'control-plane' } });
   const ctx = buildEngineContext({ env: { platforms: env.platforms } });
   const useCases = buildUseCases(ctx);
-  const facade = createFacade({ useCases, audit: env.audit ?? null });
+  // Immutable audit trail for every mutating command (TZ §14.7).
+  const audit = env.audit ?? createMongoAuditLog({ model: EngineAuditLog });
+  const facade = createFacade({ useCases, audit });
   const app = createRestServer({ facade, tokens: env.tokens, logger });
 
   const server = await new Promise((resolve) => {

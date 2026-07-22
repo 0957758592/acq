@@ -3,6 +3,7 @@
 import http from 'node:http';
 
 import { EngineAccount } from '@acq/core/models/engine-account';
+import { EngineAuditLog } from '@acq/core/models/engine-audit-log';
 import { main } from './server.js';
 
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/acq';
@@ -50,6 +51,21 @@ describe('control-plane REST over LIVE Mongo', () => {
     });
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ platform: PLATFORM, available: 2 });
+  });
+
+  test('a mutating operation is persisted to the immutable audit log', async () => {
+    // Append-only: use the raw collection to reset (mongoose deleteMany is blocked).
+    await EngineAuditLog.collection.deleteMany({ correlationId: 'audit-c1' });
+    await request(port, {
+      path: '/v1/op/reconcile.now',
+      headers: { authorization: 'Bearer admin-tok', 'x-correlation-id': 'audit-c1' },
+      body: { platform: PLATFORM }
+    });
+    const entry = await EngineAuditLog.findOne({ operation: 'reconcile.now', correlationId: 'audit-c1' }).lean();
+    expect(entry).not.toBeNull();
+    expect(entry.actor).toBe('admin-tok');
+    expect(entry.role).toBe('admin');
+    await EngineAuditLog.collection.deleteMany({ correlationId: 'audit-c1' });
   });
 
   test('readonly may read pool.status but not retire an account', async () => {
