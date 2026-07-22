@@ -15,6 +15,9 @@
   "dependencies": {
     "@acq/engine-domain": "*"
   },
+  "optionalDependencies": {
+    "playwright": "^1.49.0"
+  },
   "devDependencies": {
     "cross-env": "^7.0.3",
     "eslint": "^9.17.0",
