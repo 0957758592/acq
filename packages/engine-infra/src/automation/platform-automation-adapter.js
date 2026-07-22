@@ -34,14 +34,31 @@ export function createPlatformAutomationAdapter({
   const driver = getAdapter(platform);
   const controllerFor = (ctx) => provider.createDirectController(ctx.providerDeviceId, ctx.controllerOpts);
 
-  function probeMap() {
-    let vocab = {};
+  function capsOf() {
     try {
-      vocab = capabilitiesOf(platform)?.stateVocabulary ?? {};
+      return capabilitiesOf(platform) ?? {};
     } catch {
-      vocab = {};
+      return {};
     }
-    return { ...DEFAULT_STATE_TO_PROBE, ...vocab };
+  }
+  function probeMap() {
+    return { ...DEFAULT_STATE_TO_PROBE, ...(capsOf().stateVocabulary ?? {}) };
+  }
+
+  // Verify-by-fact probe: run the driver health check, then confirm the
+  // platform's OWN app is the foreground app before trusting a logged-in
+  // reading. A mismatch (a different app is foreground, or the app isn't
+  // installed) means the UI dump we read isn't ours — report logged_out rather
+  // than a false "online". Generic guard for every platform.
+  async function probeStateImpl(ctx) {
+    const controller = controllerFor(ctx);
+    const hc = await driver.healthCheck(controller, ctx.account ?? {}, ctx.opts ?? {});
+    const expectedPkg = capsOf().appPackage;
+    if (expectedPkg && typeof controller.getCurrentPackage === 'function') {
+      const foreground = await controller.getCurrentPackage().catch(() => '');
+      if (foreground && foreground !== expectedPkg) return 'logged_out';
+    }
+    return probeMap()[hc?.state] || 'logged_out';
   }
 
   return {
@@ -56,6 +73,17 @@ export function createPlatformAutomationAdapter({
       const session = sessionRef ? await secretResolver.resolve(sessionRef) : undefined;
       const account = { ...ctx.account, secretRefs: { ...(ctx.account?.secretRefs ?? {}), session } };
       const result = await driver.login(controller, account, ctx.opts ?? {});
+      if (result?.banned) return { ok: false, banned: true };
+      if (result?.checkpointed) return { ok: false, checkpointed: true };
+      // Verify-by-fact: when the driver can report health, don't trust login's
+      // self-report — confirm the account is actually online on-device (this also
+      // catches an optimistic {ok:true} from a login that didn't really log in).
+      if (typeof driver.healthCheck === 'function') {
+        const state = await probeStateImpl({ ...ctx, account });
+        if (state === 'banned') return { ok: false, banned: true };
+        if (state === 'checkpointed') return { ok: false, checkpointed: true };
+        return { ok: state === 'online' };
+      }
       return { ok: Boolean(result?.ok ?? true) };
     },
 
@@ -78,10 +106,7 @@ export function createPlatformAutomationAdapter({
     },
 
     async probeState(ctx) {
-      const controller = controllerFor(ctx);
-      const hc = await driver.healthCheck(controller, ctx.account ?? {}, ctx.opts ?? {});
-      const map = probeMap();
-      return map[hc?.state] || 'logged_out';
+      return probeStateImpl(ctx);
     }
   };
 }

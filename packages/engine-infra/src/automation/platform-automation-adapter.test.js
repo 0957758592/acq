@@ -1,12 +1,12 @@
 import { createPlatformAutomationAdapter } from './platform-automation-adapter.js';
 
 // Fake platform driver + provider + secretResolver (no real device).
-function build({ driver, capabilities } = {}) {
+function build({ driver, capabilities, controller } = {}) {
   const controllerCalls = [];
   const provider = {
     createDirectController: (id) => {
       controllerCalls.push(id);
-      return { __device: id };
+      return { __device: id, ...(controller ?? {}) };
     }
   };
   const secretResolver = { resolve: async (ref) => `resolved:${ref}` };
@@ -59,6 +59,57 @@ describe('createPlatformAutomationAdapter (generic, any platform)', () => {
       capabilities: { stateVocabulary: { logged_in: 'online', banned: 'banned' } }
     });
     await expect(adapter.probeState({ providerDeviceId: 'dev1', account: {} })).resolves.toBe('online');
+  });
+
+  it('probeState refuses a logged_in reading when the platform app is NOT foreground (no false online)', async () => {
+    const driver = { healthCheck: async () => ({ state: 'logged_in' }) };
+    const { adapter } = build({
+      driver,
+      capabilities: { appPackage: 'org.telegram.messenger', stateVocabulary: { logged_in: 'online' } },
+      controller: { getCurrentPackage: async () => 'com.instagram.android' } // a DIFFERENT app is foreground
+    });
+    await expect(adapter.probeState({ providerDeviceId: 'dev1', account: {} })).resolves.toBe('logged_out');
+  });
+
+  it('probeState trusts a logged_in reading when the platform app IS foreground', async () => {
+    const driver = { healthCheck: async () => ({ state: 'logged_in' }) };
+    const { adapter } = build({
+      driver,
+      capabilities: { appPackage: 'org.telegram.messenger', stateVocabulary: { logged_in: 'online' } },
+      controller: { getCurrentPackage: async () => 'org.telegram.messenger' }
+    });
+    await expect(adapter.probeState({ providerDeviceId: 'dev1', account: {} })).resolves.toBe('online');
+  });
+
+  it('bringOnline confirms by fact: login self-report is not trusted when healthCheck says logged_out', async () => {
+    const driver = {
+      login: async () => ({ ok: true }), // optimistic self-report
+      healthCheck: async () => ({ state: 'logged_out' })
+    };
+    const { adapter } = build({ driver, capabilities: { stateVocabulary: { logged_in: 'online' } } });
+    await expect(adapter.bringOnline({ providerDeviceId: 'dev1', account: {} })).resolves.toEqual({ ok: false });
+  });
+
+  it('bringOnline returns ok only when the confirming healthCheck is online', async () => {
+    const driver = {
+      login: async () => ({ ok: true }),
+      healthCheck: async () => ({ state: 'logged_in' })
+    };
+    const { adapter } = build({
+      driver,
+      capabilities: { appPackage: 'org.telegram.messenger', stateVocabulary: { logged_in: 'online' } },
+      controller: { getCurrentPackage: async () => 'org.telegram.messenger' }
+    });
+    await expect(adapter.bringOnline({ providerDeviceId: 'dev1', account: {} })).resolves.toEqual({ ok: true });
+  });
+
+  it('bringOnline surfaces banned/checkpointed from the confirming healthCheck', async () => {
+    const driver = {
+      login: async () => ({ ok: true }),
+      healthCheck: async () => ({ state: 'banned' })
+    };
+    const { adapter } = build({ driver, capabilities: { stateVocabulary: {} } });
+    await expect(adapter.bringOnline({ providerDeviceId: 'dev1', account: {} })).resolves.toEqual({ ok: false, banned: true });
   });
 
   it('warmup/setupProfile delegate when the driver supports them', async () => {

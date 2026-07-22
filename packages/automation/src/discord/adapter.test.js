@@ -9,6 +9,7 @@ const dump = (...texts) => `<hierarchy rotation="0">${texts.map(node).join('')}<
 function makeController({ dumps = [], single = null } = {}) {
   let i = 0;
   return {
+    startApp: jest.fn(async () => true),
     getUIDump: jest.fn(async () => {
       if (single != null) return single;
       const xml = dumps.length ? dumps[Math.min(i, dumps.length - 1)] : '';
@@ -38,6 +39,19 @@ describe('discordAdapter.healthCheck', () => {
     const controller = makeController({ single: dump('Account Disabled') });
     const res = await discordAdapter.healthCheck(controller);
     expect(res.state).toBe('banned');
+  });
+
+  it('launches the Discord app BEFORE reading state (never interprets another app screen)', async () => {
+    const order = [];
+    const controller = {
+      startApp: jest.fn(async () => { order.push('start'); return true; }),
+      getUIDump: jest.fn(async () => { order.push('dump'); return dump('Messages', 'Servers'); }),
+      tap: jest.fn(async () => {})
+    };
+    const res = await discordAdapter.healthCheck(controller);
+    expect(controller.startApp).toHaveBeenCalledWith('com.discord', expect.any(String));
+    expect(order[0]).toBe('start');
+    expect(res.state).toBe('logged_in');
   });
 });
 

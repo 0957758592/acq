@@ -1,9 +1,11 @@
 // Facebook on-device UI flows. VERIFY-BY-FACT seeds; reuses the shared
 // confirm-by-fact runner (DRY).
-import { parseUIDump } from '@acq/device-control';
+import { parseUIDump, delay } from '@acq/device-control';
 
 import { anyTextPresent, runConfirmedAction } from '../shared/confirmed-action.js';
 import {
+  FACEBOOK_PACKAGE,
+  FACEBOOK_LAUNCHER_ACTIVITY,
   FACEBOOK_BAN_TEXTS,
   FACEBOOK_CHECKPOINT_TEXTS,
   FACEBOOK_DISMISS_TEXTS,
@@ -28,6 +30,10 @@ class FacebookFlowError extends Error {
 }
 
 export async function checkFacebookState(controller) {
+  // Open Facebook first so the UI dump we read is Facebook's — never another
+  // app's foreground screen (a not-foreground/absent app must not read logged_in).
+  await controller.startApp(FACEBOOK_PACKAGE, FACEBOOK_LAUNCHER_ACTIVITY).catch(() => {});
+  await delay(2_500);
   const nodes = parseUIDump(await controller.getUIDump());
   if (anyTextPresent(nodes, FACEBOOK_BAN_TEXTS)) return 'banned';
   if (anyTextPresent(nodes, FACEBOOK_CHECKPOINT_TEXTS)) return 'checkpoint';

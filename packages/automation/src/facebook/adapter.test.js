@@ -9,6 +9,7 @@ const dump = (...texts) => `<hierarchy rotation="0">${texts.map(node).join('')}<
 function makeController({ dumps = [], single = null } = {}) {
   let i = 0;
   return {
+    startApp: jest.fn(async () => true),
     getUIDump: jest.fn(async () => {
       if (single != null) return single;
       const xml = dumps.length ? dumps[Math.min(i, dumps.length - 1)] : '';
@@ -30,6 +31,18 @@ describe('facebookAdapter.healthCheck', () => {
   it('maps a suspended-account screen -> banned', async () => {
     const controller = makeController({ single: dump('We suspended your account') });
     expect((await facebookAdapter.healthCheck(controller)).state).toBe('banned');
+  });
+
+  it('launches the Facebook app BEFORE reading state (never interprets another app screen)', async () => {
+    const order = [];
+    const controller = {
+      startApp: jest.fn(async () => { order.push('start'); return true; }),
+      getUIDump: jest.fn(async () => { order.push('dump'); return dump('We suspended your account'); }),
+      tap: jest.fn(async () => {})
+    };
+    await facebookAdapter.healthCheck(controller);
+    expect(controller.startApp).toHaveBeenCalledWith('com.facebook.katana', expect.any(String));
+    expect(order[0]).toBe('start');
   });
 });
 

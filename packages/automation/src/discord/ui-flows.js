@@ -1,10 +1,12 @@
 // Discord on-device UI flows. VERIFY-BY-FACT selector seeds in ./constants.js;
 // what is tested is the control flow + ban/confirm classification. Reuses the
 // shared confirm-by-fact runner (DRY).
-import { parseUIDump } from '@acq/device-control';
+import { parseUIDump, delay } from '@acq/device-control';
 
 import { anyTextPresent, runConfirmedAction } from '../shared/confirmed-action.js';
 import {
+  DISCORD_PACKAGE,
+  DISCORD_LAUNCHER_ACTIVITY,
   DISCORD_BAN_TEXTS,
   DISCORD_CHECKPOINT_TEXTS,
   DISCORD_DISMISS_TEXTS,
@@ -27,6 +29,10 @@ class DiscordFlowError extends Error {
 }
 
 export async function checkDiscordState(controller) {
+  // Open Discord first so the UI dump we read is Discord's — never another app's
+  // foreground screen (a not-foreground/absent app must not read as logged_in).
+  await controller.startApp(DISCORD_PACKAGE, DISCORD_LAUNCHER_ACTIVITY).catch(() => {});
+  await delay(2_500);
   const nodes = parseUIDump(await controller.getUIDump());
   if (anyTextPresent(nodes, DISCORD_BAN_TEXTS)) return 'banned';
   if (anyTextPresent(nodes, DISCORD_CHECKPOINT_TEXTS)) return 'checkpoint';
