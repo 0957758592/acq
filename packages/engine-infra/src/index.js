@@ -7,4 +7,5 @@ export { consumeJsonWithDlq } from './messaging/dlq.js';
 export { createGdprService } from './compliance/gdpr.js';
 export { createMongoAuditLog, redactSecrets } from './audit/mongo-audit-log.js';
 export { createPlatformAutomationAdapter } from './automation/platform-automation-adapter.js';
+export { createExpenseRecorder } from './procurement/expense-recorder.js';
 export { conflictError } from './errors.js';

@@ -1,28 +1,22 @@
-// createExpenseRecorder — books a dark.shopping account purchase as an
-// EngineExpense row. Mirrors the engine procurement precedent (persistImport):
-// an expense is written only when the amount is positive (no zero-amount rows)
-// and the write is idempotent via upsert on (provider, externalReference).
+// dark.shopping purchase recorder — a thin, provider-fixed facade over the
+// generic engine-infra expense recorder (single source of the EngineExpense
+// upsert; no duplicated finance logic). Keeps the whatsapp-facing method name
+// while delegating the idempotent write.
+import { createExpenseRecorder as createGenericRecorder } from '@acq/engine-infra';
 import { EngineExpense } from '@acq/core/models/engine-finance';
 
 export function createExpenseRecorder({ model = EngineExpense } = {}) {
+  const generic = createGenericRecorder({ model });
   return {
     async recordPurchaseExpense({ externalReference, amountUsdCents, quantity }) {
-      if (!(amountUsdCents > 0)) return null;
-      return model.findOneAndUpdate(
-        { provider: 'dark_shopping', externalReference },
-        {
-          $set: {
-            category: 'account',
-            provider: 'dark_shopping',
-            amountCents: amountUsdCents,
-            currency: 'USD',
-            description: `dark.shopping purchase x${quantity}`,
-            externalReference,
-            metadata: { quantity }
-          }
-        },
-        { upsert: true, new: true }
-      );
+      return generic.record({
+        provider: 'dark_shopping',
+        category: 'account',
+        externalReference,
+        amountUsdCents,
+        quantity,
+        description: `dark.shopping purchase x${quantity}`
+      });
     }
   };
 }

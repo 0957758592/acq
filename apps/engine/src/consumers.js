@@ -6,12 +6,14 @@ import { fillQueueHandler } from './handlers/fill-queue.handler.js';
 import { bringOnlineHandler } from './handlers/bring-online.handler.js';
 import { probeHealthHandler } from './handlers/probe-health.handler.js';
 import { replaceBannedHandler } from './handlers/replace-banned.handler.js';
+import { acquireHandler } from './handlers/acquire.handler.js';
 
 // Queue -> handler map for the engine's job consumers (TZ §8.3). Generic across
 // ALL platforms (not whatsapp-only) — bring-online/probe/replace/action drive
 // any platform via ctx.automationFor(platform). acquire/generate/proxy/scrape
 // land as their vendor adapters are configured.
 export const ENGINE_HANDLERS = {
+  'engine.acquire': acquireHandler,
   'engine.action': runActionTaskHandler,
   'engine.queue-fill': fillQueueHandler,
   'engine.bring-online': bringOnlineHandler,

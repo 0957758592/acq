@@ -3,9 +3,11 @@ import {
   createMongoActionTaskRepo,
   createMongoDeviceQueueRepo,
   createMongoCampaignRepo,
-  createPlatformAutomationAdapter
+  createPlatformAutomationAdapter,
+  createExpenseRecorder
 } from '@acq/engine-infra';
 import { reconcile } from '@acq/engine-domain';
+import { createShopRegistry, createShopHttpClient, compileShopAdapter } from '@acq/procurement';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
 import { createDeviceProvider } from '@acq/device-control';
 import { EngineAccount } from '@acq/core/models/engine-account';
@@ -13,6 +15,7 @@ import { EngineActionTask } from '@acq/core/models/engine-action-task';
 import { EngineDeviceQueue } from '@acq/core/models/engine-device-queue';
 import { EngineDevice } from '@acq/core/models/engine-device';
 import { EngineCampaign } from '@acq/core/models/engine-campaign';
+import { EngineShopSpec } from '@acq/core/models/engine-shop-spec';
 import { canDeviceAcceptAccount } from '@acq/core/utils/device-account-eligibility';
 import { claimRunningDeviceLease, releaseDeviceLease } from '@acq/core/services/device-lease';
 import { getRedis } from '@acq/core/db/redis';
@@ -45,6 +48,10 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createMongoDeviceQueueRepo,
     createMongoCampaignRepo,
     createPlatformAutomationAdapter,
+    createExpenseRecorder,
+    createShopRegistry,
+    createShopHttpClient,
+    compileShopAdapter,
     createDeviceProvider,
     reconcile,
     getPlatformCapabilities,
@@ -54,6 +61,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     EngineDeviceQueue,
     EngineDevice,
     EngineCampaign,
+    EngineShopSpec,
     canDeviceAcceptAccount,
     claimRunningDeviceLease,
     releaseDeviceLease,
@@ -69,6 +77,14 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   const deviceQueueRepo = D.createMongoDeviceQueueRepo({ model: D.EngineDeviceQueue });
   const campaignRepo = D.createMongoCampaignRepo({ model: D.EngineCampaign });
   const secretResolver = D.secretResolver ?? createEnvSecretResolver();
+
+  // Procurement wiring (TZ §6/§8.3): a ShopRegistry over verified declarative
+  // specs + an auth-aware HTTP client feed the generic acquire consumer. The
+  // account GENERATE path is injected (per-platform on-device signup) — absent
+  // by default, in which case that path is an honest seam.
+  const shopRegistry = D.shopRegistry ?? D.createShopRegistry({ model: D.EngineShopSpec });
+  const httpClient = D.httpClient ?? D.createShopHttpClient({ secretResolver });
+  const expenseRecorder = D.expenseRecorder ?? D.createExpenseRecorder();
 
   // Device provider from env (duoplus/vmos/geelark + creds). Absent -> null, in
   // which case automationFor is null and the online/action/probe handlers
@@ -104,6 +120,12 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     secretResolver,
     provider,
     automationFor,
+    shopRegistry,
+    httpClient,
+    compileShopAdapter: D.compileShopAdapter,
+    expenseRecorder,
+    accountGenerator: D.accountGenerator ?? null,
+    eventBus: D.eventBus ?? null,
     jobDispatcher: D.jobDispatcher ?? null,
     reconcile: D.reconcile,
     capabilitiesOf: D.getPlatformCapabilities,
@@ -115,7 +137,11 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     config: {
       poolThreshold: env.poolThreshold ?? 10,
       buyBatchSize: env.buyBatchSize ?? 5,
-      autobuyEnabled: Boolean(env.autobuyEnabled)
+      autobuyEnabled: Boolean(env.autobuyEnabled),
+      maxUnitPriceUsdCents: env.maxUnitPriceUsdCents ?? null,
+      expectedUnitUsdCents: env.expectedUnitUsdCents ?? null,
+      priceDriftTolerance: env.priceDriftTolerance ?? 0.2,
+      maxTotalUsdCents: env.maxTotalUsdCents ?? null
     },
     owner
   };
