@@ -65,6 +65,13 @@ describe('createShopHttpClient (auth-aware, request-by-object)', () => {
       .rejects.toMatchObject({ code: 'SHOP_HTTP_ERROR', status: 402 });
   });
 
+  it('never attaches a body to a GET request (fetch would throw)', async () => {
+    const cap = {};
+    const client = createShopHttpClient({ fetchImpl: fakeFetch(cap), secretResolver });
+    await client.request({ method: 'GET', url: 'https://s/x', auth: { kind: 'bearer', config: { tokenRef: 'env:KEY' } }, body: { order: 'ORD-1' } });
+    expect(cap.init.body).toBeUndefined();
+  });
+
   it('login-password without a session is an honest seam (never guessed)', async () => {
     const client = createShopHttpClient({ fetchImpl: fakeFetch({}), secretResolver });
     await expect(client.request({ method: 'GET', url: 'https://s/x', auth: { kind: 'login-password', config: {} } }))

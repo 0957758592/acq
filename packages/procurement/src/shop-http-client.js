@@ -47,10 +47,13 @@ export function createShopHttpClient({ fetchImpl = globalThis.fetch, secretResol
         secretResolver
       });
 
+      // GET/HEAD must not carry a body (fetch throws otherwise) — an endpoint
+      // that needs to pass data on a GET should encode it in the URL.
+      const sendsBody = body != null && method !== 'GET' && method !== 'HEAD';
       const response = await fetchImpl(applied.url, {
         method,
         headers: applied.headers,
-        body: body ? JSON.stringify(body) : undefined
+        body: sendsBody ? JSON.stringify(body) : undefined
       });
 
       const text = await response.text();

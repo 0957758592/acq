@@ -40,6 +40,17 @@ describe('generic acquireHandler', () => {
     expect(ctx.expenses).toHaveLength(1);
   });
 
+  it('compiles the shop with the authoritative verified flag (doc-level, even if spec.verified is stale false)', async () => {
+    const ctx = fakeCtx({ shop: { shopId: 's1', verified: true, spec: { shopId: 's1', verified: false }, unitPriceUsdCents: 100 } });
+    let compiledSpec;
+    ctx.compileShopAdapter = (spec) => {
+      compiledSpec = spec;
+      return { purchase: async () => ({ orderId: 'O', amountUsdCents: 100 }), fetchDelivered: async () => [] };
+    };
+    await acquireHandler(ctx, { platform: 'telegram', source: 'purchase', quantity: 1 });
+    expect(compiledSpec.verified).toBe(true);
+  });
+
   it('purchase path fails safe when no verified shop (never guesses)', async () => {
     const ctx = fakeCtx({ shop: null });
     await expect(acquireHandler(ctx, { platform: 'telegram', source: 'purchase', quantity: 2 })).rejects.toMatchObject({

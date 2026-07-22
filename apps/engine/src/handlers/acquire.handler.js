@@ -28,7 +28,10 @@ export async function acquireHandler(ctx, { platform, source = 'purchase', quant
     throw seam('SHOP_SPEC_UNVERIFIED', `no verified shop for ${platform}`);
   }
 
-  const adapter = ctx.compileShopAdapter(shop.spec, {
+  // The ShopRegistry doc-level `verified` (flipped by approve()) is the source of
+  // truth; the embedded spec.verified can be stale from registration. Compile
+  // with the authoritative flag so an approved shop actually executes.
+  const adapter = ctx.compileShopAdapter({ ...shop.spec, verified: true }, {
     httpClient: ctx.httpClient,
     secretResolver: ctx.secretResolver,
     config: {
