@@ -2,7 +2,7 @@ import http from 'node:http';
 
 import { reconcileTick, startHealthServer } from './engine.js';
 
-function fakeCtx({ platforms = ['telegram'], intents = [], dispatcher = null } = {}) {
+function fakeCtx({ platforms = ['telegram'], dispatcher = null } = {}) {
   return {
     activePlatforms: platforms,
     jobDispatcher: dispatcher,
