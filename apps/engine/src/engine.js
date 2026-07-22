@@ -12,6 +12,7 @@ import cron from 'node-cron';
 import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
 import { getRedis, disconnectRedis } from '@acq/core/db/redis';
 import { connectRabbitmq, disconnectRabbitmq } from '@acq/core/queue/rabbitmq';
+import { createMetricsRegistry } from '@acq/core/observability/metrics';
 
 import { buildEngineContext } from './composition.js';
 import { planForPlatform } from './snapshot.js';
@@ -34,18 +35,25 @@ export async function reconcileTick(ctx, { planFn = planForPlatform, dispatchFn 
     if (ctx.jobDispatcher) {
       await dispatchFn(intents, { jobDispatcher: ctx.jobDispatcher, clock: ctx.clock }).catch(() => {});
     }
+    ctx.metrics?.reconcileTicks?.inc({ platform });
+    ctx.metrics?.intentsDispatched?.inc({ platform }, intents.length);
     ctx.logger.info?.('reconcile tick', { platform, intents: intents.length });
     all.push(...intents);
   }
   return all;
 }
 
-export function startHealthServer(port, { onHealth } = {}) {
+export function startHealthServer(port, { onHealth, onMetrics } = {}) {
   const server = http.createServer((req, res) => {
     if (req.url === '/health') {
       const body = JSON.stringify(onHealth ? onHealth() : { status: 'ok' });
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(body);
+      return;
+    }
+    if (req.url === '/metrics' && onMetrics) {
+      res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4' });
+      res.end(onMetrics());
       return;
     }
     res.writeHead(404);
@@ -70,11 +78,19 @@ export async function main({ env } = {}) {
     deps: { jobDispatcher: createRabbitJobDispatcher() }
   });
 
+  // Observability: metrics registry exposed at /metrics (TZ §15).
+  const registry = createMetricsRegistry();
+  ctx.metrics = {
+    reconcileTicks: registry.counter('acq_engine_reconcile_ticks_total', 'Reconcile ticks per platform'),
+    intentsDispatched: registry.counter('acq_engine_intents_dispatched_total', 'Intents dispatched per platform')
+  };
+
   // Register job consumers (DLQ-wrapped) so dispatched work is processed.
   registerConsumers(ctx);
 
   const server = await startHealthServer(env.healthPort, {
-    onHealth: () => ({ status: 'ok', service: 'engine', platforms: ctx.activePlatforms })
+    onHealth: () => ({ status: 'ok', service: 'engine', platforms: ctx.activePlatforms }),
+    onMetrics: () => registry.render()
   });
   ctx.logger.info?.('engine up', { port: env.healthPort, platforms: ctx.activePlatforms });
 

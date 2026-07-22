@@ -40,18 +40,45 @@ describe('reconcileTick', () => {
   });
 });
 
+describe('reconcileTick metrics', () => {
+  it('increments reconcile + intents counters', async () => {
+    const inc = [];
+    const ctx = fakeCtx({ platforms: ['telegram'] });
+    ctx.metrics = {
+      reconcileTicks: { inc: (l) => inc.push(['ticks', l]) },
+      intentsDispatched: { inc: (l, n) => inc.push(['intents', l, n]) }
+    };
+    await reconcileTick(ctx, { planFn: async () => [{ type: 'acquire', platform: 'telegram' }] });
+    expect(inc).toContainEqual(['ticks', { platform: 'telegram' }]);
+    expect(inc).toContainEqual(['intents', { platform: 'telegram' }, 1]);
+  });
+});
+
 describe('startHealthServer', () => {
+  function get(port, pathname) {
+    return new Promise((resolve) => {
+      http.get(`http://127.0.0.1:${port}${pathname}`, (res) => {
+        let data = '';
+        res.on('data', (c) => (data += c));
+        res.on('end', () => resolve({ status: res.statusCode, body: data }));
+      });
+    });
+  }
+
   it('responds 200 with the health payload on /health', async () => {
     const server = await startHealthServer(0, { onHealth: () => ({ status: 'ok', service: 'engine' }) });
     const { port } = server.address();
-    const body = await new Promise((resolve) => {
-      http.get(`http://127.0.0.1:${port}/health`, (res) => {
-        let data = '';
-        res.on('data', (c) => (data += c));
-        res.on('end', () => resolve(data));
-      });
-    });
+    const res = await get(port, '/health');
     server.close();
-    expect(JSON.parse(body)).toEqual({ status: 'ok', service: 'engine' });
+    expect(JSON.parse(res.body)).toEqual({ status: 'ok', service: 'engine' });
+  });
+
+  it('serves /metrics when onMetrics is provided', async () => {
+    const server = await startHealthServer(0, { onMetrics: () => 'acq_test 1\n' });
+    const { port } = server.address();
+    const res = await get(port, '/metrics');
+    server.close();
+    expect(res.status).toBe(200);
+    expect(res.body).toContain('acq_test 1');
   });
 });

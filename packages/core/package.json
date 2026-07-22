@@ -11,6 +11,7 @@
     "./models/*": "./src/models/*.model.js",
     "./services/*": "./src/services/*.service.js",
     "./utils/*": "./src/utils/*.js",
+    "./observability/*": "./src/observability/*.js",
     "./auth/*": "./src/auth/*.js",
     "./config/*": "./src/config/*.js"
   },
