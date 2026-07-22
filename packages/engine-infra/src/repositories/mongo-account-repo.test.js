@@ -1,0 +1,86 @@
+import { createMongoAccountRepo } from './mongo-account-repo.js';
+
+function fakeModel(returns = {}) {
+  const calls = [];
+  return {
+    calls,
+    find: (filter) => {
+      calls.push({ find: filter });
+      return { lean: () => returns.find ?? [] };
+    },
+    countDocuments: (filter) => {
+      calls.push({ count: filter });
+      return returns.count ?? 0;
+    },
+    findOneAndUpdate: (filter, update, options) => {
+      calls.push({ filter, update, options });
+      return returns.findOneAndUpdate;
+    },
+    insertMany: (docs, opts) => {
+      calls.push({ insertMany: docs, opts });
+      return docs;
+    }
+  };
+}
+
+const account = (over = {}) => ({
+  id: 'a1',
+  platform: 'telegram',
+  identifier: '@bob',
+  source: 'purchase',
+  secretRefs: {},
+  status: 'assigned',
+  assignedDeviceId: 'd1',
+  assignedProxyId: null,
+  health: { consecutiveFailures: 0, lastProbeAt: null },
+  checkpointReason: null,
+  version: 3,
+  ...over
+});
+
+describe('generic MongoAccountRepo.save (opt-lock)', () => {
+  it('matches the pre-bump version and $sets the bumped fields', async () => {
+    const model = fakeModel({ findOneAndUpdate: { _id: 'a1' } });
+    const repo = createMongoAccountRepo({ model });
+    await repo.save(account({ version: 3 }));
+    const { filter, update } = model.calls[0];
+    expect(filter).toEqual({ _id: 'a1', version: 2 });
+    expect(update.$set.identifier).toBe('@bob');
+    expect(update.$set.platform).toBe('telegram');
+    expect(update.$set.version).toBe(3);
+  });
+
+  it('throws CONFLICT when no row matched the version', async () => {
+    const model = fakeModel({ findOneAndUpdate: null });
+    const repo = createMongoAccountRepo({ model });
+    await expect(repo.save(account())).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});
+
+describe('generic MongoAccountRepo.countAvailable', () => {
+  it('counts acquired unassigned accounts for a platform+source', async () => {
+    const model = fakeModel({ count: 4 });
+    const repo = createMongoAccountRepo({ model });
+    const n = await repo.countAvailable({ platform: 'telegram', source: 'purchase' });
+    expect(n).toBe(4);
+    expect(model.calls[0].count).toMatchObject({
+      status: 'acquired',
+      assignedDeviceId: null,
+      platform: 'telegram',
+      source: 'purchase'
+    });
+  });
+});
+
+describe('generic MongoAccountRepo.insertAcquired', () => {
+  it('inserts acquired accounts at version 0 with the order id', async () => {
+    const model = fakeModel();
+    const repo = createMongoAccountRepo({ model });
+    await repo.insertAcquired([{ platform: 'telegram', identifier: '@x', source: 'purchase', secretRefs: {} }], {
+      orderId: 'ORD-1'
+    });
+    const { insertMany } = model.calls[0];
+    expect(insertMany[0]).toMatchObject({ status: 'acquired', version: 0, identifier: '@x' });
+    expect(insertMany[0].acquisition.externalOrderId).toBe('ORD-1');
+  });
+});
