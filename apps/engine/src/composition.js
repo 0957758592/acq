@@ -2,6 +2,7 @@ import {
   createMongoAccountRepo,
   createMongoActionTaskRepo,
   createMongoDeviceQueueRepo,
+  createMongoCampaignRepo,
   createPlatformAutomationAdapter
 } from '@acq/engine-infra';
 import { reconcile } from '@acq/engine-domain';
@@ -11,6 +12,8 @@ import { EngineAccount } from '@acq/core/models/engine-account';
 import { EngineActionTask } from '@acq/core/models/engine-action-task';
 import { EngineDeviceQueue } from '@acq/core/models/engine-device-queue';
 import { EngineDevice } from '@acq/core/models/engine-device';
+import { EngineCampaign } from '@acq/core/models/engine-campaign';
+import { canDeviceAcceptAccount } from '@acq/core/utils/device-account-eligibility';
 import { claimRunningDeviceLease, releaseDeviceLease } from '@acq/core/services/device-lease';
 import { getRedis } from '@acq/core/db/redis';
 import { createStructuredLogger } from '@acq/logger';
@@ -40,6 +43,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createMongoAccountRepo,
     createMongoActionTaskRepo,
     createMongoDeviceQueueRepo,
+    createMongoCampaignRepo,
     createPlatformAutomationAdapter,
     createDeviceProvider,
     reconcile,
@@ -49,6 +53,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     EngineActionTask,
     EngineDeviceQueue,
     EngineDevice,
+    EngineCampaign,
+    canDeviceAcceptAccount,
     claimRunningDeviceLease,
     releaseDeviceLease,
     getRedis,
@@ -61,6 +67,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   const accountRepo = D.createMongoAccountRepo({ model: D.EngineAccount });
   const actionTaskRepo = D.createMongoActionTaskRepo({ model: D.EngineActionTask });
   const deviceQueueRepo = D.createMongoDeviceQueueRepo({ model: D.EngineDeviceQueue });
+  const campaignRepo = D.createMongoCampaignRepo({ model: D.EngineCampaign });
   const secretResolver = D.secretResolver ?? createEnvSecretResolver();
 
   // Device provider from env (duoplus/vmos/geelark + creds). Absent -> null, in
@@ -91,7 +98,9 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     accountRepo,
     actionTaskRepo,
     deviceQueueRepo,
+    campaignRepo,
     deviceModel: D.EngineDevice,
+    canDeviceAcceptAccount: D.canDeviceAcceptAccount,
     secretResolver,
     provider,
     automationFor,
