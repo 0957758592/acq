@@ -7,3 +7,5 @@ export { SCRAPE_TIERS, selectTier } from './tier-router.js';
 export { normalizeEntities, naturalKey } from './read-models.js';
 export { extractEmbeddedJson } from './embedded-json.js';
 export { createScrapeProvider } from './scrape-provider.js';
+export { createHttpScrapeAdapter } from './adapters/http-scrape-adapter.js';
+export { createDeviceScrapeAdapter } from './adapters/device-scrape-adapter.js';
