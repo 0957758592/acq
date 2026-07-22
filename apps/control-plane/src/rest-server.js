@@ -2,12 +2,13 @@ import express from 'express';
 import helmet from 'helmet';
 
 import { httpStatusFor, authenticate } from './http-mapping.js';
+import { attachEventStream } from './sse.js';
 
 // REST surface over the single command facade (TZ §11.4). Thin presentation:
 // auth + envelope + status mapping only, zero business logic. Every operation
 // is POST /v1/op/:operation with a JSON args body; the facade enforces RBAC,
 // validation, error mapping and audit.
-export function createRestServer({ facade, tokens = {}, logger = null } = {}) {
+export function createRestServer({ facade, tokens = {}, logger = null, eventSource = null } = {}) {
   const app = express();
   app.use(helmet());
   app.use(express.json({ limit: '1mb' }));
@@ -26,6 +27,14 @@ export function createRestServer({ facade, tokens = {}, logger = null } = {}) {
     req.auth = auth;
     next();
   });
+
+  // SSE stream of domain events (TZ §11.5) — one-way, auth-gated.
+  if (eventSource) {
+    app.get('/v1/events', (req, res) => {
+      attachEventStream(res, eventSource);
+      logger?.info?.('sse open', { role: req.auth.role });
+    });
+  }
 
   app.post('/v1/op/:operation', async (req, res) => {
     const operation = req.params.operation;
