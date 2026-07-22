@@ -14,6 +14,58 @@ jobs:
           node-version: '20'
           cache: 'yarn'
       - run: yarn install --frozen-lockfile
-      - run: yarn lint
-      - run: yarn test
+      - run: yarn lint            # lint + JSDoc typecheck (SAST-lite via eslint)
+      - run: yarn test            # unit + contract (jest projects)
       - run: yarn build
+
+  security_scan:
+    # TZ §18.2 — dependency scanning + SAST. Fails only on high/critical so
+    # moderate transitive advisories don't block, but are still surfaced.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+      - run: yarn install --frozen-lockfile
+      - name: Dependency scan (fail on high/critical only)
+        # yarn v1 `yarn audit` exit code is a severity bitmask
+        # (1 info, 2 low, 4 moderate, 8 high, 16 critical). Surface everything,
+        # but fail the job only when high(8) or critical(16) bits are set.
+        run: |
+          yarn audit || code=$?
+          code=${code:-0}
+          echo "yarn audit severity bitmask: $code"
+          if [ $(( code & 8 )) -ne 0 ] || [ $(( code & 16 )) -ne 0 ]; then
+            echo "High/critical vulnerabilities found"; exit 1
+          fi
+          echo "No high/critical vulnerabilities"
+
+  integration:
+    # Live integration tests against real Mongo/Redis/RabbitMQ service containers.
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports: ['27017:27017']
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+      rabbitmq:
+        image: rabbitmq:3-alpine
+        ports: ['5672:5672']
+    env:
+      MONGODB_URI: mongodb://127.0.0.1:27017/acq_ci
+      REDIS_URL: redis://127.0.0.1:6379
+      RABBITMQ_URL: amqp://127.0.0.1:5672
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+      - run: yarn install --frozen-lockfile
+      - run: yarn workspace @acq/engine-app run test:live
+      - run: yarn workspace @acq/control-plane-app run test:live
+      - run: yarn workspace @acq/scrape-worker-app run test:live
