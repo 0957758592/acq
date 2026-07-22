@@ -1,4 +1,10 @@
-import { checkYouTubeLoginState, loginYouTube, publishYouTubeShort, setupYouTubeChannel } from './ui-flows.js';
+import {
+  checkYouTubeLoginState,
+  loginYouTube,
+  publishYouTubeShort,
+  setupYouTubeChannel,
+  warmupYouTubeAccount
+} from './ui-flows.js';
 
 function credentialsFrom(account = {}) {
   return {
@@ -41,8 +47,8 @@ export const youtubeAdapter = {
     };
   },
 
-  warmup() {
-    return { success: true, status: 'active', skipped: true };
+  warmup(controller, account, opts = {}) {
+    return warmupYouTubeAccount(controller, opts);
   },
 
   publish(controller, post, account, opts = {}) {

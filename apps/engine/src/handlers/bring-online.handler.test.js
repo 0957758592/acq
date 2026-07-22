@@ -1,0 +1,77 @@
+import { bringOnlineHandler } from './bring-online.handler.js';
+
+const clock = { now: () => new Date('2026-07-22T16:00:00.000Z') };
+
+function fakeCtx({ account, bringOnlineResult, bringOnlineThrows, device = { providerDeviceId: 'pd1' } } = {}) {
+  const saved = [];
+  const events = [];
+  const released = [];
+  return {
+    saved,
+    events,
+    released,
+    clock,
+    owner: 'engine:test',
+    lease: { claim: async () => true, release: async (d) => released.push(d) },
+    accountRepo: {
+      find: async () => [account],
+      save: async (a) => { saved.push({ status: a.status, version: a.version }); return a; }
+    },
+    deviceModel: { findById: () => ({ lean: async () => device }) },
+    automationFor: () => ({
+      bringOnline: async () => {
+        if (bringOnlineThrows) throw Object.assign(new Error(bringOnlineThrows), { code: bringOnlineThrows });
+        return bringOnlineResult;
+      }
+    }),
+    eventBus: { publish: async (e) => events.push(e.type) }
+  };
+}
+
+const account = (over = {}) => ({
+  _id: 'a1', platform: 'telegram', identifier: '@t1', status: 'assigned', assignedDeviceId: 'd1',
+  secretRefs: {}, health: { consecutiveFailures: 0, lastProbeAt: null }, version: 1, ...over
+});
+
+const payload = { accountId: 'a1', deviceId: 'd1', platform: 'telegram' };
+
+describe('generic bringOnlineHandler', () => {
+  it('brings an account online across the state machine and emits account.online', async () => {
+    const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: true } });
+    const res = await bringOnlineHandler(ctx, payload);
+    expect(res.ok).toBe(true);
+    // bringing_online then online
+    expect(ctx.saved.map((s) => s.status)).toEqual(['bringing_online', 'online']);
+    expect(ctx.events).toContain('account.online');
+    expect(ctx.released).toContain('d1');
+  });
+
+  it('reverts to assigned + blocked on a session-import seam (no fake success)', async () => {
+    const ctx = fakeCtx({ account: account(), bringOnlineThrows: 'TELEGRAM_SESSION_IMPORT_UNVERIFIED' });
+    const res = await bringOnlineHandler(ctx, payload);
+    expect(res).toMatchObject({ ok: false, blocked: 'TELEGRAM_SESSION_IMPORT_UNVERIFIED' });
+    expect(ctx.saved.map((s) => s.status)).toEqual(['bringing_online', 'assigned']);
+  });
+
+  it('maps a mid-flow ban to banned + account.banned', async () => {
+    const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: false, banned: true } });
+    const res = await bringOnlineHandler(ctx, payload);
+    expect(res.banned).toBe(true);
+    expect(ctx.saved.map((s) => s.status)).toContain('banned');
+    expect(ctx.events).toContain('account.banned');
+  });
+
+  it('maps checkpoint to checkpointed', async () => {
+    const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: false, checkpointed: true } });
+    const res = await bringOnlineHandler(ctx, payload);
+    expect(res.checkpointed).toBe(true);
+    expect(ctx.saved.map((s) => s.status)).toContain('checkpointed');
+    expect(ctx.events).toContain('account.checkpointed');
+  });
+
+  it('DEVICE_BUSY when the lease cannot be claimed (retriable)', async () => {
+    const ctx = fakeCtx({ account: account() });
+    ctx.lease.claim = async () => false;
+    await expect(bringOnlineHandler(ctx, payload)).rejects.toMatchObject({ code: 'DEVICE_BUSY' });
+  });
+});

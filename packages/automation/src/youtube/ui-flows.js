@@ -203,12 +203,28 @@ export async function loginYouTube(controller, { username = '', email = '', pass
   };
 }
 
+// Real warmup: open Shorts and watch/scroll a human-paced number of times to
+// build activity before hard actions (mirrors the Instagram Reels warmup).
+export async function warmupYouTubeAccount(controller, { swipes = 6, delayMs = 2_500 } = {}) {
+  await controller.startApp(YOUTUBE_PACKAGE).catch(() => false);
+  await delay(3_000);
+  await dismissPopups(controller);
+  await tapFirst(controller, ['Shorts']).catch(() => {});
+  for (let index = 0; index < swipes; index += 1) {
+    await delay(delayMs);
+    await controller.swipe(360, 1_050, 360, 280, 450);
+  }
+  return { success: true, swipes };
+}
+
+// Channel/profile setup on the YouTube Android app is a multi-step, account-
+// state-dependent flow whose selectors we have NOT captured from a live device.
+// Rather than fake success, this is a fail-safe verify-by-fact seam (REQUIREM:
+// no stubs — a coded error, never a pretend result).
 export async function setupYouTubeChannel() {
-  return {
-    success: false,
-    status: 'checkpointed',
-    reason: 'manual_intervention'
-  };
+  const err = new Error('YOUTUBE_PROFILE_SETUP_UNVERIFIED: youtube channel setup flow not verified on a live device');
+  err.code = 'YOUTUBE_PROFILE_SETUP_UNVERIFIED';
+  throw err;
 }
 
 export async function publishYouTubeShort(

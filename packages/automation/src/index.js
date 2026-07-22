@@ -25,7 +25,7 @@ export {
   publishInstagramReel
 } from './instagram/ui-flows.js';
 export { YOUTUBE_PACKAGE } from './youtube/constants.js';
-export { checkYouTubeLoginState, loginYouTube, publishYouTubeShort, setupYouTubeChannel } from './youtube/ui-flows.js';
+export { checkYouTubeLoginState, loginYouTube, publishYouTubeShort, setupYouTubeChannel, warmupYouTubeAccount } from './youtube/ui-flows.js';
 export {
   WHATSAPP_PACKAGE,
   WHATSAPP_LAUNCHER_ACTIVITY,

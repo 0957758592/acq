@@ -1,5 +1,20 @@
 import { makeEvent } from '@acq/engine-domain';
 
+// Resolves the platform action across ANY platform. Preferred path uses
+// ctx.automationFor(account.platform) over a live device controller; falls back
+// to a single ctx.automation for isolated tests.
+async function runPlatformAction(ctx, payload) {
+  const action = { type: payload.actionType, target: payload.target };
+  if (ctx.automationFor && ctx.accountRepo) {
+    const [doc] = await ctx.accountRepo.find({ _id: payload.accountId });
+    const platform = doc?.platform;
+    const device = doc?.assignedDeviceId ? await ctx.deviceModel?.findById(doc.assignedDeviceId).lean() : null;
+    const automation = ctx.automationFor(platform);
+    return automation.runAction({ providerDeviceId: device?.providerDeviceId, account: doc }, action);
+  }
+  return ctx.automation.runAction({ accountId: payload.accountId }, action);
+}
+
 // run-action-task consumer (TZ §8.3). Exactly-once via upsertTask on the natural
 // key; success is claimed only when the driver confirms (result.ok). A mid-flow
 // ban is mapped to account.banned; anything else is a transient failure (task
@@ -17,10 +32,7 @@ export async function runActionTaskHandler(ctx, payload) {
   await ctx.actionTaskRepo.upsertTask(key);
   await ctx.actionTaskRepo.markTask(key, 'running');
 
-  const result = await ctx.automation.runAction(
-    { accountId: payload.accountId },
-    { type: payload.actionType, target: payload.target }
-  );
+  const result = await runPlatformAction(ctx, payload);
 
   if (result?.banned) {
     await ctx.actionTaskRepo.markTask({ ...key, lastError: 'banned' }, 'failed');
