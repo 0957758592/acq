@@ -1,6 +1,7 @@
 /** @type {import('jest').Config} */
 module.exports = {
   projects: [
+    '<rootDir>/apps/engine/jest.config.js',
     '<rootDir>/apps/whatsapp/jest.config.js',
     '<rootDir>/packages/account-gen/jest.config.js',
     '<rootDir>/packages/automation/jest.config.js',
