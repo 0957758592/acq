@@ -1,0 +1,110 @@
+// engine.js — process entrypoint for @acq/engine-app (TZ §2.3/§8.5).
+//
+// Connects infra, builds the composition-root ctx, starts a health server, and
+// schedules the reconciler tick per active platform (node-cron in the
+// composition root, never in the domain). No I/O runs at import: main() only
+// executes on direct run. reconcileTick / startHealthServer are testable with
+// injected fakes.
+import http from 'node:http';
+
+import cron from 'node-cron';
+
+import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
+import { getRedis, disconnectRedis } from '@acq/core/db/redis';
+import { connectRabbitmq, disconnectRabbitmq } from '@acq/core/queue/rabbitmq';
+
+import { buildEngineContext } from './composition.js';
+import { planForPlatform } from './snapshot.js';
+
+// One reconcile pass across every active platform. Pure-ish: only the repo reads
+// and the (optional) dispatch touch I/O. Returns the intents it planned.
+export async function reconcileTick(ctx, { planFn = planForPlatform } = {}) {
+  const all = [];
+  for (const platform of ctx.activePlatforms) {
+    let intents = [];
+    try {
+      intents = await planFn(ctx, { platform });
+    } catch (err) {
+      ctx.logger.error?.('reconcile failed', { platform, err: err.message });
+      continue;
+    }
+    if (ctx.jobDispatcher) {
+      for (const intent of intents) {
+        await ctx.jobDispatcher.dispatch(`engine.${intent.type}`, intent).catch(() => {});
+      }
+    }
+    ctx.logger.info?.('reconcile tick', { platform, intents: intents.length });
+    all.push(...intents);
+  }
+  return all;
+}
+
+export function startHealthServer(port, { onHealth } = {}) {
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+      const body = JSON.stringify(onHealth ? onHealth() : { status: 'ok' });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(body);
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  return new Promise((resolve) => server.listen(port, () => resolve(server)));
+}
+
+export async function main({ env } = {}) {
+  await connectMongo(env.mongoUri);
+  getRedis(env.redisUrl);
+  await connectRabbitmq(env.rabbitUrl);
+
+  const ctx = buildEngineContext({
+    env: {
+      platforms: env.platforms,
+      poolThreshold: env.poolThreshold,
+      buyBatchSize: env.buyBatchSize,
+      autobuyEnabled: env.autobuyEnabled,
+      pid: process.pid
+    }
+  });
+
+  const server = await startHealthServer(env.healthPort, {
+    onHealth: () => ({ status: 'ok', service: 'engine', platforms: ctx.activePlatforms })
+  });
+  ctx.logger.info?.('engine up', { port: env.healthPort, platforms: ctx.activePlatforms });
+
+  const task = cron.schedule(env.reconcileCron || '*/5 * * * *', () => {
+    reconcileTick(ctx).catch((err) => ctx.logger.error?.('tick error', { err: err.message }));
+  });
+
+  const shutdown = async () => {
+    task.stop();
+    server.close();
+    await disconnectRabbitmq();
+    await disconnectRedis();
+    await disconnectMongo();
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
+  return { ctx, server, task, shutdown };
+}
+
+// Direct-run guard.
+if (process.argv[1] && process.argv[1].endsWith('engine.js')) {
+  main({
+    env: {
+      mongoUri: process.env.MONGODB_URI,
+      redisUrl: process.env.REDIS_URL,
+      rabbitUrl: process.env.RABBITMQ_URL,
+      healthPort: Number(process.env.ENGINE_HEALTH_PORT || 7401),
+      reconcileCron: process.env.ENGINE_RECONCILE_CRON,
+      poolThreshold: Number(process.env.ENGINE_POOL_THRESHOLD || 10),
+      buyBatchSize: Number(process.env.ENGINE_BUY_BATCH_SIZE || 5),
+      autobuyEnabled: process.env.ENGINE_AUTOBUY_ENABLED === 'true'
+    }
+  }).catch((err) => {
+    console.error('engine failed to start', err);
+    process.exit(1);
+  });
+}
