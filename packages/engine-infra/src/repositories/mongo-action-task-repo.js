@@ -11,11 +11,19 @@ export function createMongoActionTaskRepo({ model } = {}) {
   if (!model) throw new Error('createMongoActionTaskRepo requires a mongoose model');
   return {
     async upsertTask(task) {
-      return model.findOneAndUpdate(
-        keyOf(task),
-        { $setOnInsert: { ...keyOf(task), status: 'pending', attempts: 0, lastError: null } },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      );
+      try {
+        return await model.findOneAndUpdate(
+          keyOf(task),
+          { $setOnInsert: { ...keyOf(task), status: 'pending', attempts: 0, lastError: null } },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } catch (err) {
+        // Concurrent upserts on the unique natural key can race to insert; the
+        // loser gets E11000. That IS exactly-once (one row won) — resolve to the
+        // existing task instead of failing.
+        if (err?.code === 11000) return model.findOne(keyOf(task));
+        throw err;
+      }
     },
     async markTask(key, status) {
       return model.findOneAndUpdate(

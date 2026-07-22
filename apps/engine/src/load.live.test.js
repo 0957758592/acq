@@ -9,7 +9,7 @@ import { EngineActionTask } from '@acq/core/models/engine-action-task';
 import { createMongoAccountRepo, createMongoActionTaskRepo } from '@acq/engine-infra';
 
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/acq';
-const PLATFORMS = ['e2etest', 'e2eload'];
+const PLATFORMS = ['e2eloadA', 'e2eloadB'];
 const CAMPAIGN = 'e2e-load';
 
 const accountRepo = createMongoAccountRepo({ model: EngineAccount });
@@ -54,7 +54,7 @@ describe('load / concurrency (LIVE Mongo)', () => {
 
   it('sustains concurrent countAvailable reads without error', async () => {
     const reads = await Promise.all(
-      Array.from({ length: 100 }, () => accountRepo.countAvailable({ platform: 'e2eload' }))
+      Array.from({ length: 100 }, () => accountRepo.countAvailable({ platform: 'e2eloadB' }))
     );
     expect(reads.every((n) => n === 400)).toBe(true);
   });

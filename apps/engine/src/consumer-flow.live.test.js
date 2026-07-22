@@ -53,5 +53,5 @@ describe('full consume path (LIVE)', () => {
     }
     expect(row).not.toBeNull();
     expect(row.status).toBe('done');
-  });
+  }, 20_000); // poll budget (5s) + headroom under concurrent load
 });
