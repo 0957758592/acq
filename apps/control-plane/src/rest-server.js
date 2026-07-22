@@ -4,12 +4,20 @@ import helmet from 'helmet';
 import { httpStatusFor, authenticate } from './http-mapping.js';
 import { attachEventStream } from './sse.js';
 import { correlationMiddleware } from './correlation.js';
+import { createRateLimiter } from './rate-limit.js';
 
 // REST surface over the single command facade (TZ §11.4). Thin presentation:
 // auth + envelope + status mapping only, zero business logic. Every operation
 // is POST /v1/op/:operation with a JSON args body; the facade enforces RBAC,
 // validation, error mapping and audit.
-export function createRestServer({ facade, tokens = {}, logger = null, eventSource = null, webhookProcessor = null } = {}) {
+export function createRestServer({
+  facade,
+  tokens = {},
+  logger = null,
+  eventSource = null,
+  webhookProcessor = null,
+  rateLimit = { max: 300, windowMs: 60_000 }
+} = {}) {
   const app = express();
   app.use(helmet());
   // Capture the raw body so inbound webhooks can verify their HMAC signature.
@@ -45,6 +53,12 @@ export function createRestServer({ facade, tokens = {}, logger = null, eventSour
     req.auth = auth;
     next();
   });
+
+  // Rate limiting per authenticated actor (TZ §14.6). Applied after auth so the
+  // bucket key is the token/actor, not just the IP.
+  if (rateLimit) {
+    app.use('/v1', createRateLimiter({ max: rateLimit.max, windowMs: rateLimit.windowMs }));
+  }
 
   // SSE stream of domain events (TZ §11.5) — one-way, auth-gated.
   if (eventSource) {

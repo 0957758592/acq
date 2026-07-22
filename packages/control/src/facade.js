@@ -1,5 +1,6 @@
 import { getOperation } from './operations.js';
 import { can } from './rbac.js';
+import { assertSafeArgs } from './sanitize.js';
 
 // Single command facade (TZ §11.1/§11.8). Every management surface calls
 // execute() — one place for RBAC, validation, the response envelope, error
@@ -17,7 +18,7 @@ function toError(err) {
   return { code: 'INTERNAL', message: 'internal error' };
 }
 
-export function createFacade({ useCases = {}, audit = null } = {}) {
+export function createFacade({ useCases = {}, validators = {}, audit = null } = {}) {
   async function execute(operationName, { role = 'readonly', args = {}, correlationId, actor } = {}) {
     const op = getOperation(operationName);
     if (!op) {
@@ -32,7 +33,10 @@ export function createFacade({ useCases = {}, audit = null } = {}) {
     }
 
     try {
-      const data = await handler(args, { role, actor, correlationId });
+      // Security: reject Mongo-operator injection, then run the op's validator.
+      assertSafeArgs(args);
+      const validated = validators[operationName] ? validators[operationName](args) : args;
+      const data = await handler(validated, { role, actor, correlationId });
       if (op.mutating && audit?.record) {
         await audit.record({ operation: operationName, actor: actor ?? null, role, args, correlationId: correlationId ?? null });
       }

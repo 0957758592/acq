@@ -47,6 +47,23 @@ describe('createFacade.execute — envelope', () => {
     expect(res.error).toEqual({ code: 'ACCOUNT_TRANSITION_INVALID', message: expect.any(String) });
     expect(res.error.stack).toBeUndefined();
   });
+
+  test('rejects Mongo-operator injection in args (INVALID_ARGS)', async () => {
+    const { facade } = build();
+    const res = await facade.execute('pool.status', { role: 'readonly', args: { $where: 'x' } });
+    expect(res.error.code).toBe('INVALID_ARGS');
+  });
+
+  test('runs a per-operation validator when provided', async () => {
+    const audits = [];
+    const facade = createFacade({
+      useCases: { 'pool.status': async (a) => ({ got: a }) },
+      validators: { 'pool.status': (a) => ({ ...a, validated: true }) },
+      audit: { record: async (e) => audits.push(e) }
+    });
+    const res = await facade.execute('pool.status', { role: 'readonly', args: { platform: 'tg' } });
+    expect(res.data.got).toEqual({ platform: 'tg', validated: true });
+  });
 });
 
 describe('createFacade.execute — audit', () => {
