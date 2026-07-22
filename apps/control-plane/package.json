@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node ./src/server.js",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.config.js --passWithNoTests",
+    "test:live": "cross-env ACQ_LIVE=1 NODE_OPTIONS=--experimental-vm-modules jest -c jest.live.config.js --runInBand",
     "lint": "eslint .",
     "build": "node -e \"console.log('control-plane-app: no build step')\""
   },
