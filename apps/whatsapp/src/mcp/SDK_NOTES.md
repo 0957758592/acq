@@ -1,6 +1,6 @@
 # `@modelcontextprotocol/sdk` — API notes (Plan 6 contract)
 
-Discovery notes for the MCP surface of `@julio/whatsapp-app`. Every symbol / import
+Discovery notes for the MCP surface of `@acq/whatsapp-app`. Every symbol / import
 path below was verified against the **installed** package, not docs. Later tasks
 (`errors.js`, `schemas.js`, `tools.js`, `resources.js`, `notifications.js`,
 `core.js`, `stdio.js`, `streamable-http.js`) build against this file.
@@ -9,7 +9,7 @@ path below was verified against the **installed** package, not docs. Later tasks
 
 - `@modelcontextprotocol/sdk` **1.29.0** (`^1.29.0` in `package.json`).
 - Runtime: Node 20, ESM (`"type": "module"`). The SDK is ESM-first (`dist/esm`).
-- `yup ^1.4.0` also added (matches `@julio/validation`) — used by our own schema
+- `yup ^1.4.0` also added (matches `@acq/validation`) — used by our own schema
   layer (`schemas.js`), NOT by the SDK. See "Validation: yup vs zod" below.
 
 ### Getting the version at runtime
@@ -46,7 +46,7 @@ Workers/Deno/Bun) — we want the Node one (`streamableHttp.js`).
 - **Recommendation: use the low-level `Server` + `setRequestHandler` approach.** With
   it WE own argument validation, so we validate `tools/call` arguments with **yup**
   (`schemas.js`) inside the handler, and hand-author the JSON Schema we advertise in
-  `tools/list`. This keeps schema authorship consistent with `@julio/validation` (yup)
+  `tools/list`. This keeps schema authorship consistent with `@acq/validation` (yup)
   and avoids adding a second schema library to our own code. The `@deprecated` tag on
   `Server` is Anthropic steering casual users to the sugar API; the low-level API is
   fully supported and is what `McpServer` is built on top of.

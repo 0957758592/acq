@@ -41,7 +41,16 @@ describe('createScrapeProvider.scrape', () => {
     ).rejects.toMatchObject({ code: 'SCRAPE_TIER_UNAVAILABLE' });
   });
 
-  test('propagates a captcha hard-stop from the adapter', async () => {
+  test('throws SCRAPE_CAPTCHA when the adapter signals a captcha wall', async () => {
+    const provider = createScrapeProvider({
+      adapters: { browser: { scrape: async () => ({ captcha: true }) } }
+    });
+    await expect(
+      provider.scrape({ platform: 'ig', targetType: 'followers', target: '@x', routing: { needsLogin: true } })
+    ).rejects.toMatchObject({ code: 'SCRAPE_CAPTCHA' });
+  });
+
+  test('propagates a captcha hard-stop thrown by the adapter', async () => {
     const provider = createScrapeProvider({
       adapters: {
         browser: {

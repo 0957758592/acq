@@ -1,10 +1,10 @@
-# @julio/config
+# @acq/config
 
 Shared runtime config loader + validator.
 
 ## Usage
 ```js
-import { defineSchema, loadConfig, rules } from '@julio/config';
+import { defineSchema, loadConfig, rules } from '@acq/config';
 
 const schema = defineSchema({
   API_URL: rules.requiredString(),

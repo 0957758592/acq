@@ -14,8 +14,13 @@ export function createScrapeProvider({ adapters = {} } = {}) {
     if (!adapter) {
       throw domainError('SCRAPE_TIER_UNAVAILABLE', `no adapter for scrape tier '${tier}'`);
     }
-    const { rawItems = [] } = await adapter.scrape({ platform, targetType, target, params });
-    const entities = normalizeEntities({ platform, targetType, target, rawItems });
+    const result = await adapter.scrape({ platform, targetType, target, params });
+    // Captcha is a hard-stop verify-by-fact seam (§10.3/§22.2): never solved
+    // blind. An adapter that hit a captcha signals it; we fail with a coded error.
+    if (result?.captcha) {
+      throw domainError('SCRAPE_CAPTCHA', `captcha wall on ${platform}/${targetType} via ${tier}`);
+    }
+    const entities = normalizeEntities({ platform, targetType, target, rawItems: result?.rawItems ?? [] });
     return { tier, entities };
   }
 
