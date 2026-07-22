@@ -1,14 +1,20 @@
 // Generic MongoActionTaskRepo — exactly-once action-task persistence (TZ §4).
 // The unique natural key {campaignId, accountId, target, actionType} plus an
-// upsert with $setOnInsert guarantees at-most-one task per tuple. Model injected.
+// upsert with $setOnInsert guarantees at-most-one task per tuple. Model injected;
+// tenant-scoped (§14.2).
 import { actionTaskKey } from '@acq/engine-domain';
 
-function keyOf(task) {
-  return { campaignId: task.campaignId, accountId: task.accountId, target: task.target, actionType: task.actionType };
-}
-
-export function createMongoActionTaskRepo({ model } = {}) {
+export function createMongoActionTaskRepo({ model, tenantId = 'default' } = {}) {
   if (!model) throw new Error('createMongoActionTaskRepo requires a mongoose model');
+
+  const keyOf = (task) => ({
+    tenantId,
+    campaignId: task.campaignId,
+    accountId: task.accountId,
+    target: task.target,
+    actionType: task.actionType
+  });
+
   return {
     async upsertTask(task) {
       try {
@@ -33,11 +39,11 @@ export function createMongoActionTaskRepo({ model } = {}) {
       );
     },
     async doneKeys(campaignId) {
-      const rows = await model.find({ campaignId, status: 'done' }).lean();
+      const rows = await model.find({ tenantId, campaignId, status: 'done' }).lean();
       return rows.map((r) => actionTaskKey(r));
     },
     async hasOpenTasks(campaignId) {
-      const open = await model.countDocuments({ campaignId, status: { $in: ['pending', 'running'] } });
+      const open = await model.countDocuments({ tenantId, campaignId, status: { $in: ['pending', 'running'] } });
       return open > 0;
     }
   };

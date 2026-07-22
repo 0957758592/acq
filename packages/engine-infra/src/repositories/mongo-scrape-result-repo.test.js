@@ -50,6 +50,6 @@ describe('createMongoScrapeResultRepo', () => {
     const repo = createMongoScrapeResultRepo({ model });
     const rows = await repo.listResults({ platform: 'ig', type: 'follower' }, { cursor: 'abc', limit: 2 });
     expect(rows).toHaveLength(2);
-    expect(model.calls[0].find).toMatchObject({ platform: 'ig', type: 'follower', _id: { $gt: 'abc' } });
+    expect(model.calls[0].find).toMatchObject({ tenantId: 'default', platform: 'ig', type: 'follower', _id: { $gt: 'abc' } });
   });
 });

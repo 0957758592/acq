@@ -26,7 +26,7 @@ describe('MongoActionTaskRepo.upsertTask (exactly-once)', () => {
     const model = fakeModel();
     await createMongoActionTaskRepo({ model }).upsertTask(task);
     const { filter, update, options } = model.calls[0];
-    expect(filter).toEqual(task);
+    expect(filter).toEqual({ tenantId: 'default', ...task });
     expect(options).toMatchObject({ upsert: true });
     expect(update.$setOnInsert).toMatchObject({ status: 'pending', attempts: 0 });
   });
@@ -37,7 +37,7 @@ describe('MongoActionTaskRepo.markTask', () => {
     const model = fakeModel();
     await createMongoActionTaskRepo({ model }).markTask(task, 'done');
     const { filter, update } = model.calls[0];
-    expect(filter).toEqual(task);
+    expect(filter).toEqual({ tenantId: 'default', ...task });
     expect(update.$set.status).toBe('done');
     expect(update.$inc.attempts).toBe(1);
   });
@@ -50,7 +50,7 @@ describe('MongoActionTaskRepo.doneKeys', () => {
     });
     const keys = await createMongoActionTaskRepo({ model }).doneKeys('c1');
     expect(keys).toEqual(['c1:a1:t1:follow']);
-    expect(model.calls[0].find).toMatchObject({ campaignId: 'c1', status: 'done' });
+    expect(model.calls[0].find).toMatchObject({ tenantId: 'default', campaignId: 'c1', status: 'done' });
   });
 });
 
@@ -58,7 +58,7 @@ describe('MongoActionTaskRepo.hasOpenTasks', () => {
   it('is true when pending/running tasks remain', async () => {
     const model = fakeModel({ count: 2 });
     expect(await createMongoActionTaskRepo({ model }).hasOpenTasks('c1')).toBe(true);
-    expect(model.calls[0].count).toMatchObject({ campaignId: 'c1', status: { $in: ['pending', 'running'] } });
+    expect(model.calls[0].count).toMatchObject({ tenantId: 'default', campaignId: 'c1', status: { $in: ['pending', 'running'] } });
   });
   it('is false when none remain', async () => {
     const model = fakeModel({ count: 0 });

@@ -39,12 +39,12 @@ const account = (over = {}) => ({
 });
 
 describe('generic MongoAccountRepo.save (opt-lock)', () => {
-  it('matches the pre-bump version and $sets the bumped fields', async () => {
+  it('matches the pre-bump version + tenant and $sets the bumped fields', async () => {
     const model = fakeModel({ findOneAndUpdate: { _id: 'a1' } });
     const repo = createMongoAccountRepo({ model });
     await repo.save(account({ version: 3 }));
     const { filter, update } = model.calls[0];
-    expect(filter).toEqual({ _id: 'a1', version: 2 });
+    expect(filter).toEqual({ _id: 'a1', tenantId: 'default', version: 2 });
     expect(update.$set.identifier).toBe('@bob');
     expect(update.$set.platform).toBe('telegram');
     expect(update.$set.version).toBe(3);
@@ -64,11 +64,21 @@ describe('generic MongoAccountRepo.countAvailable', () => {
     const n = await repo.countAvailable({ platform: 'telegram', source: 'purchase' });
     expect(n).toBe(4);
     expect(model.calls[0].count).toMatchObject({
+      tenantId: 'default',
       status: 'acquired',
       assignedDeviceId: null,
       platform: 'telegram',
       source: 'purchase'
     });
+  });
+
+  it('scopes every query to the bound tenant (no cross-tenant leak)', async () => {
+    const model = fakeModel({ count: 0 });
+    const repo = createMongoAccountRepo({ model, tenantId: 'tenant-A' });
+    await repo.find({ platform: 'telegram' });
+    await repo.countAvailable({ platform: 'telegram' });
+    expect(model.calls[0].find).toMatchObject({ tenantId: 'tenant-A' });
+    expect(model.calls[1].count).toMatchObject({ tenantId: 'tenant-A' });
   });
 });
 
@@ -80,7 +90,7 @@ describe('generic MongoAccountRepo.insertAcquired', () => {
       orderId: 'ORD-1'
     });
     const { insertMany } = model.calls[0];
-    expect(insertMany[0]).toMatchObject({ status: 'acquired', version: 0, identifier: '@x' });
+    expect(insertMany[0]).toMatchObject({ tenantId: 'default', status: 'acquired', version: 0, identifier: '@x' });
     expect(insertMany[0].acquisition.externalOrderId).toBe('ORD-1');
   });
 });

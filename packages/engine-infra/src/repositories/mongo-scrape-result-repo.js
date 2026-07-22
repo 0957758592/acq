@@ -28,7 +28,8 @@ export function createMongoScrapeResultRepo({ model, tenantId = 'default' } = {}
     },
 
     async listResults(filter = {}, { cursor = null, limit = 100 } = {}) {
-      const query = { ...filter };
+      // Always scope reads to the bound tenant (§14.2 — no cross-tenant leak).
+      const query = { tenantId, ...filter };
       if (cursor) query._id = { $gt: cursor };
       return model.find(query).sort({ _id: 1 }).limit(limit).lean();
     }

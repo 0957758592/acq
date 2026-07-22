@@ -1,6 +1,6 @@
 // Generic MongoDeviceQueueRepo — persistence for EngineDeviceQueue, keyed by
-// {deviceId, platform} (TZ §3.3/§4). Model injected; opt-lock like the account
-// repo (domain bumps version before save()).
+// {deviceId, platform} (TZ §3.3/§4). Model injected; tenant-scoped (§14.2);
+// opt-lock like the account repo (domain bumps version before save()).
 import { conflictError } from '../errors.js';
 
 function toFields(q) {
@@ -13,22 +13,23 @@ function toFields(q) {
   };
 }
 
-export function createMongoDeviceQueueRepo({ model } = {}) {
+export function createMongoDeviceQueueRepo({ model, tenantId = 'default' } = {}) {
   if (!model) throw new Error('createMongoDeviceQueueRepo requires a mongoose model');
   return {
     async find(deviceId, platform) {
-      return model.findOne({ deviceId, platform }).lean();
+      return model.findOne({ tenantId, deviceId, platform }).lean();
     },
     async listAll(platform) {
-      return model.find(platform ? { platform } : {}).lean();
+      return model.find(platform ? { tenantId, platform } : { tenantId }).lean();
     },
     async ensureQueue(deviceId, platform, targetDepth) {
       return model
         .findOneAndUpdate(
-          { deviceId, platform },
+          { tenantId, deviceId, platform },
           {
             $set: { targetDepth },
             $setOnInsert: {
+              tenantId,
               deviceId,
               platform,
               activeSlots: 1,
@@ -43,7 +44,7 @@ export function createMongoDeviceQueueRepo({ model } = {}) {
     },
     async save(queue) {
       const updated = await model.findOneAndUpdate(
-        { deviceId: queue.deviceId, platform: queue.platform, version: queue.version - 1 },
+        { tenantId, deviceId: queue.deviceId, platform: queue.platform, version: queue.version - 1 },
         { $set: toFields(queue) },
         { new: true }
       );

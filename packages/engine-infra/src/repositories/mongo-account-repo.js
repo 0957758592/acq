@@ -2,11 +2,14 @@
 // the whatsapp vertical (TZ §4). The mongoose model is INJECTED so this stays
 // deployment-agnostic and unit-testable against a fake model.
 //
+// Multi-tenancy (TZ §12.2/§14.2): the repo is bound to a `tenantId` and injects
+// it into EVERY query and insert, so one tenant can never read/write another's
+// data.
+//
 // Optimistic locking: the pure domain bumps `version` BEFORE save() is called,
-// so save() opt-locks on { _id, version: account.version - 1 } and $sets the
-// already-bumped fields. A null result means a concurrent writer moved the
-// version -> CONFLICT. Brand-new accounts (version 0) are INSERTED via
-// insertAcquired, never through save().
+// so save() opt-locks on { _id, tenantId, version-1 } and $sets the already-
+// bumped fields. A null result means a concurrent writer moved the version ->
+// CONFLICT. Brand-new accounts (version 0) are INSERTED via insertAcquired.
 import { conflictError } from '../errors.js';
 
 function toFields(a) {
@@ -25,18 +28,18 @@ function toFields(a) {
   };
 }
 
-export function createMongoAccountRepo({ model } = {}) {
+export function createMongoAccountRepo({ model, tenantId = 'default' } = {}) {
   if (!model) throw new Error('createMongoAccountRepo requires a mongoose model');
   return {
     async find(filter = {}) {
-      return model.find(filter).lean();
+      return model.find({ tenantId, ...filter }).lean();
     },
     async countAvailable(filter = {}) {
-      return model.countDocuments({ status: 'acquired', assignedDeviceId: null, ...filter });
+      return model.countDocuments({ tenantId, status: 'acquired', assignedDeviceId: null, ...filter });
     },
     async save(account) {
       const updated = await model.findOneAndUpdate(
-        { _id: account.id, version: account.version - 1 },
+        { _id: account.id, tenantId, version: account.version - 1 },
         { $set: toFields(account) },
         { new: true }
       );
@@ -45,6 +48,7 @@ export function createMongoAccountRepo({ model } = {}) {
     },
     async insertAcquired(accounts, { orderId } = {}) {
       const docs = accounts.map((a) => ({
+        tenantId,
         platform: a.platform,
         identifier: a.identifier,
         source: a.source ?? 'purchase',
