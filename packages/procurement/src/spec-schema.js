@@ -20,6 +20,7 @@ const shopSpecSchema = yup
     shopId: yup.string().required(),
     baseUrl: yup.string().required(),
     title: yup.string().default(''),
+    platform: yup.string().optional(),
     auth: yup
       .object({
         kind: yup.string().oneOf(AUTH_KINDS).required(),
