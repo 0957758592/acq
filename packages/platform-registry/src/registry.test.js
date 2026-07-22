@@ -65,6 +65,15 @@ describe('built-in facebook descriptor', () => {
   });
 });
 
+describe('built-in gmail descriptor', () => {
+  test('is the signup anchor / code reader', () => {
+    const caps = getPlatformCapabilities('gmail');
+    expect(caps.appPackage).toBe('com.google.android.gm');
+    expect(caps.identifierVO).toBe('email');
+    expect(caps.supportedActions).toEqual(['read-code']);
+  });
+});
+
 describe('isSupportedAction', () => {
   test('true for a declared action', () => {
     expect(isSupportedAction('whatsapp', 'report')).toBe(true);

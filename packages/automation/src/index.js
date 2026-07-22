@@ -64,3 +64,6 @@ export { discordAdapter } from './discord/adapter.js';
 export { FACEBOOK_PACKAGE, FACEBOOK_HOME_TEXTS, FACEBOOK_BAN_TEXTS } from './facebook/constants.js';
 export { checkFacebookState, runFacebookAction, FACEBOOK_SUPPORTED_ACTIONS } from './facebook/ui-flows.js';
 export { facebookAdapter } from './facebook/adapter.js';
+export { GMAIL_PACKAGE, GMAIL_HOME_TEXTS } from './gmail/constants.js';
+export { checkGmailState, readVerificationCode } from './gmail/ui-flows.js';
+export { gmailAdapter } from './gmail/adapter.js';

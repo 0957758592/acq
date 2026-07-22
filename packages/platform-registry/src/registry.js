@@ -3,6 +3,7 @@ import { whatsappCapabilities } from './descriptors/whatsapp.js';
 import { telegramCapabilities } from './descriptors/telegram.js';
 import { discordCapabilities } from './descriptors/discord.js';
 import { facebookCapabilities } from './descriptors/facebook.js';
+import { gmailCapabilities } from './descriptors/gmail.js';
 
 // Required fields every PlatformCapabilities descriptor must declare (TZ §3.6).
 const REQUIRED_FIELDS = [
@@ -75,3 +76,4 @@ registerPlatform(whatsappCapabilities);
 registerPlatform(telegramCapabilities);
 registerPlatform(discordCapabilities);
 registerPlatform(facebookCapabilities);
+registerPlatform(gmailCapabilities);
