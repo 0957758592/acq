@@ -2,7 +2,7 @@
 
 Self-contained platform that **buys (or generates) accounts across many shops, provisions them onto cloud-phone devices from many providers, keeps a healthy pool, and runs mass actions and scraping at scale** — centralized, modular, horizontally scalable, controlled by an AI brain over MCP, or via CLI / HTTP-API / npm.
 
-**Status:** **WhatsApp** (mass report) is fully implemented and is the reference vertical (335 tests green). The platform is being generalized along four independent axes; the full design is the foundational spec **`docs/TZ.md`** (local design doc, kept out of git by design).
+**Status:** the **generic engine is live** — one platform-agnostic reconciler + queue consumers **self-drive every account type** off real Mongo state (acquire → enroll → assign → bring-online → campaigns → probe → replace), exposed through a **single command facade** over many surfaces. **WhatsApp** (mass report) remains the most complete reference vertical. **847 tests green** (163 suites) plus live suites against real Mongo/RabbitMQ/Redis and a **real headless-Chromium** browser-scrape run. Unknown external facts (per-shop delivery/auth, on-device selectors, session-import, some platform logins) stay **verify-by-fact seams** — fail-safe coded errors, never guesses. The full design is the foundational spec **`docs/TZ.md`** (local design doc, kept out of git by design).
 
 > `docs/` (the TZ, runbook, plans, REQUIREM) is intentionally **not tracked in git** — it is the working design corpus. This README is the tracked entry point.
 
@@ -25,7 +25,7 @@ Adding a value on any axis is a plugin — **no core changes** (Open/Closed):
 Cross-cutting over all axes: **AI is used maximally** — brain orchestration, shop-doc scan, content & persona generation, scoring, CAPTCHA assist, scrape parsing (all in the application layer, deterministically validated).
 
 ### What it does
-Keeps a **pool** of ready accounts, provisions **devices** (install the platform app + proxy/SmartIP + verify subscription), fills per-device **queues**, brings accounts **online** (session-import or login), **probes health**, **auto-replaces** banned and **auto-buys/generates** new ones, runs **action campaigns** (report / publish / warmup / follow / like / comment / join / dm) exactly-once, and **scrapes maximally** — groups, channels, members, followers, follows, likes, comments, commenters/likers, posts/reels/stories, hashtags, contacts — for **every** account type (WA/TG/IG/TikTok/Discord/FB/Gmail/YouTube) via a hybrid `ScrapeProvider` where a **headless-browser tier is first-class and primary** (playwright/puppeteer), complemented by anon-HTTP, on-device (UI-dump), and API tiers. The browser tier is a **cloud headless-browser pool of Browserbase class and beyond** (`BrowserProvider`: thousands of concurrent CDP sessions, stealth, residential proxies, CAPTCHA solving, persistent contexts, live-view/takeover, session replay, AI `act/observe/extract(schema)`) — **better because** we also drive real Android phones for app-only data, integrate scraping into the same exactly-once lifecycle engine, and are brain/MCP-native. All account types (WhatsApp today, others next) are **managed identically** — same facade ops (`account.status/retire/cooldown/reassign/refreshSession/probe/action/tag`, bulk), reconciler, campaigns — only the platform driver differs; a device can host **multiple accounts** (app-cloning/switching, up to N:1). Every account runs behind a **1:1 proxy** (residential/mobile, geo-consistent IP↔SIM↔GPS↔timezone), goes through **warmup** and per-account **action budgets**, with **anti-detect fingerprinting** and AI-generated **personas & content**. Self-healing, idempotent, observable, secure.
+Keeps a **pool** of ready accounts, provisions **devices** (install the platform app + proxy/SmartIP + verify subscription), fills per-device **queues**, brings accounts **online** (session-import or login), **probes health**, **auto-replaces** banned and **auto-buys/generates** new ones, runs **action campaigns** (report / publish / warmup / follow / like / comment / join / dm) exactly-once, and **scrapes maximally** — groups, channels, members, followers, follows, likes, comments, commenters/likers, posts/reels/stories, hashtags, contacts — for **every** account type (WA/TG/IG/TikTok/Discord/FB/Gmail/YouTube) via a hybrid `ScrapeProvider` where a **headless-browser tier is first-class and primary** (playwright/puppeteer), complemented by anon-HTTP, on-device (UI-dump), and API tiers. Today the browser tier is a **real capacity-gated Playwright/Chromium pool** (`createPlaywrightBrowserProvider`: lazily-launched, an isolated per-page context with its own proxy/user-agent/cookies for anti-detect, promise-queue concurrency bound) driving **scroll-until-dry** extraction with a **captcha hard-stop** (never solved blind), proven end-to-end against real Chromium. The **design target** (`docs/TZ.md`) is a cloud headless-browser pool of Browserbase class and beyond — thousands of concurrent CDP sessions, stealth, residential proxies, CAPTCHA solving, persistent contexts, live-view/takeover, session replay, AI `act/observe/extract(schema)` — **better because** we also drive real Android phones for app-only data, integrate scraping into the same exactly-once lifecycle engine, and are brain/MCP-native. All account types (WhatsApp today, others next) are **managed identically** — same facade ops (`account.status/retire/cooldown/reassign/refreshSession/probe/action/tag`, bulk), reconciler, campaigns — only the platform driver differs; a device can host **multiple accounts** (app-cloning/switching, up to N:1). Every account runs behind a **1:1 proxy** (residential/mobile, geo-consistent IP↔SIM↔GPS↔timezone), goes through **warmup** and per-account **action budgets**, with **anti-detect fingerprinting** and AI-generated **personas & content**. Self-healing, idempotent, observable, secure.
 
 ### Architecture at a glance
 Clean Architecture + Hexagonal (Ports & Adapters) + tactical DDD, per `docs/REQUIREM.md`. The domain is pure and dependency-free; infrastructure implements ports; a `reconcile(snapshot) → intents` pure function drives idempotent jobs through RabbitMQ (+ DLQ, retry ledger, opt-lock, exactly-once). Every unknown external fact is a **verify-by-fact seam** — a fail-safe coded error, never a guess.
@@ -41,40 +41,55 @@ Infrastructure  Mongo · RabbitMQ · Redis · DeviceProvider · PurchaseAdapter
 ### Package map (`@acq/*`, yarn workspaces, Node 20 ESM)
 ```
 packages/
-  engine-domain*    generic domain (account state-machine, queue, pool, campaign/action, reconcile, ports)
-  engine-infra*     generic adapters (Mongo repos, DLQ, dispatcher, event bus)
-  platform-registry* PlatformCapabilities descriptors
+  engine-domain     generic domain (account state-machine, queue, pool, campaign/action, reconcile, ports)
+  engine-infra      generic adapters (Mongo repos incl. campaign, DLQ, dispatcher, expense recorder, automation)
+  platform-registry PlatformCapabilities descriptors
   core              engine infra (Mongo/Redis/RabbitMQ, job ledger, lease, models, auth)
   device-control    DeviceProvider + Controller: duoplus, vmos, +geelark, +matt-duo (3 channels)
   automation        PlatformDriver: whatsapp/ig/tiktok/yt +telegram/discord/facebook/gmail; human-actor
   integrations      vendor HTTP clients (dark.shopping, djekxa, email-code, totp, llm, proxy)
-  procurement*      declarative purchase-adapter engine, approval, cookie sessions
-  scraping*         hybrid ScrapeProvider (browser / on-device / api), maximal entities
-  browser*          BrowserProvider: cloud headless-browser pool (CDP/Playwright), stealth, contexts,
-                    live-view, recording, AI extract(schema) — Browserbase-class and beyond
-  account-gen*      on-device account generation (gmail/google-auth), persona + verification providers
-  proxy*            ProxyProvider: pool, 1:1 assignment, rotation, health, purchase (residential/mobile)
-  media*            MediaStore + ContentGenerator (content/media for publish actions)
-  intelligence*     account/target scoring, targeting, behavior baselines
-  control*          all management gateways over one facade + RBAC
+  procurement       declarative purchase-adapter engine + ShopRegistry + auth-aware shop HTTP client, approval, cookie sessions
+  scraping          hybrid ScrapeProvider (browser primary / anon-http / on-device / api), maximal entities;
+                    createPlaywrightBrowserProvider = real capacity-gated headless-Chromium pool (anti-detect
+                    context per page), createBrowserScrapeAdapter = scroll-until-dry + captcha hard-stop
+  account-gen       on-device account generation (gmail/google-auth), persona + verification providers
+  proxy             ProxyProvider: pool, 1:1 assignment, rotation, health, purchase (residential/mobile)
+  media             MediaStore + ContentGenerator (content/media for publish actions)
+  intelligence      account/target scoring, targeting, behavior baselines
+  control           all management gateways over one facade + RBAC (OPERATIONS catalog, sanitize/injection guard)
   config, logger, validation, humanizer, shared
 apps/
-  engine*           reconciler (cron) + queue consumers, parameterized by active platforms
-  control-plane*    MCP (stdio+http) + REST API + CLI
-  scrape-worker*    scrape-queue consumers
-  dashboard*        operator control panel (feature-based SPA, WCAG/CSP) — REQUIREM §7
-  whatsapp          current orchestrator (migrates into apps/engine as a platform module)
+  engine            reconciler (cron) + queue consumers, parameterized by active platforms; generic handlers
+                    (acquire[buy/generate] · queue-fill · bring-online · action · probe · replace) + shared
+                    account-lifecycle & device-enroll services
+  control-plane     single facade over MCP (stdio+http) + REST API + CLI + SSE + inbound webhooks
+  scrape-worker     scrape-queue consumers; wires the real hybrid tiers (browser primary) by default
+  dashboard         operator control panel (feature-based SPA, WCAG/CSP) — REQUIREM §7
+  whatsapp          most complete reference vertical (mass report); shares the generic engine/infra
 ```
-`*` = to be built per the phased plan (`docs/TZ.md` §19). Everything else exists today.
+All packages above exist today. The generic engine + control facade + hybrid scrape tiers are wired and tested; per-platform logins/selectors and per-shop delivery formats remain verify-by-fact seams.
 
 ### Quickstart
 ```bash
 yarn install
-yarn test           # proves self-containment (currently 335 tests, 9 projects)
+yarn test           # full unit suite (847 tests, 163 suites) — proves self-containment
 cp .env.example .env && $EDITOR .env
-yarn start:whatsapp   # orchestrator worker (cron reconciler + consumers + /health)
-yarn mcp:http         # MCP over HTTP (the brain connects here, bearer-authed)
-yarn mcp:stdio        # per-connection stdio MCP
+
+# Run the whole platform in Docker (infra + engine + control-plane + scrape + dashboard):
+docker compose -f docker-compose.dev.yml up -d
+curl localhost:7401/health                                   # engine (lists active platforms)
+curl -XPOST localhost:7500/v1/op/pool.status \               # a facade op over REST
+  -H 'authorization: Bearer admin-dev-token' -d '{"platform":"telegram"}'
+
+# Or run services directly:
+yarn workspace @acq/engine-app start          # generic reconciler (cron) + queue consumers
+yarn workspace @acq/control-plane-app start   # single facade: REST + MCP + CLI + SSE + webhooks
+yarn workspace @acq/scrape-worker-app start   # hybrid scrape tiers (browser primary)
+
+# Live suites (need Mongo/RabbitMQ/Redis; browser tier needs the Chromium binary):
+yarn workspace @acq/engine-app test:live
+yarn workspace @acq/control-plane-app test:live
+npx playwright install chromium && yarn workspace @acq/scraping test:live
 ```
 
 ### How it's controlled — one facade, many surfaces
@@ -90,7 +105,7 @@ Maximal set of management gateways (all over one facade):
 Multi-tenant: every record carries a `tenantId` with per-tenant isolation, RBAC, and quotas.
 
 ### Roadmap (phases, full detail in `docs/TZ.md` §19)
-0 Extraction ✅ · 1 DeviceProvider generalization · 2 Domain generalization · 3 Declarative purchase + cookie sessions · 4 Telegram end-to-end · 5 Remaining platform drivers · 6 ScrapeProvider · 7 On-device account generation · 8 Control plane (CLI + REST + RAG) · 9 Hardening (observability, scale, compliance).
+0 Extraction ✅ · 1 DeviceProvider generalization ✅ · 2 Domain generalization ✅ · 3 Declarative purchase + cookie sessions ✅ · 4 Telegram end-to-end (reconciler self-drive live ✅; real login = seam) · 5 Remaining platform drivers (generic lifecycle ✅; some logins = seams) · 6 ScrapeProvider ✅ (browser primary live) · 7 On-device account generation (flow ✅; on-device selectors = seams) · 8 Control plane ✅ (facade over REST + MCP + CLI + SSE + webhooks) · 9 Hardening (observability, scale, compliance) — ongoing.
 
 ---
 
@@ -111,7 +126,7 @@ Multi-tenant: every record carries a `tenantId` with per-tenant isolation, RBAC,
 Сквозной слой поверх всех осей: **ИИ используется максимально** — brain-оркестрация, scan магазинов, генерация контента и персон, скоринг, captcha-ассист, парсинг скрапа (всё в application-слое, с детерминированной валидацией).
 
 ### Что делает
-Держит **пул** готовых аккаунтов, провижит **устройства** (ставит приложение платформы + прокси/SmartIP + верифицирует подписку), наполняет **очереди** на устройствах, выводит в **онлайн** (импорт сессии или логин), следит за **здоровьем**, **авто-заменяет** забаненные и **авто-докупает/генерирует** новые, исполняет **кампании действий** (report / publish / warmup / follow / like / comment / join / dm) exactly-once и **скрапит по-максимуму** — группы, каналы, участники, подписчики, подписки, лайки, комментарии, комментаторы/лайкеры, посты/reels/stories, хэштеги, контакты — для **любого** типа аккаунтов (WA/TG/IG/TikTok/Discord/FB/Gmail/YouTube) через гибридный `ScrapeProvider`, где **браузерный тир — первоклассный и приоритетный** (playwright/puppeteer), дополняемый anon-HTTP, on-device (UI-dump) и API-тирами. Браузерный тир — **облачный пул headless-браузеров класса Browserbase и выше** (`BrowserProvider`: тысячи конкуррентных CDP-сессий, stealth, residential-прокси, решение CAPTCHA, persistent-контексты, live-view/перехват, реплей сессий, AI `act/observe/extract(schema)`) — **лучше, потому что** мы ещё драйвим реальные Android для app-only данных, интегрируем скрап в тот же exactly-once lifecycle-движок и он brain/MCP-native. Все типы аккаунтов (WhatsApp сейчас, остальные следом) **управляются одинаково** — те же операции фасада (`account.status/retire/cooldown/reassign/refreshSession/probe/action/tag`, bulk), reconciler, кампании — меняется только драйвер платформы; на одном устройстве может быть **несколько аккаунтов** (app-cloning/переключение, до N:1). Каждый аккаунт работает через **1:1 прокси** (residential/mobile, гео-консистентность IP↔SIM↔GPS↔timezone), проходит **прогрев** и per-account **бюджеты действий**, с **анти-детект fingerprint** и ИИ-генерируемыми **персонами и контентом**. Самовосстанавливается, идемпотентно, наблюдаемо, секьюрно.
+Держит **пул** готовых аккаунтов, провижит **устройства** (ставит приложение платформы + прокси/SmartIP + верифицирует подписку), наполняет **очереди** на устройствах, выводит в **онлайн** (импорт сессии или логин), следит за **здоровьем**, **авто-заменяет** забаненные и **авто-докупает/генерирует** новые, исполняет **кампании действий** (report / publish / warmup / follow / like / comment / join / dm) exactly-once и **скрапит по-максимуму** — группы, каналы, участники, подписчики, подписки, лайки, комментарии, комментаторы/лайкеры, посты/reels/stories, хэштеги, контакты — для **любого** типа аккаунтов (WA/TG/IG/TikTok/Discord/FB/Gmail/YouTube) через гибридный `ScrapeProvider`, где **браузерный тир — первоклассный и приоритетный** (playwright/puppeteer), дополняемый anon-HTTP, on-device (UI-dump) и API-тирами. Сегодня браузерный тир — **реальный пул Playwright/Chromium с ограничением ёмкости** (`createPlaywrightBrowserProvider`: ленивый запуск, изолированный контекст на каждую страницу со своим proxy/user-agent/cookies для анти-детекта, семафор на промисах) с извлечением **scroll-until-dry** и **жёстким стопом на CAPTCHA** (никогда не решается вслепую), проверен end-to-end на реальном Chromium. **Целевой дизайн** (`docs/TZ.md`) — облачный пул headless-браузеров класса Browserbase и выше: тысячи конкуррентных CDP-сессий, stealth, residential-прокси, решение CAPTCHA, persistent-контексты, live-view/перехват, реплей сессий, AI `act/observe/extract(schema)` — **лучше, потому что** мы ещё драйвим реальные Android для app-only данных, интегрируем скрап в тот же exactly-once lifecycle-движок и он brain/MCP-native. Все типы аккаунтов (WhatsApp сейчас, остальные следом) **управляются одинаково** — те же операции фасада (`account.status/retire/cooldown/reassign/refreshSession/probe/action/tag`, bulk), reconciler, кампании — меняется только драйвер платформы; на одном устройстве может быть **несколько аккаунтов** (app-cloning/переключение, до N:1). Каждый аккаунт работает через **1:1 прокси** (residential/mobile, гео-консистентность IP↔SIM↔GPS↔timezone), проходит **прогрев** и per-account **бюджеты действий**, с **анти-детект fingerprint** и ИИ-генерируемыми **персонами и контентом**. Самовосстанавливается, идемпотентно, наблюдаемо, секьюрно.
 
 ### Архитектура вкратце
 Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, по `docs/REQUIREM.md`. Домен чист и без зависимостей; инфраструктура реализует порты; чистая функция `reconcile(snapshot) → intents` гонит идемпотентные джобы через RabbitMQ (+ DLQ, retry-ledger, opt-lock, exactly-once). Каждый неизвестный внешний факт — **verify-by-fact-шов**: fail-safe кодированная ошибка, а не догадка.
@@ -129,6 +144,6 @@ Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, 
 Мультитенантность: каждая запись несёт `tenantId` с изоляцией, RBAC и квотами per-tenant.
 
 ### Запуск и roadmap
-Быстрый старт — см. блок Quickstart выше. Полный фундамент проекта — **`docs/TZ.md`** (супер-детальное ТЗ по всем фазам, локальный дизайн-документ вне гита). Фазы: 0 Экстракция ✅ · 1 DeviceProvider · 2 Обобщение домена · 3 Декларативные закупки + cookie-сессии · 4 Telegram end-to-end · 5 Остальные драйверы · 6 ScrapeProvider · 7 Генерация аккаунтов · 8 Control plane · 9 Hardening.
+Быстрый старт — см. блок Quickstart выше. Полный фундамент проекта — **`docs/TZ.md`** (супер-детальное ТЗ по всем фазам, локальный дизайн-документ вне гита). Фазы: 0 Экстракция ✅ · 1 DeviceProvider ✅ · 2 Обобщение домена ✅ · 3 Декларативные закупки + cookie-сессии ✅ · 4 Telegram end-to-end (self-drive reconciler вживую ✅; реальный логин — шов) · 5 Остальные драйверы (общий lifecycle ✅; часть логинов — швы) · 6 ScrapeProvider ✅ (браузерный тир вживую) · 7 Генерация аккаунтов (поток ✅; on-device селекторы — швы) · 8 Control plane ✅ (фасад: REST + MCP + CLI + SSE + webhooks) · 9 Hardening — в процессе.
 
 > ⚠️ До реального прода нужно снять внешние факты «по факту» (форматы поставки/авторизации магазинов, on-device селекторы, импорт сессии, matt-duo auth) — все они fail-safe заблокированы кодированными ошибками. Каталог швов — `docs/TZ.md` §22.2.

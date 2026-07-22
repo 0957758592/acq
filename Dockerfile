@@ -2,6 +2,11 @@
 FROM node:20-slim
 WORKDIR /app
 ENV NODE_ENV=production
+# Playwright is the scrape-worker's browser engine (optional dep). Skip the
+# ~150MB browser binary at image-build time — the worker lazy-loads the engine
+# and only launches on demand; enable the browser tier in an ops step with
+# `npx playwright install --with-deps chromium`.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY package.json yarn.lock .nvmrc ./
 COPY packages ./packages
 COPY apps ./apps
