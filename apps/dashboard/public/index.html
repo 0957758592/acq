@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@acq — Operator Dashboard</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header>
+      <h1>@acq Operator Dashboard</h1>
+      <form id="auth" aria-label="Authentication">
+        <label for="token">Bearer token</label>
+        <input id="token" type="password" autocomplete="off" />
+        <button type="submit">Connect</button>
+      </form>
+    </header>
+    <main id="app" role="main" aria-live="polite">
+      <p>Enter a bearer token to connect to the control plane.</p>
+    </main>
+    <div id="error-boundary" role="alert" aria-live="assertive" hidden></div>
+    <script src="/config.js"></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
