@@ -10,6 +10,7 @@
   "scripts": {
     "lint": "eslint .",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.config.js",
+    "test:live": "cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.live.config.js --runInBand",
     "build": "node -e \"console.log('scraping: no build step')\""
   },
   "dependencies": {
