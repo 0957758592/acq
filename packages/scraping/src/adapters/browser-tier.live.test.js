@@ -1,9 +1,9 @@
-// LIVE: drives the REAL Playwright Chromium engine end-to-end through the
+// LIVE: drives the REAL Puppeteer + CDP Chromium engine end-to-end through the
 // production provider + browser scrape adapter + ScrapeProvider normalization,
 // against a deterministic offline page (a data: URL — no network flakiness).
-// Proves the full browser tier works with a real browser. Requires the chromium
-// binary (`npx playwright install chromium`); skips cleanly if it is absent.
-import { createPlaywrightBrowserProvider } from './playwright-browser-provider.js';
+// Proves the full browser tier works with a real browser. Requires Puppeteer's
+// bundled Chromium (installed with the package); skips cleanly if it is absent.
+import { createPuppeteerBrowserProvider } from './puppeteer-browser-provider.js';
 import { createBrowserScrapeAdapter } from './browser-scrape-adapter.js';
 import { createScrapeProvider } from '../scrape-provider.js';
 
@@ -28,7 +28,7 @@ let available = true;
 let provider;
 
 beforeAll(async () => {
-  provider = createPlaywrightBrowserProvider({ maxConcurrency: 2, headless: true });
+  provider = createPuppeteerBrowserProvider({ maxConcurrency: 2, headless: true });
   try {
     const page = await provider.openPage({});
     await page.close();

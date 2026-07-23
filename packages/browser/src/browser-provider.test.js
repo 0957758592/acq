@@ -3,18 +3,23 @@ import { createBrowserProvider } from './browser-provider.js';
 function fakeEngine() {
   const log = { contexts: [], launched: 0, closed: false };
   const makePage = () => ({
+    _ua: null,
+    _auth: null,
     url: () => 'https://x/list',
     goto: async () => {},
     evaluate: async (fn) => (typeof fn === 'function' ? fn() : []),
-    title: async () => 't'
+    setUserAgent: async function (ua) { this._ua = ua; },
+    authenticate: async function (a) { this._auth = a; },
+    tracing: { start: async () => {}, stop: async () => {} },
+    createCDPSession: async () => ({ send: async () => ({ targetInfo: { targetId: 'TID-1' } }) })
   });
-  const chromium = {
+  const puppeteer = {
     launch: async (opts) => {
       log.launched += 1;
       log.launchOpts = opts;
       return {
-        newContext: async (o) => {
-          const ctx = { opts: o, closed: false, pages: [], newPage: async () => { const p = makePage(); ctx.pages.push(p); return p; }, close: async () => { ctx.closed = true; }, tracing: { start: async () => {}, stop: async () => {} }, newCDPSession: async () => ({ send: async () => ({ targetInfo: { targetId: 'TID-1' } }) }) };
+        createBrowserContext: async (o) => {
+          const ctx = { opts: o, closed: false, pages: [], newPage: async () => { const p = makePage(); ctx.pages.push(p); return p; }, close: async () => { ctx.closed = true; } };
           log.contexts.push(ctx);
           return ctx;
         },
@@ -26,23 +31,33 @@ function fakeEngine() {
     ok: true,
     json: async () => [{ id: 'TID-1', url: 'https://x/list', devtoolsFrontendUrl: '/devtools/inspector.html?ws=127.0.0.1:9222/devtools/page/TID-1', webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/TID-1' }]
   });
-  return { chromium, fetchImpl, log };
+  return { puppeteer, fetchImpl, log };
 }
 
-describe('createBrowserProvider (real session-based, Playwright)', () => {
-  it('createSession opens an anti-detect context and returns a session id, gated by the pool', async () => {
-    const { chromium, log } = fakeEngine();
-    const provider = createBrowserProvider({ chromium, maxConcurrent: 1 });
+describe('createBrowserProvider (real session-based, Puppeteer + CDP)', () => {
+  it('createSession opens an anti-detect context (proxy + UA) and returns a session id, pool-gated', async () => {
+    const { puppeteer, log } = fakeEngine();
+    const provider = createBrowserProvider({ puppeteer, maxConcurrent: 1 });
     const s = await provider.createSession({ proxy: 'http://p:1', userAgent: 'UA' });
     expect(s.sessionId).toBeTruthy();
-    expect(log.contexts[0].opts).toMatchObject({ userAgent: 'UA', proxy: { server: 'http://p:1' } });
+    expect(log.contexts[0].opts).toMatchObject({ proxyServer: 'http://p:1' });
+    expect(log.contexts[0].pages[0]._ua).toBe('UA');
     await expect(provider.createSession({})).rejects.toMatchObject({ code: 'BROWSER_POOL_EXHAUSTED' });
     await provider.shutdown();
   });
 
+  it('applies proxy credentials via page.authenticate (Chromium proxy-server carries no auth)', async () => {
+    const { puppeteer, log } = fakeEngine();
+    const provider = createBrowserProvider({ puppeteer, maxConcurrent: 1 });
+    await provider.createSession({ proxy: 'http://user:pass@host:8080' });
+    expect(log.contexts[0].opts).toMatchObject({ proxyServer: 'http://host:8080' });
+    expect(log.contexts[0].pages[0]._auth).toEqual({ username: 'user', password: 'pass' });
+    await provider.shutdown();
+  });
+
   it('extract navigates, evaluates, and validates the result against a schema', async () => {
-    const { chromium } = fakeEngine();
-    const provider = createBrowserProvider({ chromium, maxConcurrent: 2 });
+    const { puppeteer } = fakeEngine();
+    const provider = createBrowserProvider({ puppeteer, maxConcurrent: 2 });
     const { sessionId } = await provider.createSession({});
     const schema = { validate: async (v) => { if (!Array.isArray(v)) throw new Error('bad'); return v; } };
     const out = await provider.extract(sessionId, { url: 'https://x/list', pageFunction: () => [{ h: '@a' }], schema });
@@ -51,8 +66,8 @@ describe('createBrowserProvider (real session-based, Playwright)', () => {
   });
 
   it('extract throws EXTRACTION_SCHEMA_MISMATCH when the result fails the schema', async () => {
-    const { chromium } = fakeEngine();
-    const provider = createBrowserProvider({ chromium, maxConcurrent: 1 });
+    const { puppeteer } = fakeEngine();
+    const provider = createBrowserProvider({ puppeteer, maxConcurrent: 1 });
     const { sessionId } = await provider.createSession({});
     const schema = { validate: async () => { throw new Error('shape mismatch'); } };
     await expect(provider.extract(sessionId, { url: 'https://x', pageFunction: () => ({}), schema }))
@@ -61,8 +76,8 @@ describe('createBrowserProvider (real session-based, Playwright)', () => {
   });
 
   it('liveView returns a real devtools frontend URL for the session page', async () => {
-    const { chromium, fetchImpl } = fakeEngine();
-    const provider = createBrowserProvider({ chromium, fetchImpl, debugPort: 9222, maxConcurrent: 1 });
+    const { puppeteer, fetchImpl } = fakeEngine();
+    const provider = createBrowserProvider({ puppeteer, fetchImpl, debugPort: 9222, maxConcurrent: 1 });
     const { sessionId } = await provider.createSession({});
     const view = await provider.liveView(sessionId);
     expect(view.devtoolsUrl).toContain('TID-1');
@@ -71,8 +86,8 @@ describe('createBrowserProvider (real session-based, Playwright)', () => {
   });
 
   it('close releases the pool slot so a new session can be created', async () => {
-    const { chromium, log } = fakeEngine();
-    const provider = createBrowserProvider({ chromium, maxConcurrent: 1 });
+    const { puppeteer, log } = fakeEngine();
+    const provider = createBrowserProvider({ puppeteer, maxConcurrent: 1 });
     const { sessionId } = await provider.createSession({});
     await provider.close(sessionId);
     expect(log.contexts[0].closed).toBe(true);
@@ -81,14 +96,14 @@ describe('createBrowserProvider (real session-based, Playwright)', () => {
   });
 
   it('operations on an unknown session fail safe (coded)', async () => {
-    const { chromium } = fakeEngine();
-    const provider = createBrowserProvider({ chromium });
+    const { puppeteer } = fakeEngine();
+    const provider = createBrowserProvider({ puppeteer });
     await expect(provider.liveView('nope')).rejects.toMatchObject({ code: 'BROWSER_SESSION_NOT_FOUND' });
     await provider.shutdown();
   });
 
   it('fails safe with a coded error when the engine is unavailable', async () => {
-    const provider = createBrowserProvider({ loadChromium: async () => null });
+    const provider = createBrowserProvider({ loadEngine: async () => null });
     await expect(provider.createSession({})).rejects.toMatchObject({ code: 'BROWSER_ENGINE_UNAVAILABLE' });
   });
 });

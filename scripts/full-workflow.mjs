@@ -21,7 +21,7 @@ import { EngineActionTask } from '@acq/core/models/engine-action-task';
 import { EngineShopSpec } from '@acq/core/models/engine-shop-spec';
 import { EngineExpense } from '@acq/core/models/engine-finance';
 import { createShopRegistry } from '@acq/procurement';
-import { createScrapeProvider, createBrowserScrapeAdapter, createPlaywrightBrowserProvider } from '@acq/scraping';
+import { createScrapeProvider, createBrowserScrapeAdapter, createPuppeteerBrowserProvider } from '@acq/scraping';
 import { createFacade } from '@acq/control';
 
 import { buildEngineContext } from '../apps/engine/src/composition.js';
@@ -176,7 +176,7 @@ async function main() {
 
   // ── STAGE 7 — SCRAPE with REAL Chromium ──
   console.log('\n[7] SCRAPE (real Playwright Chromium → normalized entities)');
-  const browserProvider = createPlaywrightBrowserProvider({ maxConcurrency: 1 });
+  const browserProvider = createPuppeteerBrowserProvider({ maxConcurrency: 1 });
   try {
     const PAGE = `data:text/html,${encodeURIComponent('<ul id="f"><li class="u" data-h="@a">A</li><li class="u" data-h="@b">B</li></ul>')}`;
     const adapter = createBrowserScrapeAdapter({

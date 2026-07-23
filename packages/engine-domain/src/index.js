@@ -10,6 +10,7 @@ export { normalizeMsisdn } from './value-objects/msisdn.js';
 export { normalizeHandle } from './value-objects/handle.js';
 export { normalizeEmail } from './value-objects/email.js';
 export { normalizeIdentifier } from './value-objects/identifier.js';
+export { parseProxyUrl } from './value-objects/proxy-url.js';
 
 // Pool + device-queue
 export { needsReplenish, buyQuantity } from './pool/pool-policy.js';

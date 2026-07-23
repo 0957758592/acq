@@ -1,5 +1,5 @@
 import {
-  createPlaywrightBrowserProvider,
+  createPuppeteerBrowserProvider,
   createBrowserScrapeAdapter,
   createHttpScrapeAdapter,
   createDeviceScrapeAdapter
@@ -22,7 +22,7 @@ export function buildScrapeAdapters({
   browserProvider = null,
   maxConcurrency = 4
 } = {}) {
-  const provider = browserProvider ?? createPlaywrightBrowserProvider({ maxConcurrency });
+  const provider = browserProvider ?? createPuppeteerBrowserProvider({ maxConcurrency });
   const adapters = {
     browser: createBrowserScrapeAdapter({ browserProvider: provider, selectorRegistry: browserSelectors })
   };

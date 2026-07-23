@@ -1,29 +1,30 @@
-import { domainError } from '@acq/engine-domain';
+import { domainError, parseProxyUrl } from '@acq/engine-domain';
 
 import { createBrowserPool, acquireSession, releaseSession } from './session-pool.js';
 
 // Real session-based BrowserProvider (TZ §10.6) — a Browserbase-class fleet on
-// Playwright/Chromium. Each createSession() gets an ISOLATED context (own proxy /
-// user-agent for anti-detect), capacity-gated by the pure session-pool. Exposes
-// a live-view devtools URL (via the CDP /json/list endpoint), record (tracing),
-// and schema-validated extract() (EXTRACTION_SCHEMA_MISMATCH on shape drift).
-// The engine is injectable so the logic is fully tested without browser binaries;
-// a missing engine is an honest coded error, never a fake.
-const defaultLoadChromium = async () => {
-  const mod = await import('playwright').catch(() => null);
-  return mod?.chromium ?? null;
+// Puppeteer + CDP. Each createSession() gets an ISOLATED browser context (own
+// proxy / user-agent for anti-detect), capacity-gated by the pure session-pool.
+// Exposes a live-view devtools URL (via a page CDP session + the /json/list
+// endpoint), record (tracing), and schema-validated extract() (raises
+// EXTRACTION_SCHEMA_MISMATCH on shape drift). The engine is injectable so the
+// logic is fully tested without browser binaries; a missing engine is an honest
+// coded error, never a fake.
+const defaultLoadEngine = async () => {
+  const mod = await import('puppeteer').catch(() => null);
+  return mod?.default ?? mod ?? null;
 };
 
 export function createBrowserProvider({
-  chromium = null,
-  loadChromium = defaultLoadChromium,
+  puppeteer = null,
+  loadEngine = defaultLoadEngine,
   maxConcurrent = 4,
   headless = true,
   debugPort = 0,
   fetchImpl = globalThis.fetch,
   launchOptions = {}
 } = {}) {
-  let engine = chromium;
+  let engine = puppeteer;
   let browserPromise = null;
   let pool = createBrowserPool({ maxConcurrent });
   const sessions = new Map();
@@ -31,8 +32,8 @@ export function createBrowserProvider({
 
   async function ensureBrowser() {
     if (!engine) {
-      engine = await loadChromium();
-      if (!engine) throw domainError('BROWSER_ENGINE_UNAVAILABLE', 'playwright chromium engine is not available');
+      engine = await loadEngine();
+      if (!engine) throw domainError('BROWSER_ENGINE_UNAVAILABLE', 'puppeteer chromium engine is not available');
     }
     if (!browserPromise) {
       const args = debugPort ? [`--remote-debugging-port=${debugPort}`] : [];
@@ -53,11 +54,11 @@ export function createBrowserProvider({
       const sessionId = contextId || `sess-${(counter += 1)}`;
       pool = acquireSession(pool, sessionId); // throws BROWSER_POOL_EXHAUSTED at capacity
       try {
-        const context = await browser.newContext({
-          ...(userAgent ? { userAgent } : {}),
-          ...(proxy ? { proxy: { server: proxy } } : {})
-        });
+        const { server, auth } = parseProxyUrl(proxy);
+        const context = await browser.createBrowserContext(server ? { proxyServer: server } : {});
         const page = await context.newPage();
+        if (userAgent) await page.setUserAgent(userAgent);
+        if (auth) await page.authenticate(auth);
         sessions.set(sessionId, { context, page, geo });
         const cdpUrl = debugPort ? `http://127.0.0.1:${debugPort}` : '';
         return { sessionId, cdpUrl };
@@ -87,17 +88,17 @@ export function createBrowserProvider({
     },
 
     async record(sessionId, { start = true } = {}) {
-      const { context } = requireSession(sessionId);
-      if (typeof context.tracing?.start !== 'function') return { recording: false, unsupported: true };
-      if (start) await context.tracing.start({ screenshots: true, snapshots: true });
-      else await context.tracing.stop();
+      const { page } = requireSession(sessionId);
+      if (typeof page.tracing?.start !== 'function') return { recording: false, unsupported: true };
+      if (start) await page.tracing.start({ screenshots: true });
+      else await page.tracing.stop();
       return { recording: start };
     },
 
     async liveView(sessionId) {
-      const { context, page } = requireSession(sessionId);
+      const { page } = requireSession(sessionId);
       if (!debugPort) throw domainError('BROWSER_LIVEVIEW_UNAVAILABLE', 'liveView requires a CDP debug port');
-      const cdp = await context.newCDPSession(page); // Playwright: CDP session is minted off the context
+      const cdp = await page.createCDPSession(); // Puppeteer: CDP session is minted off the page
       const info = await cdp.send('Target.getTargetInfo');
       const targetId = info?.targetInfo?.targetId;
       const res = await fetchImpl(`http://127.0.0.1:${debugPort}/json/list`);
