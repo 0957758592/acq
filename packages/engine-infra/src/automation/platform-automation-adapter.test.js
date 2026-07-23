@@ -52,6 +52,39 @@ describe('createPlatformAutomationAdapter (generic, any platform)', () => {
     expect(res).toMatchObject({ ok: false, banned: true });
   });
 
+  it('runAction downgrades a claimed success to ACTION_NOT_CONFIRMED when the app is NOT foreground', async () => {
+    const driver = { runAction: async () => ({ ok: true, echo: 'view' }) };
+    const { adapter } = build({
+      driver,
+      capabilities: { appPackage: 'org.telegram.messenger', stateVocabulary: {} },
+      controller: { getCurrentPackage: async () => 'com.other.app' }
+    });
+    const res = await adapter.runAction({ providerDeviceId: 'd', account: {} }, { type: 'view', target: '@t' });
+    expect(res).toMatchObject({ ok: false, reason: 'ACTION_NOT_CONFIRMED' });
+  });
+
+  it('runAction keeps a confirmed success when the platform app IS foreground', async () => {
+    const driver = { runAction: async () => ({ ok: true }) };
+    const { adapter } = build({
+      driver,
+      capabilities: { appPackage: 'org.telegram.messenger' },
+      controller: { getCurrentPackage: async () => 'org.telegram.messenger' }
+    });
+    const res = await adapter.runAction({ providerDeviceId: 'd', account: {} }, { type: 'view', target: '@t' });
+    expect(res.ok).toBe(true);
+  });
+
+  it('runAction passes a banned result through regardless of foreground', async () => {
+    const driver = { runAction: async () => ({ ok: false, banned: true }) };
+    const { adapter } = build({
+      driver,
+      capabilities: { appPackage: 'x' },
+      controller: { getCurrentPackage: async () => 'y' }
+    });
+    const res = await adapter.runAction({ providerDeviceId: 'd', account: {} }, { type: 'view', target: '@t' });
+    expect(res).toMatchObject({ ok: false, banned: true });
+  });
+
   it('probeState maps healthCheck state via the registry stateVocabulary', async () => {
     const driver = { healthCheck: async () => ({ state: 'logged_in' }) };
     const { adapter } = build({

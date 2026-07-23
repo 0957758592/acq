@@ -161,9 +161,16 @@ async function main() {
       await ctx.actionTaskRepo.upsertTask(task); // idempotent — exactly-once
       const count = await EngineActionTask.countDocuments({ actionType: 'view', accountId: online._id });
       pass(`expand-actions emitted ${expand.tasks.length} task(s); exactly-once upsert → ${count} row (deduped)`);
-      const rr = await runActionTaskHandler(ctx, { ...task, platform: PLATFORM });
-      if (rr.ok) pass('run-action confirmed on real device');
-      else seam('run-action not confirmed (account not truly logged in)', rr.banned ? 'banned' : 'not-confirmed');
+      try {
+        const rr = await runActionTaskHandler(ctx, { ...task, platform: PLATFORM });
+        if (rr.ok) pass('run-action confirmed by fact on real device');
+        else seam('run-action not confirmed by fact', rr.reason || (rr.banned ? 'banned' : 'not-confirmed'));
+      } catch (e) {
+        const code = e.code || e.message || '';
+        if (/ACTION_NOT_CONFIRMED|DEVICE_APP_NOT_FOUND|not installed/i.test(code)) {
+          seam('run-action not confirmed by fact (telegram not installed on this clone)', 'ACTION_NOT_CONFIRMED');
+        } else throw e;
+      }
     }
   } catch (e) { fail('actions', `${e.code || ''} ${e.message}`); }
 

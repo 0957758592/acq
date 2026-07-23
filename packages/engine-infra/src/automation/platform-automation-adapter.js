@@ -45,19 +45,23 @@ export function createPlatformAutomationAdapter({
     return { ...DEFAULT_STATE_TO_PROBE, ...(capsOf().stateVocabulary ?? {}) };
   }
 
-  // Verify-by-fact probe: run the driver health check, then confirm the
-  // platform's OWN app is the foreground app before trusting a logged-in
-  // reading. A mismatch (a different app is foreground, or the app isn't
-  // installed) means the UI dump we read isn't ours — report logged_out rather
-  // than a false "online". Generic guard for every platform.
+  // Verify-by-fact foreground guard (shared by probe + action confirmation):
+  // true if the platform's OWN app is the foreground app, or if we cannot tell.
+  // A KNOWN mismatch (a different app is foreground, or the app isn't installed)
+  // returns false so callers never trust a reading/result off the wrong screen.
+  async function foregroundMatches(controller) {
+    const expectedPkg = capsOf().appPackage;
+    if (!expectedPkg || typeof controller.getCurrentPackage !== 'function') return true;
+    const foreground = await controller.getCurrentPackage().catch(() => '');
+    return !foreground || foreground === expectedPkg;
+  }
+
+  // Verify-by-fact probe: run the driver health check, then confirm the app is
+  // foreground before trusting a logged-in reading (else report logged_out).
   async function probeStateImpl(ctx) {
     const controller = controllerFor(ctx);
     const hc = await driver.healthCheck(controller, ctx.account ?? {}, ctx.opts ?? {});
-    const expectedPkg = capsOf().appPackage;
-    if (expectedPkg && typeof controller.getCurrentPackage === 'function') {
-      const foreground = await controller.getCurrentPackage().catch(() => '');
-      if (foreground && foreground !== expectedPkg) return 'logged_out';
-    }
+    if (!(await foregroundMatches(controller))) return 'logged_out';
     return probeMap()[hc?.state] || 'logged_out';
   }
 
@@ -90,7 +94,14 @@ export function createPlatformAutomationAdapter({
     async runAction(ctx, action) {
       const controller = controllerFor(ctx);
       const result = await driver.runAction(controller, action, ctx.account ?? {}, ctx.opts ?? {});
-      return { ok: Boolean(result?.ok), banned: result?.banned, checkpointed: result?.checkpointed, ...result };
+      const normalized = { ...result, ok: Boolean(result?.ok), banned: result?.banned, checkpointed: result?.checkpointed };
+      // Verify-by-fact (§9.5): an action counts as done ONLY if the platform's own
+      // app was actually foreground — otherwise the driver acted on/read the wrong
+      // screen (or the app isn't installed) and the "success" is not real.
+      if (normalized.ok && !normalized.banned && !normalized.checkpointed && !(await foregroundMatches(controller))) {
+        return { ...normalized, ok: false, confirmed: false, reason: 'ACTION_NOT_CONFIRMED' };
+      }
+      return normalized;
     },
 
     async warmup(ctx) {
