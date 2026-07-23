@@ -21,7 +21,8 @@
     "@acq/device-control": "*",
     "@acq/config": "*",
     "@acq/logger": "0.1.0",
-    "node-cron": "^3.0.3"
+    "node-cron": "^3.0.3",
+    "@acq/browser": "*"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",

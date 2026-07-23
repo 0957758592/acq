@@ -15,6 +15,10 @@ function require$(args, field, code) {
   return v;
 }
 
+function seam(code, message) {
+  return Object.assign(new Error(`${code}: ${message}`), { code });
+}
+
 // Wires facade operations to real application logic over the engine context
 // (TZ §11.1). ONE definition per operation, exposed identically across every
 // surface (MCP/REST/CLI/SSE/webhooks) via the facade. Generic across platforms —
@@ -174,6 +178,17 @@ export function buildUseCases(ctx) {
         throw Object.assign(new Error('VERIFICATION_PROVIDER_UNAVAILABLE: no verification resource provider wired'), { code: 'VERIFICATION_PROVIDER_UNAVAILABLE' });
       }
       return ctx.verificationProvider.rentNumber({ country: require$(args, 'country', 'COUNTRY_REQUIRED'), service: require$(args, 'service', 'SERVICE_REQUIRED') });
+    },
+
+    // ---- Browser sessions (Browserbase-class fleet) ------------------------
+    'browser.session.open': async (args = {}) => {
+      if (!ctx.browserProvider) throw seam('BROWSER_PROVIDER_UNAVAILABLE', 'no browser provider wired');
+      const s = await ctx.browserProvider.createSession({ proxy: args.proxy, userAgent: args.userAgent, contextId: args.contextId, geo: args.geo });
+      return { sessionId: s.sessionId, cdpUrl: s.cdpUrl };
+    },
+    'browser.session.liveView': async (args = {}) => {
+      if (!ctx.browserProvider) throw seam('BROWSER_PROVIDER_UNAVAILABLE', 'no browser provider wired');
+      return ctx.browserProvider.liveView(require$(args, 'sessionId', 'SESSION_ID_REQUIRED'));
     },
 
     // ---- Reconciliation ----------------------------------------------------

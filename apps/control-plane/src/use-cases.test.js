@@ -39,6 +39,10 @@ function fakeCtx() {
       save: async (p) => ({ _id: p._id, ...p })
     },
     dispatchScrape: async (job) => `scrapejob:${job.platform}:${job.target}`,
+    browserProvider: {
+      createSession: async (o) => ({ sessionId: 'sess-1', cdpUrl: o.proxy ? 'http://127.0.0.1:9222' : '' }),
+      liveView: async (id) => ({ sessionId: id, devtoolsUrl: '/devtools/inspector.html?id=' + id, wsUrl: 'ws://x/' + id })
+    },
     automationFor: (platform) => ({
       probeState: async () => 'online',
       runAction: async (_c, act) => ({ ok: false, reason: 'ACTION_NOT_CONFIRMED', echo: `${platform}:${act.type}` })
@@ -202,5 +206,13 @@ describe('control-plane use-cases through the facade', () => {
     const res = await facade.execute('account.bulk', { role: 'operator', args: { platform: 'telegram', to: 'cooldown' } });
     expect(res.data.requested).toBeGreaterThanOrEqual(1);
     expect(res.data.applied).toBeGreaterThanOrEqual(1);
+  });
+
+  it('browser.session.open opens a real browser session; liveView returns a devtools URL', async () => {
+    const { facade } = build();
+    const open = await facade.execute('browser.session.open', { role: 'operator', args: { proxy: 'http://p:1', userAgent: 'UA' } });
+    expect(open.data).toMatchObject({ sessionId: 'sess-1', cdpUrl: 'http://127.0.0.1:9222' });
+    const view = await facade.execute('browser.session.liveView', { role: 'operator', args: { sessionId: 'sess-1' } });
+    expect(view.data.devtoolsUrl).toContain('sess-1');
   });
 });

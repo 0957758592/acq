@@ -10,6 +10,7 @@ import {
 } from '@acq/engine-infra';
 import { reconcile } from '@acq/engine-domain';
 import { createShopRegistry, createShopHttpClient, compileShopAdapter } from '@acq/procurement';
+import { createBrowserProvider } from '@acq/browser';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
 import { createDeviceProvider } from '@acq/device-control';
 import { EngineAccount } from '@acq/core/models/engine-account';
@@ -58,6 +59,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createShopRegistry,
     createShopHttpClient,
     compileShopAdapter,
+    createBrowserProvider,
     createDeviceProvider,
     reconcile,
     getPlatformCapabilities,
@@ -93,6 +95,12 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   // account GENERATE path is injected (per-platform on-device signup) — absent
   // by default, in which case that path is an honest seam.
   const shopRegistry = D.shopRegistry ?? D.createShopRegistry({ model: D.EngineShopSpec });
+  // Browserbase-class session provider (lazy: Chromium launches on first
+  // createSession). debugPort enables the live-view devtools URL.
+  const browserProvider = D.browserProvider ?? D.createBrowserProvider({
+    maxConcurrent: env.browserConcurrency ?? 4,
+    debugPort: env.browserDebugPort ?? 0
+  });
   const httpClient = D.httpClient ?? D.createShopHttpClient({ secretResolver });
   const expenseRecorder = D.expenseRecorder ?? D.createExpenseRecorder();
 
@@ -127,6 +135,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     campaignRepo,
     scrapeResultRepo,
     proxyRepo,
+    browserProvider,
     deviceModel: D.EngineDevice,
     canDeviceAcceptAccount: D.canDeviceAcceptAccount,
     secretResolver,

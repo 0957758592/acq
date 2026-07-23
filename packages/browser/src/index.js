@@ -14,3 +14,4 @@ export {
   releaseSession,
   activeCount
 } from './session-pool.js';
+export { createBrowserProvider } from './browser-provider.js';
