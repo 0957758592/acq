@@ -384,6 +384,34 @@ Entities are keyed and de-duplicated; results persist as `EngineScrapeResult` an
   - **Or auto-select:** omit `shopId` → `selectForPlatform` picks the **highest-priority verified shop within budget** (`maxUnitPriceUsdCents` config filters out too-expensive ones). Auto-buy on low pool uses the same selection.
   - **Delivery → vault.** Delivered accounts are mapped by the spec's `deliveryFormat.itemMap` (accepts a dot-free **nested** form, e.g. `{ identifier:'phone', secrets:{ session:'sess' } }`, so specs pass the facade injection guard); every secret is vaulted via `secretResolver.put` → only a **ref** (`vault:…`/`env:…`) lands in the account's `secretRefs`, never the raw secret. Each purchase is balance-checked, price-drift-guarded (`priceDriftTolerance`, `maxTotalUsdCents`), and expense-recorded.
   - *Verified live* (`scripts/shop-select-live.mjs`, real Mongo): two telegram shops (priority 1/$3 vs 10/$1) → auto-select picks priority-1; a $2 budget switches the pick to the cheaper; explicit `shopId` buys from that shop; an un-approved shop is rejected; the delivered account persists a **vaulted** session ref.
+- **Authenticating to a shop — you supply access; the system does NOT sign up.** The engine consumes a shop through its API using **pre-existing** access; it never registers or logs into a shop *for* you. Supported `auth.kind`:
+
+  | kind | `config` | how it's sent |
+  |---|---|---|
+  | `api-key` | `{ name, valueRef, in: 'header'\|'query' }` | header (or query param) `name` = the resolved key |
+  | `bearer` / `oauth2` | `{ tokenRef }` | `Authorization: Bearer <token>` |
+  | `cookie-session` | `{ cookieRef }` | `Cookie: <session>` |
+  | `login-password` | — | **unsupported** → coded `SHOP_AUTH_LOGIN_UNSUPPORTED` — establish the session yourself first |
+
+  Every `*Ref` is a **secret reference, never plaintext**: put the key/cookie in the vault or env (e.g. `env:MYSHOP_KEY`) and reference it — the `SecretResolver` dereferences it at request time; the raw secret never lives in the spec, DB, or logs.
+
+  A full working spec (an api-key shop selling telegram accounts):
+  ```json
+  {
+    "shopId": "myshop", "platform": "telegram", "baseUrl": "https://api.myshop.example",
+    "priority": 1, "unitPriceUsdCents": 250,
+    "auth": { "kind": "api-key", "config": { "name": "X-Api-Key", "valueRef": "env:MYSHOP_KEY", "in": "header" } },
+    "endpoints": {
+      "balance":  { "method": "GET",  "path": "/v1/balance", "responseMap": { "balanceUsdCents": "data.balance_cents" } },
+      "offers":   { "method": "GET",  "path": "/v1/offers",  "responseMap": { "unitPriceUsdCents": "data.price_cents" } },
+      "purchase": { "method": "POST", "path": "/v1/orders",  "responseMap": { "orderId": "data.order_id" } },
+      "delivery": { "method": "GET",  "path": "/v1/orders",  "responseMap": { "blob": "data.items" },
+        "deliveryFormat": { "verified": true, "format": "json-array",
+          "itemMap": { "identifier": "phone", "secrets": { "session": "tdata" } } } }
+    }
+  }
+  ```
+  Then the brain (or any surface) drives it end-to-end: `shop.register {spec}` → `shop.approve {shopId:"myshop"}` → `pool.acquire {platform:"telegram", count, shopId?}` → full lifecycle. **What it can't do:** create your account *at* the shop — you subscribe / obtain the key yourself, then hand the system the ref.
 - **Generation (create).** The GENERATE path is on-device native signup driven by the platform driver (`signupVia`: phone/native/google), fed by verification resources. Absent an injected generator, it is an honest seam — never a fake account.
 - **Verification.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` rent numbers / poll SMS codes over any declarative vendor (sms-activate/5sim/…). A pending code returns `null` (caller polls); an exhausted rental is `VERIFICATION_CODE_TIMEOUT` — never a fabricated code.
 - **Personas.** `persona.generate` produces coherent identities (name/handle/bio/niche/locale) to fill profiles.
@@ -805,6 +833,34 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"jobId":"<id>"}' ...
   - **Или авто-выбор:** без `shopId` → `selectForPlatform` берёт **самый приоритетный verified-магазин в рамках бюджета** (`maxUnitPriceUsdCents` отсекает слишком дорогих). Авто-докупка при падении пула использует тот же выбор.
   - **Доставка → vault.** Доставленные аккаунты мапятся `deliveryFormat.itemMap` спеки (принимает бесточечную **вложенную** форму, напр. `{ identifier:'phone', secrets:{ session:'sess' } }`, чтобы спека проходила injection-guard фасада); каждый секрет уходит в vault через `secretResolver.put` → в `secretRefs` аккаунта попадает только **ссылка** (`vault:…`/`env:…`), никогда сырой секрет. Каждая покупка проверяется по балансу, защищена от дрейфа цены (`priceDriftTolerance`, `maxTotalUsdCents`) и пишет расход.
   - *Проверено вживую* (`scripts/shop-select-live.mjs`, реальный Mongo): два telegram-магазина (priority 1/$3 vs 10/$1) → авто-выбор берёт priority-1; бюджет $2 переключает на дешёвый; явный `shopId` покупает из него; неаппрувнутый магазин отклонён; доставленный аккаунт сохраняет **vaulted** ссылку сессии.
+- **Авторизация в магазине — доступ даёшь ты; система сама НЕ регистрируется.** Движок работает с магазином через его API по **уже существующему** доступу; он никогда не заводит и не логинит аккаунт в магазине *за тебя*. Поддерживаемые `auth.kind`:
+
+  | kind | `config` | как отправляется |
+  |---|---|---|
+  | `api-key` | `{ name, valueRef, in: 'header'\|'query' }` | заголовок (или query-параметр) `name` = разрезолвленный ключ |
+  | `bearer` / `oauth2` | `{ tokenRef }` | `Authorization: Bearer <token>` |
+  | `cookie-session` | `{ cookieRef }` | `Cookie: <session>` |
+  | `login-password` | — | **не поддерживается** → код `SHOP_AUTH_LOGIN_UNSUPPORTED` — сессию заводишь сам |
+
+  Каждый `*Ref` — это **ссылка на секрет, не открытый текст**: кладёшь ключ/куку в vault или env (напр. `env:MYSHOP_KEY`) и ссылаешься — `SecretResolver` разрешает её в момент запроса; сырой секрет не живёт ни в спеке, ни в базе, ни в логах.
+
+  Полная рабочая спека (магазин с api-key, продаёт telegram-аккаунты):
+  ```json
+  {
+    "shopId": "myshop", "platform": "telegram", "baseUrl": "https://api.myshop.example",
+    "priority": 1, "unitPriceUsdCents": 250,
+    "auth": { "kind": "api-key", "config": { "name": "X-Api-Key", "valueRef": "env:MYSHOP_KEY", "in": "header" } },
+    "endpoints": {
+      "balance":  { "method": "GET",  "path": "/v1/balance", "responseMap": { "balanceUsdCents": "data.balance_cents" } },
+      "offers":   { "method": "GET",  "path": "/v1/offers",  "responseMap": { "unitPriceUsdCents": "data.price_cents" } },
+      "purchase": { "method": "POST", "path": "/v1/orders",  "responseMap": { "orderId": "data.order_id" } },
+      "delivery": { "method": "GET",  "path": "/v1/orders",  "responseMap": { "blob": "data.items" },
+        "deliveryFormat": { "verified": true, "format": "json-array",
+          "itemMap": { "identifier": "phone", "secrets": { "session": "tdata" } } } }
+    }
+  }
+  ```
+  Дальше brain (или любой контур) гонит end-to-end: `shop.register {spec}` → `shop.approve {shopId:"myshop"}` → `pool.acquire {platform:"telegram", count, shopId?}` → полный жизненный цикл. **Чего он НЕ может:** завести твой аккаунт *в самом магазине* — подписку/ключ получаешь ты, потом отдаёшь системе ссылку.
 - **Генерация (create).** Путь GENERATE — нативная регистрация на устройстве драйвером платформы (`signupVia`: phone/native/google), питается ресурсами верификации. Без инъектированного генератора — честный шов, никогда не фейк-аккаунт.
 - **Верификация.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` арендуют номера / поллят SMS-коды через любой декларативный вендор (sms-activate/5sim/…). Ожидающий код возвращает `null` (вызывающий поллит); исчерпанная аренда — `VERIFICATION_CODE_TIMEOUT`, никогда не выдуманный код.
 - **Персоны.** `persona.generate` производит связные личности (имя/хендл/био/ниша/локаль) для заполнения профилей.
