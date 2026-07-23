@@ -53,8 +53,29 @@ describe('proxy-ops service (1:1 sticky, Mongo-backed)', () => {
       healthy({ _id: 'p2' })
     ]);
     const res = await rotateDeviceProxy(ctx, { deviceId: 'd1' });
-    expect(res).toMatchObject({ deviceId: 'd1', from: 'p1', to: 'p2' });
+    expect(res).toMatchObject({ deviceId: 'd1', from: 'p1', to: 'p2', rotated: true });
     expect((await ctx.proxyRepo.findById('p1')).assignedDeviceId).toBe('');
     expect((await ctx.proxyRepo.findById('p2')).assignedDeviceId).toBe('d1');
+  });
+
+  it('rotateDeviceProxy does NOT rotate a proxy that is healthy by fact (unless forced)', async () => {
+    const ctx = fakeCtx([
+      healthy({ _id: 'p1', status: 'assigned', assignedDeviceId: 'd1' }),
+      healthy({ _id: 'p2' })
+    ]);
+    ctx.proxyHealthChecker = { check: async () => ({ ok: true, ip: '1.2.3.4' }) };
+    const res = await rotateDeviceProxy(ctx, { deviceId: 'd1' });
+    expect(res).toMatchObject({ deviceId: 'd1', rotated: false, reason: 'healthy' });
+    expect((await ctx.proxyRepo.findById('p1')).assignedDeviceId).toBe('d1'); // kept
+  });
+
+  it('rotateDeviceProxy rotates an UNHEALTHY proxy (by fact)', async () => {
+    const ctx = fakeCtx([
+      healthy({ _id: 'p1', status: 'assigned', assignedDeviceId: 'd1' }),
+      healthy({ _id: 'p2' })
+    ]);
+    ctx.proxyHealthChecker = { check: async () => ({ ok: false, error: 'timeout' }) };
+    const res = await rotateDeviceProxy(ctx, { deviceId: 'd1' });
+    expect(res).toMatchObject({ from: 'p1', to: 'p2', rotated: true });
   });
 });

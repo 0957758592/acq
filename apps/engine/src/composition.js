@@ -6,7 +6,8 @@ import {
   createMongoScrapeResultRepo,
   createMongoProxyRepo,
   createPlatformAutomationAdapter,
-  createExpenseRecorder
+  createExpenseRecorder,
+  createProxyHealthChecker
 } from '@acq/engine-infra';
 import { reconcile } from '@acq/engine-domain';
 import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner } from '@acq/procurement';
@@ -55,6 +56,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createMongoCampaignRepo,
     createMongoScrapeResultRepo,
     createMongoProxyRepo,
+    createProxyHealthChecker,
     createPlatformAutomationAdapter,
     createExpenseRecorder,
     createShopRegistry,
@@ -92,6 +94,11 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   const scrapeResultRepo = D.createMongoScrapeResultRepo({ model: D.EngineScrapeResult });
   const proxyRepo = D.createMongoProxyRepo({ model: D.EngineProxy });
   const secretResolver = D.secretResolver ?? createEnvSecretResolver();
+  // Real proxy health check (verify-by-fact: routes a request through the proxy).
+  const proxyHealthChecker = D.proxyHealthChecker ?? D.createProxyHealthChecker({ secretResolver });
+  // Verification resource provider (SMS/email). Vendor adapters wired from creds
+  // via deps; absent -> verification.rent is an honest coded seam.
+  const verificationProvider = D.verificationProvider ?? null;
 
   // Procurement wiring (TZ §6/§8.3): a ShopRegistry over verified declarative
   // specs + an auth-aware HTTP client feed the generic acquire consumer. The
@@ -156,6 +163,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     campaignRepo,
     scrapeResultRepo,
     proxyRepo,
+    proxyHealthChecker,
+    verificationProvider,
     browserProvider,
     shopScanner,
     deviceModel: D.EngineDevice,

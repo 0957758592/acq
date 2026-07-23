@@ -31,9 +31,18 @@ export async function assignDeviceProxy(ctx, { deviceId, proxyId, geo }) {
   return { deviceId, proxyId: id, assigned: true };
 }
 
-export async function rotateDeviceProxy(ctx, { deviceId, geo }) {
+export async function rotateDeviceProxy(ctx, { deviceId, geo, force = false }) {
   const current = await ctx.proxyRepo.findByDevice(deviceId);
   const from = current ? String(current._id) : null;
+  // Verify-by-fact: don't rotate a proxy that is actually healthy (unless forced)
+  // — churn wastes the sticky IP. Health is proven by routing through it.
+  if (current && !force && ctx.proxyHealthChecker) {
+    const health = await ctx.proxyHealthChecker.check(current);
+    if (health.ok) {
+      await ctx.proxyRepo.save({ _id: current._id, version: current.version, status: 'assigned', assignedDeviceId: deviceId, health });
+      return { deviceId, from, rotated: false, reason: 'healthy' };
+    }
+  }
   if (current) {
     const released = releaseProxy(domainProxy(current));
     await ctx.proxyRepo.save({ _id: current._id, version: current.version, status: 'available', assignedDeviceId: '', health: released.health });
@@ -41,5 +50,5 @@ export async function rotateDeviceProxy(ctx, { deviceId, geo }) {
   const pool = (await ctx.proxyRepo.findAvailable({ geo })).filter((p) => String(p._id) !== from);
   const next = selectHealthyProxy(pool.map(domainProxy));
   const to = await persistAssignment(ctx, next, deviceId);
-  return { deviceId, from, to };
+  return { deviceId, from, to, rotated: true };
 }

@@ -9,4 +9,5 @@ export { createGdprService } from './compliance/gdpr.js';
 export { createMongoAuditLog, redactSecrets } from './audit/mongo-audit-log.js';
 export { createPlatformAutomationAdapter } from './automation/platform-automation-adapter.js';
 export { createExpenseRecorder } from './procurement/expense-recorder.js';
+export { createProxyHealthChecker } from './proxy/proxy-health-checker.js';
 export { conflictError } from './errors.js';
