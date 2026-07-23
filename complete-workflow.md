@@ -210,6 +210,32 @@ curl -XPOST localhost:7500/v1/op/campaign.create \
 # → expands into per-account follow tasks (exactly-once), executed on-device, confirmed on-screen
 ```
 
+**Action capability guard.** Every action is checked against the platform's `supportedActions` **before** anything runs. An unsupported action — e.g. `report` on Instagram, or `publish` on Gmail — is rejected **up-front** with a coded `ACTION_NOT_SUPPORTED` at *both* entry points (`account.action` and `campaign.create`), before any task is created or any device is touched. It's input validation (runs even with no device wired), so a bad request costs nothing and returns one clear error instead of a late per-task failure.
+
+> **`report` is supported on WhatsApp · Telegram · Discord · Facebook** — not on Instagram, TikTok, YouTube, or Gmail.
+
+**Reporting a target — targeted vs mass.** To send a report against a target *from other accounts* (e.g. after one of yours is flagged/burned):
+
+1. **Exclude the flagged account** so the engine won't use it (it only ever dispatches to `online` accounts):
+   ```bash
+   curl -XPOST localhost:7500/v1/op/account.retire -d '{"accountId":"<burned-id>"}' \
+     -H 'authorization: Bearer <operator-token>' -H 'content-type: application/json'
+   ```
+   (Or it auto-goes `banned → retired → replace`.)
+2. **Targeted** — one specific healthy account → one target (you choose who reports):
+   ```bash
+   curl -XPOST localhost:7500/v1/op/account.action \
+     -d '{"accountId":"<healthy-id>","actionType":"report","target":"<who-to-report>"}' ...
+   ```
+3. **Mass** — every healthy account of the platform → the target:
+   ```bash
+   curl -XPOST localhost:7500/v1/op/campaign.create \
+     -d '{"platform":"telegram","actionType":"report","targets":["<target>"],"strategy":"all-accounts-per-target"}' ...
+   ```
+   Fans out one exactly-once task per `online` account; the flagged/retired one is never included. Manage with `campaign.status/pause/resume/stop`; re-run a single task with `action.retry`.
+
+`target` is the thing being reported (phone for WhatsApp, `@handle`/channel for Telegram, user/server for Discord, page/profile for Facebook). The report's platform is the reporting account's platform. Each report is confirmed **verify-by-fact** on-device (`ACTION_NOT_CONFIRMED` if the app wasn't actually foreground).
+
 For **every** type, the lifecycle (§5) and surfaces (§7) are identical — only the descriptor differs. That is the whole point of "generic".
 
 ## 7. Management surfaces
@@ -587,6 +613,32 @@ curl -XPOST localhost:7500/v1/op/campaign.create \
   -d '{"platform":"instagram","actionType":"follow","targets":["@someone"],"schedule":{"perHour":20}}' ...
 # → разворачивается в per-account follow-таски (exactly-once), выполняется на устройстве, подтверждается на экране
 ```
+
+**Guard возможностей действия.** Каждый экшн проверяется против `supportedActions` платформы **до** запуска. Неподдерживаемый экшн — напр. `report` на Instagram или `publish` на Gmail — отклоняется **на входе** кодированной ошибкой `ACTION_NOT_SUPPORTED` в *обеих* точках (`account.action` и `campaign.create`), до создания тасков и до любого обращения к устройству. Это валидация входа (срабатывает даже без подключённого провайдера), поэтому плохой запрос ничего не стоит и возвращает одну чёткую ошибку вместо поздних падений по каждому таску.
+
+> **`report` поддержан на WhatsApp · Telegram · Discord · Facebook** — не на Instagram, TikTok, YouTube, Gmail.
+
+**Report на цель — точечно vs массово.** Чтобы отправить report на цель *с других аккаунтов* (напр. когда один из твоих спалился):
+
+1. **Исключи спалённый аккаунт**, чтобы движок его не использовал (действия шлются только `online`-аккаунтам):
+   ```bash
+   curl -XPOST localhost:7500/v1/op/account.retire -d '{"accountId":"<burned-id>"}' \
+     -H 'authorization: Bearer <operator-token>' -H 'content-type: application/json'
+   ```
+   (Либо он сам уйдёт `banned → retired → replace`.)
+2. **Точечно** — один конкретный здоровый аккаунт → одна цель (ты выбираешь, кто репортит):
+   ```bash
+   curl -XPOST localhost:7500/v1/op/account.action \
+     -d '{"accountId":"<healthy-id>","actionType":"report","target":"<кого-репортим>"}' ...
+   ```
+3. **Массово** — все здоровые аккаунты платформы → цель:
+   ```bash
+   curl -XPOST localhost:7500/v1/op/campaign.create \
+     -d '{"platform":"telegram","actionType":"report","targets":["<цель>"],"strategy":"all-accounts-per-target"}' ...
+   ```
+   Разворачивается в по одному exactly-once таску на каждый `online`-аккаунт; спалённый/retired не попадает. Управление — `campaign.status/pause/resume/stop`; отдельный таск — `action.retry`.
+
+`target` — это цель репорта (телефон для WhatsApp, `@handle`/канал для Telegram, user/server для Discord, page/profile для Facebook). Платформа репорта = платформа репортящего аккаунта. Каждый report подтверждается **verify-by-fact** на устройстве (`ACTION_NOT_CONFIRMED`, если приложения не было на переднем плане).
 
 Для **каждого** типа жизненный цикл (§5) и контуры (§7) идентичны — отличается только дескриптор. В этом весь смысл «генеричности».
 
