@@ -4,6 +4,7 @@ import {
   createMongoDeviceQueueRepo,
   createMongoCampaignRepo,
   createMongoScrapeResultRepo,
+  createMongoProxyRepo,
   createPlatformAutomationAdapter,
   createExpenseRecorder
 } from '@acq/engine-infra';
@@ -18,6 +19,7 @@ import { EngineDevice } from '@acq/core/models/engine-device';
 import { EngineCampaign } from '@acq/core/models/engine-campaign';
 import { EngineShopSpec } from '@acq/core/models/engine-shop-spec';
 import { EngineScrapeResult } from '@acq/core/models/engine-scrape-result';
+import { EngineProxy } from '@acq/core/models/engine-proxy';
 import { canDeviceAcceptAccount } from '@acq/core/utils/device-account-eligibility';
 import { claimRunningDeviceLease, releaseDeviceLease } from '@acq/core/services/device-lease';
 import { getRedis } from '@acq/core/db/redis';
@@ -50,6 +52,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createMongoDeviceQueueRepo,
     createMongoCampaignRepo,
     createMongoScrapeResultRepo,
+    createMongoProxyRepo,
     createPlatformAutomationAdapter,
     createExpenseRecorder,
     createShopRegistry,
@@ -66,6 +69,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     EngineCampaign,
     EngineShopSpec,
     EngineScrapeResult,
+    EngineProxy,
     canDeviceAcceptAccount,
     claimRunningDeviceLease,
     releaseDeviceLease,
@@ -81,6 +85,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   const deviceQueueRepo = D.createMongoDeviceQueueRepo({ model: D.EngineDeviceQueue });
   const campaignRepo = D.createMongoCampaignRepo({ model: D.EngineCampaign });
   const scrapeResultRepo = D.createMongoScrapeResultRepo({ model: D.EngineScrapeResult });
+  const proxyRepo = D.createMongoProxyRepo({ model: D.EngineProxy });
   const secretResolver = D.secretResolver ?? createEnvSecretResolver();
 
   // Procurement wiring (TZ §6/§8.3): a ShopRegistry over verified declarative
@@ -121,6 +126,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     deviceQueueRepo,
     campaignRepo,
     scrapeResultRepo,
+    proxyRepo,
     deviceModel: D.EngineDevice,
     canDeviceAcceptAccount: D.canDeviceAcceptAccount,
     secretResolver,
@@ -132,6 +138,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     expenseRecorder,
     accountGenerator: D.accountGenerator ?? null,
     eventBus: D.eventBus ?? null,
+    dispatchScrape: D.dispatchScrape ?? null,
     jobDispatcher: D.jobDispatcher ?? null,
     reconcile: D.reconcile,
     capabilitiesOf: D.getPlatformCapabilities,

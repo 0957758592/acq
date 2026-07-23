@@ -6,6 +6,7 @@ import { createFacade } from '@acq/control';
 import { createMongoAuditLog } from '@acq/engine-infra';
 
 import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
+import { connectRabbitmq, disconnectRabbitmq, publishJson } from '@acq/core/queue/rabbitmq';
 import { getRedis, disconnectRedis } from '@acq/core/db/redis';
 import { EngineAuditLog } from '@acq/core/models/engine-audit-log';
 import { createStructuredLogger } from '@acq/logger';
@@ -19,7 +20,10 @@ import { createWebhookProcessor } from './webhooks.js';
 export async function main({ env } = {}) {
   await connectMongo(env.mongoUri);
   const logger = createStructuredLogger({ level: env.logLevel || 'info', base: { service: 'control-plane' } });
-  const ctx = buildEngineContext({ env: { platforms: env.platforms } });
+  // Optional RabbitMQ: enables scrape.run to enqueue real engine.scrape jobs.
+  const rabbit = env.rabbitUrl ? await connectRabbitmq(env.rabbitUrl).then(() => true).catch(() => false) : false;
+  const dispatchScrape = rabbit ? async (job) => { await publishJson('engine.scrape', job); return null; } : null;
+  const ctx = buildEngineContext({ env: { platforms: env.platforms }, deps: { dispatchScrape } });
   const useCases = buildUseCases(ctx);
   // Immutable audit trail for every mutating command (TZ §14.7).
   const audit = env.audit ?? createMongoAuditLog({ model: EngineAuditLog });
@@ -51,6 +55,7 @@ export async function main({ env } = {}) {
 
   const shutdown = async () => {
     server.close();
+    if (rabbit) await disconnectRabbitmq();
     if (env.redisUrl) await disconnectRedis();
     await disconnectMongo();
   };
@@ -67,6 +72,7 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
     env: {
       mongoUri: process.env.MONGODB_URI,
       redisUrl: process.env.REDIS_URL,
+      rabbitUrl: process.env.RABBITMQ_URL,
       webhookSecret: process.env.WEBHOOK_SECRET,
       port: Number(process.env.CONTROL_PORT || 7500),
       tokens

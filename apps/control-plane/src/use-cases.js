@@ -3,6 +3,7 @@ import { acquireHandler } from '../../engine/src/handlers/acquire.handler.js';
 import { applyAccountTransition, reassignAccount } from '../../engine/src/services/account-lifecycle.js';
 import { enrollDevice } from '../../engine/src/services/device-enroll.js';
 import { probeAccount, runAccountAction } from '../../engine/src/services/account-ops.js';
+import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/src/services/proxy-ops.js';
 
 function require$(args, field, code) {
   const v = args?.[field];
@@ -95,7 +96,26 @@ export function buildUseCases(ctx) {
       return { shopId: doc.shopId, verified: doc.verified };
     },
 
-    // ---- Scrape read-models ------------------------------------------------
+    // ---- Proxies (1:1 sticky pool) -----------------------------------------
+    'proxy.status': async (args = {}) => proxyStatus(ctx, { deviceId: args.deviceId }),
+    'proxy.assign': async (args = {}) => assignDeviceProxy(ctx, {
+      deviceId: require$(args, 'deviceId', 'DEVICE_ID_REQUIRED'), proxyId: args.proxyId, geo: args.geo
+    }),
+    'proxy.rotate': async (args = {}) => rotateDeviceProxy(ctx, {
+      deviceId: require$(args, 'deviceId', 'DEVICE_ID_REQUIRED'), geo: args.geo
+    }),
+
+    // ---- Scrape ------------------------------------------------------------
+    'scrape.run': async (args = {}) => {
+      const platform = require$(args, 'platform', 'PLATFORM_REQUIRED');
+      const targetType = require$(args, 'targetType', 'TARGET_TYPE_REQUIRED');
+      const target = require$(args, 'target', 'TARGET_REQUIRED');
+      if (typeof ctx.dispatchScrape !== 'function') {
+        throw Object.assign(new Error('SCRAPE_DISPATCH_UNAVAILABLE: no scrape job dispatcher wired'), { code: 'SCRAPE_DISPATCH_UNAVAILABLE' });
+      }
+      const jobId = await ctx.dispatchScrape({ platform, targetType, target, params: args.params ?? {} });
+      return { enqueued: true, jobId: jobId ?? null, platform, targetType, target };
+    },
     'scrape.results': async (args = {}) => {
       const results = await ctx.scrapeResultRepo.listResults(
         { ...(args.platform ? { platform: args.platform } : {}), ...(args.type ? { type: args.type } : {}) },

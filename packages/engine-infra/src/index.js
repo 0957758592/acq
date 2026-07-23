@@ -3,6 +3,7 @@ export { createMongoActionTaskRepo } from './repositories/mongo-action-task-repo
 export { createMongoDeviceQueueRepo } from './repositories/mongo-device-queue-repo.js';
 export { createMongoScrapeResultRepo } from './repositories/mongo-scrape-result-repo.js';
 export { createMongoCampaignRepo } from './repositories/mongo-campaign-repo.js';
+export { createMongoProxyRepo } from './repositories/mongo-proxy-repo.js';
 export { consumeJsonWithDlq } from './messaging/dlq.js';
 export { createGdprService } from './compliance/gdpr.js';
 export { createMongoAuditLog, redactSecrets } from './audit/mongo-audit-log.js';

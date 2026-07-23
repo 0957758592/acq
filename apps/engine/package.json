@@ -17,6 +17,7 @@
     "@acq/core": "*",
     "@acq/platform-registry": "*",
     "@acq/procurement": "*",
+    "@acq/proxy": "*",
     "@acq/device-control": "*",
     "@acq/config": "*",
     "@acq/logger": "0.1.0",

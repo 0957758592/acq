@@ -29,6 +29,14 @@ function fakeCtx() {
       approve: async (shopId) => ({ shopId, verified: true })
     },
     scrapeResultRepo: { listResults: async (filter) => [{ platform: filter.platform, type: 'follower', data: { handle: '@z' } }] },
+    proxyRepo: {
+      list: async (f = {}) => [{ _id: 'px1', status: f.assignedDeviceId ? 'assigned' : 'available', geo: 'us', assignedDeviceId: f.assignedDeviceId ?? '', version: 0, health: { ok: true, latencyMs: 90 } }],
+      findById: async (id) => ({ _id: id, status: 'available', geo: 'us', assignedDeviceId: '', version: 0, health: { ok: true, latencyMs: 90 } }),
+      findByDevice: async () => null,
+      findAvailable: async () => [{ _id: 'px1', status: 'available', geo: 'us', assignedDeviceId: '', version: 0, health: { ok: true, latencyMs: 90 } }],
+      save: async (p) => ({ _id: p._id, ...p })
+    },
+    dispatchScrape: async (job) => `scrapejob:${job.platform}:${job.target}`,
     automationFor: (platform) => ({
       probeState: async () => 'online',
       runAction: async (_c, act) => ({ ok: false, reason: 'ACTION_NOT_CONFIRMED', echo: `${platform}:${act.type}` })
@@ -120,5 +128,32 @@ describe('control-plane use-cases through the facade', () => {
     const { facade } = build();
     const res = await facade.execute('scrape.results', { role: 'readonly', args: { platform: 'instagram' } });
     expect(res.data.results[0]).toMatchObject({ platform: 'instagram', type: 'follower' });
+  });
+
+  it('proxy.status lists the pool; proxy.assign binds a healthy proxy 1:1', async () => {
+    const { facade } = build();
+    expect((await facade.execute('proxy.status', { role: 'readonly', args: {} })).data.proxies).toHaveLength(1);
+    const asg = await facade.execute('proxy.assign', { role: 'operator', args: { deviceId: 'd1' } });
+    expect(asg.data).toMatchObject({ deviceId: 'd1', proxyId: 'px1', assigned: true });
+  });
+
+  it('proxy.rotate is staff-gated (operator forbidden)', async () => {
+    const { facade } = build();
+    const res = await facade.execute('proxy.rotate', { role: 'brain', args: { deviceId: 'd1' } });
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('scrape.run enqueues a real engine.scrape job through the injected dispatcher', async () => {
+    const { facade } = build();
+    const res = await facade.execute('scrape.run', { role: 'operator', args: { platform: 'instagram', targetType: 'followers', target: 'acme' } });
+    expect(res.data).toMatchObject({ enqueued: true, jobId: 'scrapejob:instagram:acme', platform: 'instagram' });
+  });
+
+  it('scrape.run fails safe when no dispatcher is wired', async () => {
+    const ctx = fakeCtx();
+    ctx.dispatchScrape = null;
+    const facade = createFacade({ useCases: buildUseCases(ctx), audit: { record: async () => {} } });
+    const res = await facade.execute('scrape.run', { role: 'operator', args: { platform: 'instagram', targetType: 'followers', target: 'acme' } });
+    expect(res.error.code).toBe('SCRAPE_DISPATCH_UNAVAILABLE');
   });
 });
