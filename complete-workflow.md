@@ -377,7 +377,13 @@ Entities are keyed and de-duplicated; results persist as `EngineScrapeResult` an
 
 ## 12. Procurement, generation, verification, personas, scoring
 
-- **Procurement (buy).** A `ShopRegistry` holds declarative `ShopAdapterSpec`s; only **verified** specs compile (`compileShopAdapter({...spec, verified:true})`). `shop.register` adds one, `shop.approve` verifies it, `shop.scan` (LLM, when a key is present) *proposes* a spec from a shop page — AI proposes, validation is by-fact.
+- **Procurement (buy).** A `ShopRegistry` holds declarative `ShopAdapterSpec`s; only **verified** specs compile (`compileShopAdapter({...spec, verified:true})`).
+  - **Lifecycle:** `shop.register {spec}` → stored **unverified**; `shop.approve {shopId}` → flips `verified:true` (the execution gate — an unverified shop is a hard `SHOP_SPEC_UNVERIFIED` seam). `shop.scan {shopUrl}` (LLM, when a key is present) *proposes* a spec from a shop page — AI proposes, validation is by-fact.
+  - **Many shops, per platform.** Register any number of shops for a platform. Each spec carries a `priority` (lower wins) and `unitPriceUsdCents`.
+  - **Buy from a specific shop:** pass `shopId` to `pool.acquire` → that exact shop (must be verified).
+  - **Or auto-select:** omit `shopId` → `selectForPlatform` picks the **highest-priority verified shop within budget** (`maxUnitPriceUsdCents` config filters out too-expensive ones). Auto-buy on low pool uses the same selection.
+  - **Delivery → vault.** Delivered accounts are mapped by the spec's `deliveryFormat.itemMap` (accepts a dot-free **nested** form, e.g. `{ identifier:'phone', secrets:{ session:'sess' } }`, so specs pass the facade injection guard); every secret is vaulted via `secretResolver.put` → only a **ref** (`vault:…`/`env:…`) lands in the account's `secretRefs`, never the raw secret. Each purchase is balance-checked, price-drift-guarded (`priceDriftTolerance`, `maxTotalUsdCents`), and expense-recorded.
+  - *Verified live* (`scripts/shop-select-live.mjs`, real Mongo): two telegram shops (priority 1/$3 vs 10/$1) → auto-select picks priority-1; a $2 budget switches the pick to the cheaper; explicit `shopId` buys from that shop; an un-approved shop is rejected; the delivered account persists a **vaulted** session ref.
 - **Generation (create).** The GENERATE path is on-device native signup driven by the platform driver (`signupVia`: phone/native/google), fed by verification resources. Absent an injected generator, it is an honest seam — never a fake account.
 - **Verification.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` rent numbers / poll SMS codes over any declarative vendor (sms-activate/5sim/…). A pending code returns `null` (caller polls); an exhausted rental is `VERIFICATION_CODE_TIMEOUT` — never a fabricated code.
 - **Personas.** `persona.generate` produces coherent identities (name/handle/bio/niche/locale) to fill profiles.
@@ -792,7 +798,13 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"jobId":"<id>"}' ...
 
 ## 12. Закупка, генерация, верификация, персоны, скоринг
 
-- **Закупка (buy).** `ShopRegistry` хранит декларативные `ShopAdapterSpec`; компилируются только **верифицированные** спеки (`compileShopAdapter({...spec, verified:true})`). `shop.register` добавляет спеку, `shop.approve` верифицирует, `shop.scan` (LLM, при наличии ключа) *предлагает* спеку по странице магазина — ИИ предлагает, валидация по факту.
+- **Закупка (buy).** `ShopRegistry` хранит декларативные `ShopAdapterSpec`; компилируются только **верифицированные** спеки (`compileShopAdapter({...spec, verified:true})`).
+  - **Жизненный цикл:** `shop.register {spec}` → сохраняется **unverified**; `shop.approve {shopId}` → ставит `verified:true` (гейт исполнения — неаппрувнутый магазин это жёсткий шов `SHOP_SPEC_UNVERIFIED`). `shop.scan {shopUrl}` (LLM, при наличии ключа) *предлагает* спеку по странице — ИИ предлагает, валидация по факту.
+  - **Много магазинов на платформу.** Регистрируешь сколько угодно магазинов под платформу. У каждой спеки есть `priority` (меньше = приоритетнее) и `unitPriceUsdCents`.
+  - **Покупка из конкретного:** передаёшь `shopId` в `pool.acquire` → именно этот магазин (должен быть verified).
+  - **Или авто-выбор:** без `shopId` → `selectForPlatform` берёт **самый приоритетный verified-магазин в рамках бюджета** (`maxUnitPriceUsdCents` отсекает слишком дорогих). Авто-докупка при падении пула использует тот же выбор.
+  - **Доставка → vault.** Доставленные аккаунты мапятся `deliveryFormat.itemMap` спеки (принимает бесточечную **вложенную** форму, напр. `{ identifier:'phone', secrets:{ session:'sess' } }`, чтобы спека проходила injection-guard фасада); каждый секрет уходит в vault через `secretResolver.put` → в `secretRefs` аккаунта попадает только **ссылка** (`vault:…`/`env:…`), никогда сырой секрет. Каждая покупка проверяется по балансу, защищена от дрейфа цены (`priceDriftTolerance`, `maxTotalUsdCents`) и пишет расход.
+  - *Проверено вживую* (`scripts/shop-select-live.mjs`, реальный Mongo): два telegram-магазина (priority 1/$3 vs 10/$1) → авто-выбор берёт priority-1; бюджет $2 переключает на дешёвый; явный `shopId` покупает из него; неаппрувнутый магазин отклонён; доставленный аккаунт сохраняет **vaulted** ссылку сессии.
 - **Генерация (create).** Путь GENERATE — нативная регистрация на устройстве драйвером платформы (`signupVia`: phone/native/google), питается ресурсами верификации. Без инъектированного генератора — честный шов, никогда не фейк-аккаунт.
 - **Верификация.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` арендуют номера / поллят SMS-коды через любой декларативный вендор (sms-activate/5sim/…). Ожидающий код возвращает `null` (вызывающий поллит); исчерпанная аренда — `VERIFICATION_CODE_TIMEOUT`, никогда не выдуманный код.
 - **Персоны.** `persona.generate` производит связные личности (имя/хендл/био/ниша/локаль) для заполнения профилей.
