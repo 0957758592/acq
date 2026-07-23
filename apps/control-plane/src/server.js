@@ -19,6 +19,7 @@ import { createWebhookProcessor } from './webhooks.js';
 import { createAcqMcpServer } from './mcp-server.js';
 import { createMcpHttpHandler } from './mcp-http.js';
 import { authenticate } from './http-mapping.js';
+import { buildValidators } from './validators.js';
 
 export async function main({ env } = {}) {
   await connectMongo(env.mongoUri);
@@ -30,7 +31,9 @@ export async function main({ env } = {}) {
   const useCases = buildUseCases(ctx);
   // Immutable audit trail for every mutating command (TZ §14.7).
   const audit = env.audit ?? createMongoAuditLog({ model: EngineAuditLog });
-  const facade = createFacade({ useCases, audit });
+  // Per-operation yup validators (REQUIREM §2.2) run in the facade before every
+  // handler — strict shape + reject-unknown, coded INVALID_ARGS on failure.
+  const facade = createFacade({ useCases, validators: buildValidators(), audit });
 
   // SSE event source (Redis pub/sub) — one-way stream of domain events (§11.5).
   const eventSource = env.redisUrl
