@@ -4,6 +4,8 @@ import { applyAccountTransition, reassignAccount } from '../../engine/src/servic
 import { enrollDevice } from '../../engine/src/services/device-enroll.js';
 import { probeAccount, runAccountAction } from '../../engine/src/services/account-ops.js';
 import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/src/services/proxy-ops.js';
+import { scoreAccount, scoreTarget } from '@acq/intelligence';
+import { generatePersona } from '@acq/account-gen';
 
 function require$(args, field, code) {
   const v = args?.[field];
@@ -122,6 +124,21 @@ export function buildUseCases(ctx) {
         { cursor: args.cursor ?? null, limit: args.limit ?? 100 }
       );
       return { results };
+    },
+
+    // ---- Intelligence / generation -----------------------------------------
+    'scoring.score': async (args = {}) => {
+      const subjectType = args.subjectType ?? 'account';
+      const features = args.features ?? {};
+      const result = subjectType === 'target' ? scoreTarget(features) : scoreAccount(features);
+      return { subjectType, subjectId: args.subjectId ?? null, ...result };
+    },
+    'persona.generate': async (args = {}) => generatePersona({ niche: args.niche, locale: args.locale, seed: args.seed ?? 0 }),
+    'verification.rent': async (args = {}) => {
+      if (!ctx.verificationProvider) {
+        throw Object.assign(new Error('VERIFICATION_PROVIDER_UNAVAILABLE: no verification resource provider wired'), { code: 'VERIFICATION_PROVIDER_UNAVAILABLE' });
+      }
+      return ctx.verificationProvider.rentNumber({ country: require$(args, 'country', 'COUNTRY_REQUIRED'), service: require$(args, 'service', 'SERVICE_REQUIRED') });
     },
 
     // ---- Reconciliation ----------------------------------------------------

@@ -156,4 +156,24 @@ describe('control-plane use-cases through the facade', () => {
     const res = await facade.execute('scrape.run', { role: 'operator', args: { platform: 'instagram', targetType: 'followers', target: 'acme' } });
     expect(res.error.code).toBe('SCRAPE_DISPATCH_UNAVAILABLE');
   });
+
+  it('scoring.score computes a deterministic account score', async () => {
+    const { facade } = build();
+    const res = await facade.execute('scoring.score', { role: 'readonly', args: { subjectType: 'account', subjectId: 'a1', features: { ageDays: 90, warmupLevel: 1 } } });
+    expect(res.data).toMatchObject({ subjectType: 'account', subjectId: 'a1' });
+    expect(typeof res.data.score).toBe('number');
+  });
+
+  it('persona.generate returns a reproducible persona', async () => {
+    const { facade } = build();
+    const res = await facade.execute('persona.generate', { role: 'operator', args: { niche: 'fitness', locale: 'en', seed: 1 } });
+    expect(res.data).toMatchObject({ nicheKey: 'fitness', locale: 'en' });
+    expect(res.data.personaKey).toBeTruthy();
+  });
+
+  it('verification.rent is an honest seam when no provider is wired', async () => {
+    const { facade } = build();
+    const res = await facade.execute('verification.rent', { role: 'operator', args: { country: 'US', service: 'telegram' } });
+    expect(res.error.code).toBe('VERIFICATION_PROVIDER_UNAVAILABLE');
+  });
 });
