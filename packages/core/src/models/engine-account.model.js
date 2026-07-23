@@ -40,6 +40,12 @@ const engineAccountSchema = new mongoose.Schema(
     status: { type: String, enum: ACCOUNT_STATUSES, default: 'acquired', index: true },
     source: { type: String, enum: ['purchase', 'generate'], default: 'purchase' },
     shopId: { type: String, trim: true, default: null },
+    // Vaulted secret REFERENCES only (never raw secrets), TZ §3.1/§14.4. The
+    // procurement → insertAcquired → bringOnline pipeline reads/writes secrets
+    // here (e.g. `secretRefs.session` for session-import); the resolver
+    // dereferences the ref on-device. `credentials`/`session` below hold
+    // structured login fields (username/password) consumed by the drivers.
+    secretRefs: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     credentials: { secretRefs: { type: mongoose.Schema.Types.Mixed, default: () => ({}) } },
     session: { secretRef: { type: String, trim: true, default: '' } },
     profile: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },

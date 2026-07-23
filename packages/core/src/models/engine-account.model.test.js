@@ -14,6 +14,22 @@ describe('EngineAccount model', () => {
     expect(new EngineAccount({}).validateSync()).toBeDefined();
   });
 
+  it('persists top-level secretRefs (session-import refs from a purchased account)', () => {
+    // The procurement → insertAcquired → bringOnline pipeline stores/reads
+    // vaulted secrets under a top-level `secretRefs`. Without the field, strict
+    // mode silently drops it and a purchased account loses its session.
+    const doc = new EngineAccount({ platform: 'telegram', identifier: '+15551230001', secretRefs: { session: 'vault:session:s1' } });
+    expect(doc.secretRefs).toEqual({ session: 'vault:session:s1' });
+  });
+
+  it('persists top-level secretRefs (session-import refs from a purchased account)', () => {
+    // The procurement → insertAcquired → bringOnline pipeline stores/reads
+    // vaulted secrets under a top-level `secretRefs`. Without the field, strict
+    // mode silently drops it and a purchased account loses its session.
+    const doc = new EngineAccount({ platform: 'telegram', identifier: '+15551230001', secretRefs: { session: 'vault:session:s1' } });
+    expect(doc.secretRefs).toEqual({ session: 'vault:session:s1' });
+  });
+
   it('rejects a status outside the 8-state machine', () => {
     const doc = new EngineAccount({ platform: 'telegram', identifier: '@x', status: 'zombie' });
     expect(doc.validateSync()).toBeDefined();
