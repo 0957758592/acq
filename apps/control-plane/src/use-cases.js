@@ -2,6 +2,7 @@ import { planForPlatform } from '../../engine/src/snapshot.js';
 import { acquireHandler } from '../../engine/src/handlers/acquire.handler.js';
 import { applyAccountTransition, reassignAccount } from '../../engine/src/services/account-lifecycle.js';
 import { enrollDevice } from '../../engine/src/services/device-enroll.js';
+import { probeAccount, runAccountAction } from '../../engine/src/services/account-ops.js';
 
 function require$(args, field, code) {
   const v = args?.[field];
@@ -76,6 +77,32 @@ export function buildUseCases(ctx) {
       accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'),
       deviceId: require$(args, 'deviceId', 'DEVICE_ID_REQUIRED')
     }),
+    'account.probe': async (args = {}) => probeAccount(ctx, { accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED') }),
+    'account.action': async (args = {}) => runAccountAction(ctx, {
+      accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'),
+      actionType: require$(args, 'actionType', 'ACTION_TYPE_REQUIRED'),
+      target: require$(args, 'target', 'TARGET_REQUIRED')
+    }),
+
+    // ---- Shops (declarative procurement specs) -----------------------------
+    'shop.register': async (args = {}) => {
+      const doc = await ctx.shopRegistry.register(require$(args, 'spec', 'SPEC_REQUIRED'));
+      return { shopId: doc.shopId, verified: doc.verified };
+    },
+    'shop.approve': async (args = {}) => {
+      const doc = await ctx.shopRegistry.approve(require$(args, 'shopId', 'SHOP_ID_REQUIRED'), { approvedBy: args.approvedBy ?? null });
+      if (!doc) throw Object.assign(new Error('SHOP_NOT_FOUND: shop not found'), { code: 'SHOP_NOT_FOUND' });
+      return { shopId: doc.shopId, verified: doc.verified };
+    },
+
+    // ---- Scrape read-models ------------------------------------------------
+    'scrape.results': async (args = {}) => {
+      const results = await ctx.scrapeResultRepo.listResults(
+        { ...(args.platform ? { platform: args.platform } : {}), ...(args.type ? { type: args.type } : {}) },
+        { cursor: args.cursor ?? null, limit: args.limit ?? 100 }
+      );
+      return { results };
+    },
 
     // ---- Reconciliation ----------------------------------------------------
     'reconcile.now': async (args = {}) => {

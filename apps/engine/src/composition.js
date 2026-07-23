@@ -3,6 +3,7 @@ import {
   createMongoActionTaskRepo,
   createMongoDeviceQueueRepo,
   createMongoCampaignRepo,
+  createMongoScrapeResultRepo,
   createPlatformAutomationAdapter,
   createExpenseRecorder
 } from '@acq/engine-infra';
@@ -16,6 +17,7 @@ import { EngineDeviceQueue } from '@acq/core/models/engine-device-queue';
 import { EngineDevice } from '@acq/core/models/engine-device';
 import { EngineCampaign } from '@acq/core/models/engine-campaign';
 import { EngineShopSpec } from '@acq/core/models/engine-shop-spec';
+import { EngineScrapeResult } from '@acq/core/models/engine-scrape-result';
 import { canDeviceAcceptAccount } from '@acq/core/utils/device-account-eligibility';
 import { claimRunningDeviceLease, releaseDeviceLease } from '@acq/core/services/device-lease';
 import { getRedis } from '@acq/core/db/redis';
@@ -47,6 +49,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createMongoActionTaskRepo,
     createMongoDeviceQueueRepo,
     createMongoCampaignRepo,
+    createMongoScrapeResultRepo,
     createPlatformAutomationAdapter,
     createExpenseRecorder,
     createShopRegistry,
@@ -62,6 +65,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     EngineDevice,
     EngineCampaign,
     EngineShopSpec,
+    EngineScrapeResult,
     canDeviceAcceptAccount,
     claimRunningDeviceLease,
     releaseDeviceLease,
@@ -76,6 +80,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   const actionTaskRepo = D.createMongoActionTaskRepo({ model: D.EngineActionTask });
   const deviceQueueRepo = D.createMongoDeviceQueueRepo({ model: D.EngineDeviceQueue });
   const campaignRepo = D.createMongoCampaignRepo({ model: D.EngineCampaign });
+  const scrapeResultRepo = D.createMongoScrapeResultRepo({ model: D.EngineScrapeResult });
   const secretResolver = D.secretResolver ?? createEnvSecretResolver();
 
   // Procurement wiring (TZ §6/§8.3): a ShopRegistry over verified declarative
@@ -115,6 +120,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     actionTaskRepo,
     deviceQueueRepo,
     campaignRepo,
+    scrapeResultRepo,
     deviceModel: D.EngineDevice,
     canDeviceAcceptAccount: D.canDeviceAcceptAccount,
     secretResolver,

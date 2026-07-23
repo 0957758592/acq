@@ -23,7 +23,16 @@ function fakeCtx() {
       setCampaignStatus: async (id, status) => { if (!campaigns[id]) return null; campaigns[id].status = status; return campaigns[id]; }
     },
     deviceQueueRepo: { find: async (deviceId, platform) => ({ deviceId, platform, waitingAccountIds: ['w1'] }) },
-    deviceModel: { findOneAndUpdate: async (filter, update) => ({ _id: 'dev-1', ...update.$set }) },
+    deviceModel: { findOneAndUpdate: async (filter, update) => ({ _id: 'dev-1', ...update.$set }), findById: (id) => ({ lean: async () => ({ _id: id, providerDeviceId: `pad-${id}` }) }) },
+    shopRegistry: {
+      register: async (spec) => ({ shopId: spec.shopId, verified: false }),
+      approve: async (shopId) => ({ shopId, verified: true })
+    },
+    scrapeResultRepo: { listResults: async (filter) => [{ platform: filter.platform, type: 'follower', data: { handle: '@z' } }] },
+    automationFor: (platform) => ({
+      probeState: async () => 'online',
+      runAction: async (_c, act) => ({ ok: false, reason: 'ACTION_NOT_CONFIRMED', echo: `${platform}:${act.type}` })
+    }),
     provider: null
   };
 }
@@ -79,5 +88,37 @@ describe('control-plane use-cases through the facade', () => {
     const { facade } = build();
     const res = await facade.execute('device.queue.get', { role: 'readonly', args: { deviceId: 'd1', platform: 'telegram' } });
     expect(res.data.waitingAccountIds).toEqual(['w1']);
+  });
+
+  it('account.probe returns the real on-device state via the facade', async () => {
+    const { facade } = build();
+    const res = await facade.execute('account.probe', { role: 'operator', args: { accountId: 'a1' } });
+    expect(res.data).toMatchObject({ accountId: 'a1', platform: 'telegram', state: 'online' });
+  });
+
+  it('account.action drives a device action and surfaces the verify-by-fact result', async () => {
+    const { facade } = build();
+    const res = await facade.execute('account.action', { role: 'operator', args: { accountId: 'a1', actionType: 'view', target: '@t' } });
+    expect(res.data).toMatchObject({ accountId: 'a1', actionType: 'view', ok: false, reason: 'ACTION_NOT_CONFIRMED' });
+  });
+
+  it('shop.register then shop.approve flip verification through the facade (admin-gated)', async () => {
+    const { facade } = build();
+    const reg = await facade.execute('shop.register', { role: 'operator', args: { spec: { shopId: 's9' } } });
+    expect(reg.data).toMatchObject({ shopId: 's9', verified: false });
+    const app = await facade.execute('shop.approve', { role: 'admin', args: { shopId: 's9' } });
+    expect(app.data).toMatchObject({ shopId: 's9', verified: true });
+  });
+
+  it('shop.approve is admin-only (operator forbidden)', async () => {
+    const { facade } = build();
+    const res = await facade.execute('shop.approve', { role: 'operator', args: { shopId: 's9' } });
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('scrape.results reads normalized read-models', async () => {
+    const { facade } = build();
+    const res = await facade.execute('scrape.results', { role: 'readonly', args: { platform: 'instagram' } });
+    expect(res.data.results[0]).toMatchObject({ platform: 'instagram', type: 'follower' });
   });
 });
