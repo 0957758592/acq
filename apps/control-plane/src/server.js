@@ -22,6 +22,7 @@ import { authenticate } from './http-mapping.js';
 import { buildValidators } from './validators.js';
 import { attachWsControl } from './ws-surface.js';
 import { buildGraphqlSchema } from './graphql-surface.js';
+import { buildAgentCard, handleA2aTask } from './a2a-surface.js';
 
 export async function main({ env } = {}) {
   await connectMongo(env.mongoUri);
@@ -64,7 +65,8 @@ export async function main({ env } = {}) {
   });
 
   const graphqlSchema = buildGraphqlSchema(facade);
-  const app = createRestServer({ facade, tokens: env.tokens, logger, eventSource, webhookProcessor, mcpHandler, graphqlSchema });
+  const a2a = { card: buildAgentCard({ baseUrl: env.baseUrl ?? '' }), task: handleA2aTask(facade, { role: 'brain' }) };
+  const app = createRestServer({ facade, tokens: env.tokens, logger, eventSource, webhookProcessor, mcpHandler, graphqlSchema, a2a });
 
   const server = await new Promise((resolve) => {
     const s = app.listen(env.port, () => resolve(s));

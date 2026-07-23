@@ -19,6 +19,7 @@ export function createRestServer({
   webhookProcessor = null,
   mcpHandler = null,
   graphqlSchema = null,
+  a2a = null,
   rateLimit = { max: 300, windowMs: 60_000 }
 } = {}) {
   const app = express();
@@ -29,6 +30,18 @@ export function createRestServer({
 
   // Health is unauthenticated (liveness).
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'control-plane' }));
+
+  // A2A (agent-to-agent, TZ §11.3): public agent card for discovery + a
+  // bearer-gated task endpoint routing through the facade.
+  if (a2a) {
+    app.get('/.well-known/agent-card.json', (_req, res) => res.json(a2a.card));
+    app.post('/a2a', async (req, res) => {
+      if (!authenticate(req.headers.authorization, { tokens })) {
+        return res.status(401).json({ status: { state: 'failed' }, error: { code: 'UNAUTHORIZED', message: 'unauthorized' } });
+      }
+      res.json(await a2a.task(req.body || {}));
+    });
+  }
 
   // Inbound webhooks (TZ §11.5) — authenticated by HMAC signature (not bearer),
   // with replay protection + idempotency in the processor.
