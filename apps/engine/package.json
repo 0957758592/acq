@@ -23,7 +23,8 @@
     "@acq/logger": "0.1.0",
     "node-cron": "^3.0.3",
     "@acq/browser": "*",
-    "@acq/integrations": "*"
+    "@acq/integrations": "*",
+    "@acq/account-gen": "*"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",

@@ -13,6 +13,7 @@ import { reconcile } from '@acq/engine-domain';
 import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner } from '@acq/procurement';
 import { createBrowserProvider } from '@acq/browser';
 import { createOpenRouterClient } from '@acq/integrations';
+import { createVerificationResourceProvider, createHttpSmsVendor } from '@acq/account-gen';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
 import { createDeviceProvider } from '@acq/device-control';
 import { EngineAccount } from '@acq/core/models/engine-account';
@@ -64,6 +65,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     compileShopAdapter,
     createLlmShopScanner,
     createOpenRouterClient,
+    createVerificationResourceProvider,
+    createHttpSmsVendor,
     createBrowserProvider,
     createDeviceProvider,
     reconcile,
@@ -96,9 +99,6 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   const secretResolver = D.secretResolver ?? createEnvSecretResolver();
   // Real proxy health check (verify-by-fact: routes a request through the proxy).
   const proxyHealthChecker = D.proxyHealthChecker ?? D.createProxyHealthChecker({ secretResolver });
-  // Verification resource provider (SMS/email). Vendor adapters wired from creds
-  // via deps; absent -> verification.rent is an honest coded seam.
-  const verificationProvider = D.verificationProvider ?? null;
 
   // Procurement wiring (TZ §6/§8.3): a ShopRegistry over verified declarative
   // specs + an auth-aware HTTP client feed the generic acquire consumer. The
@@ -131,6 +131,16 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       : null);
   const httpClient = D.httpClient ?? D.createShopHttpClient({ secretResolver });
   const expenseRecorder = D.expenseRecorder ?? D.createExpenseRecorder();
+  // Verification resource provider (SMS/email). Wired from an env-configured SMS
+  // vendor (declarative endpoints + auth); absent -> verification.rent is an
+  // honest coded seam (VERIFICATION_PROVIDER_UNAVAILABLE).
+  const verificationProvider =
+    D.verificationProvider ??
+    (env.smsVendor?.endpoints
+      ? D.createVerificationResourceProvider({
+          sms: D.createHttpSmsVendor({ httpClient, endpoints: env.smsVendor.endpoints, map: env.smsVendor.map ?? {} })
+        })
+      : null);
 
   // Device provider from env (duoplus/vmos/geelark + creds). Absent -> null, in
   // which case automationFor is null and the online/action/probe handlers

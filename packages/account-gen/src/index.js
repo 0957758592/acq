@@ -14,3 +14,4 @@
 export { generatePersona, personaKey } from './persona.js';
 export { createAccountGenerator } from './generator.js';
 export { createVerificationResourceProvider } from './verification-provider.js';
+export { createHttpSmsVendor } from './http-sms-vendor.js';
