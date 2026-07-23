@@ -12,7 +12,10 @@ import { buildUseCases } from './use-cases.js';
 
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/acq';
 const PLATFORM = 'telegram';
-const ACTION = 'e2e-facade-follow';
+// A REAL supported telegram action (join/dm/report/view) — campaign.create now
+// rejects unsupported actionTypes up-front. Isolate by a unique marker target.
+const ACTION = 'report';
+const MARKER_TARGET = '@e2e_facade_marker';
 
 let facade;
 let accountId;
@@ -20,7 +23,7 @@ let deviceProviderId;
 
 beforeAll(async () => {
   await connectMongo(URI);
-  await EngineCampaign.deleteMany({ actionType: ACTION });
+  await EngineCampaign.deleteMany({ platform: PLATFORM, targets: MARKER_TARGET });
   await EngineAccount.deleteMany({ identifier: '@e2e_facade' });
   await EngineDevice.deleteMany({ providerDeviceId: 'e2e-facade-pad' });
 
@@ -33,7 +36,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await EngineCampaign.deleteMany({ actionType: ACTION });
+  await EngineCampaign.deleteMany({ platform: PLATFORM, targets: MARKER_TARGET });
   await EngineAccount.deleteMany({ identifier: '@e2e_facade' });
   await EngineDevice.deleteMany({ providerDeviceId: 'e2e-facade-pad' });
   await disconnectMongo();
@@ -48,7 +51,7 @@ describe('facade use-cases over LIVE Mongo', () => {
   });
 
   it('campaign.create -> status -> stop moves a real campaign row', async () => {
-    const created = await facade.execute('campaign.create', { role: 'operator', args: { platform: PLATFORM, actionType: ACTION, targets: ['@x'] } });
+    const created = await facade.execute('campaign.create', { role: 'operator', args: { platform: PLATFORM, actionType: ACTION, targets: [MARKER_TARGET] } });
     const id = created.data.campaignId;
     expect(created.data.status).toBe('active');
 

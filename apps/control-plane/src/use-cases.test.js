@@ -82,7 +82,7 @@ describe('control-plane use-cases through the facade', () => {
 
   it('campaign.create -> pause -> resume -> stop all flow through one facade', async () => {
     const { facade } = build();
-    const created = await facade.execute('campaign.create', { role: 'operator', args: { platform: 'telegram', actionType: 'follow', targets: ['@t'] } });
+    const created = await facade.execute('campaign.create', { role: 'operator', args: { platform: 'telegram', actionType: 'report', targets: ['@t'] } });
     const id = created.data.campaignId;
     expect(created.data.status).toBe('active');
     expect((await facade.execute('campaign.pause', { role: 'operator', args: { campaignId: id } })).data.status).toBe('paused');
@@ -94,6 +94,14 @@ describe('control-plane use-cases through the facade', () => {
     const { facade } = build();
     const res = await facade.execute('campaign.create', { role: 'operator', args: { platform: 'telegram' } });
     expect(res.error.code).toBe('ACTION_TYPE_REQUIRED');
+  });
+
+  it('campaign.create rejects an actionType the platform does not support with a coded error (no row created)', async () => {
+    const { facade } = build();
+    // telegram supports join/dm/report/view — NOT follow.
+    const res = await facade.execute('campaign.create', { role: 'operator', args: { platform: 'telegram', actionType: 'follow', targets: ['@t'] } });
+    expect(res.error.code).toBe('ACTION_NOT_SUPPORTED');
+    expect(res.data).toBeNull();
   });
 
   it('account.cooldown walks the state machine through the facade', async () => {

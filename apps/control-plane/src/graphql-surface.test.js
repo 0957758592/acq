@@ -20,8 +20,8 @@ describe('GraphQL control surface', () => {
   });
 
   it('routes a mutation op through the facade with RBAC from context', async () => {
-    const res = await runGraphql(schema(), { query: MUT, variables: { op: 'campaign.create', a: { platform: 'telegram', actionType: 'follow' } }, context: { role: 'operator' } });
-    expect(res.data.op.data).toMatchObject({ platform: 'telegram', actionType: 'follow' });
+    const res = await runGraphql(schema(), { query: MUT, variables: { op: 'campaign.create', a: { platform: 'telegram', actionType: 'report' } }, context: { role: 'operator' } });
+    expect(res.data.op.data).toMatchObject({ platform: 'telegram', actionType: 'report' });
   });
 
   it('surfaces a facade RBAC denial as an envelope error (not a GraphQL throw)', async () => {

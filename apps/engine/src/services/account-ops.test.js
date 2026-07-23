@@ -28,6 +28,15 @@ describe('account-ops service (generic device ops over the facade)', () => {
     expect(ctx.calls[0]).toEqual(['action', 'telegram', 'pad-d1', 'view', '@t']);
   });
 
+  it('runAccountAction rejects an action the platform does not support (coded, before touching the device)', async () => {
+    // instagram supports publish/follow/like/comment/dm — NOT report.
+    const ctx = fakeCtx({ account: { _id: 'a1', platform: 'instagram', assignedDeviceId: 'd1' } });
+    await expect(runAccountAction(ctx, { accountId: 'a1', actionType: 'report', target: '@t' }))
+      .rejects.toMatchObject({ code: 'ACTION_NOT_SUPPORTED' });
+    // never dispatched to the device
+    expect(ctx.calls.find((c) => c[0] === 'action')).toBeUndefined();
+  });
+
   it('both fail safe when the account is missing', async () => {
     const ctx = fakeCtx({});
     await expect(probeAccount(ctx, { accountId: 'nope' })).rejects.toMatchObject({ code: 'ACCOUNT_NOT_FOUND' });

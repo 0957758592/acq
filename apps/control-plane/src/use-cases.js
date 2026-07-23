@@ -3,6 +3,7 @@ import { acquireHandler } from '../../engine/src/handlers/acquire.handler.js';
 import { applyAccountTransition, reassignAccount } from '../../engine/src/services/account-lifecycle.js';
 import { enrollDevice } from '../../engine/src/services/device-enroll.js';
 import { probeAccount, runAccountAction } from '../../engine/src/services/account-ops.js';
+import { assertSupportedAction } from '../../engine/src/services/action-support.js';
 import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/src/services/proxy-ops.js';
 import { scanShop } from '../../engine/src/services/scan-shop.js';
 import { scoreAccount, scoreTarget } from '@acq/intelligence';
@@ -55,6 +56,9 @@ export function buildUseCases(ctx) {
     'campaign.create': async (args = {}) => {
       require$(args, 'platform', 'PLATFORM_REQUIRED');
       require$(args, 'actionType', 'ACTION_TYPE_REQUIRED');
+      // Reject a mass campaign whose action the platform can't perform, before
+      // any row is created or fanned out into per-account tasks.
+      assertSupportedAction(args.platform, args.actionType);
       const created = await ctx.campaignRepo.createCampaign({
         platform: args.platform,
         actionType: args.actionType,

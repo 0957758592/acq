@@ -1,5 +1,7 @@
 import { domainError } from '@acq/engine-domain';
 
+import { assertSupportedAction } from './action-support.js';
+
 // Shared account device-ops (TZ §8.7 / §11): probe an account's real on-device
 // state and run a single action against its assigned device — over the generic
 // automationFor(platform) bridge. Reused by the control facade's account.probe /
@@ -21,6 +23,8 @@ export async function probeAccount(ctx, { accountId }) {
 
 export async function runAccountAction(ctx, { accountId, actionType, target }) {
   const { doc, device, automation } = await resolve(ctx, accountId);
+  // Reject an action the platform doesn't support before any device I/O.
+  assertSupportedAction(doc.platform, actionType);
   const result = await automation.runAction(
     { providerDeviceId: device?.providerDeviceId, account: doc },
     { type: actionType, target }

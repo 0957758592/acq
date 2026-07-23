@@ -25,7 +25,7 @@ describe('A2A surface', () => {
 
   it('handles a message-envelope task', async () => {
     const task = handleA2aTask(facade(), { role: 'operator' });
-    const res = await task({ id: 't2', message: { parts: [{ data: { operation: 'campaign.create', args: { platform: 'telegram', actionType: 'follow' } } }] } });
+    const res = await task({ id: 't2', message: { parts: [{ data: { operation: 'campaign.create', args: { platform: 'telegram', actionType: 'report' } } }] } });
     expect(res.status.state).toBe('completed');
   });
 
