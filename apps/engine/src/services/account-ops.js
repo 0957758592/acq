@@ -7,9 +7,13 @@ import { assertSupportedAction } from './action-support.js';
 // automationFor(platform) bridge. Reused by the control facade's account.probe /
 // account.action across every surface. Fails safe (coded) when the account is
 // missing or no device provider is wired — never guesses.
-async function resolve(ctx, accountId) {
+async function resolve(ctx, accountId, { requireAction } = {}) {
   const [doc] = await ctx.accountRepo.find({ _id: accountId });
   if (!doc) throw domainError('ACCOUNT_NOT_FOUND', `account ${accountId} not found`);
+  // Semantic input validation (unsupported action) BEFORE the infrastructure
+  // check — a caller asking for an action the platform can't do gets a clear
+  // ACTION_NOT_SUPPORTED whether or not a device provider is wired.
+  if (requireAction) assertSupportedAction(doc.platform, requireAction);
   if (!ctx.automationFor) throw domainError('AUTOMATION_UNAVAILABLE', 'no device provider wired');
   const device = doc.assignedDeviceId ? await ctx.deviceModel.findById(doc.assignedDeviceId).lean() : null;
   return { doc, device, automation: ctx.automationFor(doc.platform) };
@@ -22,9 +26,7 @@ export async function probeAccount(ctx, { accountId }) {
 }
 
 export async function runAccountAction(ctx, { accountId, actionType, target }) {
-  const { doc, device, automation } = await resolve(ctx, accountId);
-  // Reject an action the platform doesn't support before any device I/O.
-  assertSupportedAction(doc.platform, actionType);
+  const { doc, device, automation } = await resolve(ctx, accountId, { requireAction: actionType });
   const result = await automation.runAction(
     { providerDeviceId: device?.providerDeviceId, account: doc },
     { type: actionType, target }

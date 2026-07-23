@@ -37,6 +37,13 @@ describe('account-ops service (generic device ops over the facade)', () => {
     expect(ctx.calls.find((c) => c[0] === 'action')).toBeUndefined();
   });
 
+  it('runAccountAction rejects an unsupported action even with no device provider wired (input validation precedes infra)', async () => {
+    const ctx = fakeCtx({ account: { _id: 'a1', platform: 'instagram', assignedDeviceId: 'd1' } });
+    ctx.automationFor = null; // no provider
+    await expect(runAccountAction(ctx, { accountId: 'a1', actionType: 'report', target: '@t' }))
+      .rejects.toMatchObject({ code: 'ACTION_NOT_SUPPORTED' });
+  });
+
   it('both fail safe when the account is missing', async () => {
     const ctx = fakeCtx({});
     await expect(probeAccount(ctx, { accountId: 'nope' })).rejects.toMatchObject({ code: 'ACCOUNT_NOT_FOUND' });
