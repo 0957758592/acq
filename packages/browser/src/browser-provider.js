@@ -95,9 +95,9 @@ export function createBrowserProvider({
     },
 
     async liveView(sessionId) {
-      const { page } = requireSession(sessionId);
+      const { context, page } = requireSession(sessionId);
       if (!debugPort) throw domainError('BROWSER_LIVEVIEW_UNAVAILABLE', 'liveView requires a CDP debug port');
-      const cdp = await page.newCDPSession();
+      const cdp = await context.newCDPSession(page); // Playwright: CDP session is minted off the context
       const info = await cdp.send('Target.getTargetInfo');
       const targetId = info?.targetInfo?.targetId;
       const res = await fetchImpl(`http://127.0.0.1:${debugPort}/json/list`);

@@ -6,8 +6,7 @@ function fakeEngine() {
     url: () => 'https://x/list',
     goto: async () => {},
     evaluate: async (fn) => (typeof fn === 'function' ? fn() : []),
-    title: async () => 't',
-    newCDPSession: async () => ({ send: async () => ({ targetInfo: { targetId: 'TID-1' } }) })
+    title: async () => 't'
   });
   const chromium = {
     launch: async (opts) => {
@@ -15,7 +14,7 @@ function fakeEngine() {
       log.launchOpts = opts;
       return {
         newContext: async (o) => {
-          const ctx = { opts: o, closed: false, pages: [], newPage: async () => { const p = makePage(); ctx.pages.push(p); return p; }, close: async () => { ctx.closed = true; }, tracing: { start: async () => {}, stop: async () => {} } };
+          const ctx = { opts: o, closed: false, pages: [], newPage: async () => { const p = makePage(); ctx.pages.push(p); return p; }, close: async () => { ctx.closed = true; }, tracing: { start: async () => {}, stop: async () => {} }, newCDPSession: async () => ({ send: async () => ({ targetInfo: { targetId: 'TID-1' } }) }) };
           log.contexts.push(ctx);
           return ctx;
         },
@@ -23,7 +22,7 @@ function fakeEngine() {
       };
     }
   };
-  const fetchImpl = async (url) => ({
+  const fetchImpl = async (_url) => ({
     ok: true,
     json: async () => [{ id: 'TID-1', url: 'https://x/list', devtoolsFrontendUrl: '/devtools/inspector.html?ws=127.0.0.1:9222/devtools/page/TID-1', webSocketDebuggerUrl: 'ws://127.0.0.1:9222/devtools/page/TID-1' }]
   });
