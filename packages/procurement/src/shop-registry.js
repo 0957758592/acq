@@ -19,10 +19,15 @@ export function createShopRegistry({ model } = {}) {
             platform: spec.platform ?? '',
             authKind: spec.auth.kind,
             spec,
+            // Pool-selection fields (§6.5): drive selectForPlatform's priority
+            // ordering and per-unit budget filter. Defaulted when the spec omits
+            // them so an operator can set/update them via (re)register.
+            priority: spec.priority ?? 100,
+            unitPriceUsdCents: spec.unitPriceUsdCents ?? null,
             // A freshly (re)registered spec is unverified until re-approved.
             verified: Boolean(spec.verified)
           },
-          $setOnInsert: { shopId: spec.shopId, available: true, priority: 100 }
+          $setOnInsert: { shopId: spec.shopId, available: true }
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );

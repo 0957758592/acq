@@ -38,6 +38,10 @@ const shopSpecSchema = yup
       .noUnknown(true)
       .required(),
     rateLimit: yup.object().optional(),
+    // Pool-selection hints (TZ §6.5): lower `priority` wins; `unitPriceUsdCents`
+    // lets selectForPlatform honor a per-unit budget. Both optional.
+    priority: yup.number().optional(),
+    unitPriceUsdCents: yup.number().nullable().optional(),
     verified: yup.boolean().default(false)
   })
   .noUnknown(true);

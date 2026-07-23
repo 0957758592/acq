@@ -31,6 +31,18 @@ describe('extractDelivered — json-array format', () => {
       { identifier: '+15551230002', secrets: { session: 's2', password: 'p2' } }
     ]);
   });
+
+  test('supports a NESTED itemMap (no dotted keys) — same result, but passes the facade injection guard', () => {
+    const nested = {
+      verified: true,
+      format: 'json-array',
+      itemMap: { identifier: 'phone', secrets: { session: 'session', password: 'pass' } }
+    };
+    const blob = [{ phone: '+15551230001', session: 's1', pass: 'p1' }];
+    expect(extractDelivered(blob, nested)).toEqual([
+      { identifier: '+15551230001', secrets: { session: 's1', password: 'p1' } }
+    ]);
+  });
 });
 
 describe('extractDelivered — lines format', () => {
