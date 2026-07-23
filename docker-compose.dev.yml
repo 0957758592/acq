@@ -49,9 +49,10 @@ services:
     environment:
       <<: *app-env
       CONTROL_PORT: '7500'
+      GRPC_PORT: '7550'
       CONTROL_ADMIN_TOKEN: ${CONTROL_ADMIN_TOKEN:-admin-dev-token}
     extra_hosts: ['host.docker.internal:host-gateway']
-    ports: ['7500:7500']
+    ports: ['7500:7500', '7550:7550']
     depends_on: [engine]
 
   scrape:

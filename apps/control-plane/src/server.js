@@ -23,6 +23,7 @@ import { buildValidators } from './validators.js';
 import { attachWsControl } from './ws-surface.js';
 import { buildGraphqlSchema } from './graphql-surface.js';
 import { buildAgentCard, handleA2aTask } from './a2a-surface.js';
+import { createGrpcServer, startGrpcServer } from './grpc-server.js';
 
 export async function main({ env } = {}) {
   await connectMongo(env.mongoUri);
@@ -73,10 +74,18 @@ export async function main({ env } = {}) {
   });
   // WebSocket control surface (realtime, same facade) on /v1/ws.
   attachWsControl({ server, facade, tokens: env.tokens ?? {}, eventSource });
-  logger.info?.('control-plane up', { port: env.port });
+
+  // gRPC control surface (§11.4) — generic Execute over the facade.
+  const grpcServer = createGrpcServer({ facade, authenticate, tokens: env.tokens ?? {} });
+  const grpcPort = await startGrpcServer(grpcServer, { port: env.grpcPort ?? 7550 }).catch((err) => {
+    logger.error?.('grpc failed to start', { error: err.message });
+    return null;
+  });
+  logger.info?.('control-plane up', { port: env.port, grpcPort });
 
   const shutdown = async () => {
     server.close();
+    grpcServer?.forceShutdown?.();
     if (rabbit) await disconnectRabbitmq();
     if (env.redisUrl) await disconnectRedis();
     await disconnectMongo();
@@ -97,6 +106,7 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
       rabbitUrl: process.env.RABBITMQ_URL,
       webhookSecret: process.env.WEBHOOK_SECRET,
       port: Number(process.env.CONTROL_PORT || 7500),
+      grpcPort: Number(process.env.GRPC_PORT || 7550),
       tokens
     }
   }).catch((err) => {

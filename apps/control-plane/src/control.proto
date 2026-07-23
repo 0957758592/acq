@@ -1,0 +1,18 @@
+syntax = "proto3";
+package acq;
+
+// Generic control service (TZ §11.4) — one Execute RPC over the facade. Args and
+// results are JSON strings so the contract is the OPERATIONS catalog, not
+// per-op proto types (no schema drift).
+service Control {
+  rpc Execute (OpRequest) returns (OpReply);
+}
+message OpRequest {
+  string operation = 1;
+  string args_json = 2;   // JSON object
+  string role = 3;        // optional; server may override from metadata
+}
+message OpReply {
+  string data_json = 1;   // JSON or empty
+  string error_json = 2;  // JSON {code,message} or empty
+}
