@@ -1,7 +1,7 @@
 import { buildScrapeAdapters } from './composition.js';
 
 describe('scrape-worker composition (default tier wiring)', () => {
-  it('wires the browser tier (primary) by default over a Playwright provider', () => {
+  it('wires the browser tier (primary) by default over a Puppeteer provider', () => {
     const { adapters, browserProvider } = buildScrapeAdapters({});
     expect(typeof adapters.browser.scrape).toBe('function');
     expect(typeof browserProvider.openPage).toBe('function');

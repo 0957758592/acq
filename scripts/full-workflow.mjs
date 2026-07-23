@@ -175,7 +175,7 @@ async function main() {
   } catch (e) { fail('actions', `${e.code || ''} ${e.message}`); }
 
   // ── STAGE 7 — SCRAPE with REAL Chromium ──
-  console.log('\n[7] SCRAPE (real Playwright Chromium → normalized entities)');
+  console.log('\n[7] SCRAPE (real Puppeteer Chromium → normalized entities)');
   const browserProvider = createPuppeteerBrowserProvider({ maxConcurrency: 1 });
   try {
     const PAGE = `data:text/html,${encodeURIComponent('<ul id="f"><li class="u" data-h="@a">A</li><li class="u" data-h="@b">B</li></ul>')}`;

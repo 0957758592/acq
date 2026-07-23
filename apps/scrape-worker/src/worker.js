@@ -48,7 +48,7 @@ export async function main({ env, deps = {} } = {}) {
   const redis = getRedis(env.redisUrl);
   const logger = createStructuredLogger({ level: env.logLevel || 'info', base: { service: 'scrape-worker' } });
 
-  // Real hybrid tiers by default (browser primary via Playwright + optional
+  // Real hybrid tiers by default (browser primary via Puppeteer + optional
   // http/device), assembled by the composition. deps.scrapeAdapters still
   // overrides for tests. Per-platform selectors are the verify-by-fact seam.
   const wired = deps.scrapeAdapters

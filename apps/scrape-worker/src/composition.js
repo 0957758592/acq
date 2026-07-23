@@ -12,7 +12,7 @@ const EMPTY_REGISTRY = { forPlatform: () => null };
 
 // Scrape-worker tier composition (TZ §10.1). Assembles the hybrid tier adapters
 // for the ScrapeProvider. The BROWSER tier (primary) is always wired over a real
-// Playwright provider + an injectable per-platform selector registry; the HTTP
+// Puppeteer provider + an injectable per-platform selector registry; the HTTP
 // and DEVICE tiers are wired only when their config is supplied. Everything is
 // injectable so tests fake the engine and the running worker gets real I/O.
 export function buildScrapeAdapters({

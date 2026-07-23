@@ -2,7 +2,7 @@ import { domainError } from '@acq/engine-domain';
 
 // Browser scrape tier adapter (TZ §10.1 T-B, the PRIMARY tier) — a REAL headless
 // browser harness. Opens an isolated page through the injected BrowserProvider
-// (Playwright in production), navigates to the resolved URL with per-request
+// (Puppeteer in production), navigates to the resolved URL with per-request
 // proxy/user-agent/cookies (anti-detect), detects a captcha wall, then drives
 // infinite-scroll extraction until the page runs dry, de-duplicating rows.
 //
