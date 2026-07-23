@@ -42,3 +42,4 @@ export {
   findDismissButton,
   getAllText
 } from './ui-parser.js';
+export { createAdbSshTunnel, buildSshArgs } from './adb-ssh-tunnel.js';
