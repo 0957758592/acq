@@ -16,6 +16,7 @@ export function createRestServer({
   logger = null,
   eventSource = null,
   webhookProcessor = null,
+  mcpTransport = null,
   rateLimit = { max: 300, windowMs: 60_000 }
 } = {}) {
   const app = express();
@@ -39,6 +40,27 @@ export function createRestServer({
       if (result.ok) return res.json({ data: { accepted: true }, error: null, meta: {} });
       const status = result.reason === 'duplicate' ? 200 : 401;
       return res.status(status).json({ data: null, error: { code: 'WEBHOOK_REJECTED', message: result.reason }, meta: {} });
+    });
+  }
+
+  // MCP-over-HTTP endpoint (TZ §11.3) — the brain/agent contour served over the
+  // network via StreamableHTTP. Bearer-gated (fail-closed); the transport routes
+  // JSON-RPC to the generic MCP server (tools = OPERATIONS, resources = acq://
+  // RAG read-models), all through the SAME facade. POST = client→server calls,
+  // GET = server→client SSE stream.
+  if (mcpTransport) {
+    app.all('/mcp', async (req, res, next) => {
+      const auth = authenticate(req.headers.authorization, { tokens });
+      if (!auth) {
+        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'missing or invalid bearer token' });
+      }
+      try {
+        await mcpTransport.handleRequest(req, res, req.body);
+      } catch (err) {
+        logger?.error?.('mcp http request failed', { error: err.message });
+        if (!res.headersSent) res.status(500).json({ code: 'INTERNAL', message: 'internal error' });
+        else next(err);
+      }
     });
   }
 

@@ -11,11 +11,15 @@ import { getRedis, disconnectRedis } from '@acq/core/db/redis';
 import { EngineAuditLog } from '@acq/core/models/engine-audit-log';
 import { createStructuredLogger } from '@acq/logger';
 
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { randomUUID } from 'node:crypto';
+
 import { buildEngineContext } from '../../engine/src/composition.js';
 import { buildUseCases } from './use-cases.js';
 import { createRestServer } from './rest-server.js';
 import { createRedisEventSource } from './redis-event-source.js';
 import { createWebhookProcessor } from './webhooks.js';
+import { createAcqMcpServer } from './mcp-server.js';
 
 export async function main({ env } = {}) {
   await connectMongo(env.mongoUri);
@@ -46,7 +50,13 @@ export async function main({ env } = {}) {
       })
     : null;
 
-  const app = createRestServer({ facade, tokens: env.tokens, logger, eventSource, webhookProcessor });
+  // MCP-over-HTTP: the generic MCP server (tools from OPERATIONS + acq:// RAG
+  // resources) bound to a StreamableHTTP transport, served at /mcp.
+  const mcp = createAcqMcpServer({ facade, ctx, role: 'brain' });
+  const mcpTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
+  await mcp.attachTransport(mcpTransport);
+
+  const app = createRestServer({ facade, tokens: env.tokens, logger, eventSource, webhookProcessor, mcpTransport });
 
   const server = await new Promise((resolve) => {
     const s = app.listen(env.port, () => resolve(s));
