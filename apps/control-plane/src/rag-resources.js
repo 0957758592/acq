@@ -3,7 +3,9 @@
 // leave, and even refs are dropped here). One definition, exposed as MCP
 // resources; the same read functions can back an HTTP RAG endpoint.
 function stripAccount(a) {
-  const { secretRefs, credentials, ...safe } = a; // never surface secret material
+  const safe = { ...a }; // never surface secret material
+  delete safe.secretRefs;
+  delete safe.credentials;
   return safe;
 }
 
