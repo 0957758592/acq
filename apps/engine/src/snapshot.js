@@ -36,15 +36,46 @@ export async function projectSnapshot(ctx, { platform, source = 'purchase' } = {
     const banned = await ctx.accountRepo.find({ platform, status: 'banned', assignedDeviceId: deviceId });
     const online = await ctx.accountRepo.find({ platform, status: 'online', assignedDeviceId: deviceId });
 
+    // Warmup projection (gated by config.warmupTargetLevel > 0): an online
+    // account below the target warmup level needs warmup. Default target 0 -> no
+    // warmup intents, preserving prior behaviour until warmup is enabled.
+    const warmupTarget = ctx.config?.warmupTargetLevel ?? 0;
+    const warmupNeededAccountIds =
+      warmupTarget > 0
+        ? online.filter((a) => (a.warmup?.level ?? 0) < warmupTarget).map((a) => String(a._id ?? a.id))
+        : [];
+
+    // Proxy projection (gated by config.proxyEnabled): a device without a healthy
+    // assigned proxy needs one. Default disabled -> hasHealthyProxy:true (no proxy
+    // intents) until proxy management is turned on with a wired pool.
+    let hasHealthyProxy = true;
+    if (ctx.config?.proxyEnabled && ctx.proxyRepo) {
+      const assigned = await ctx.proxyRepo.findByDevice(deviceId);
+      hasHealthyProxy = Boolean(assigned && assigned.health?.ok === true);
+    }
+
     devices.push({
       deviceId,
       eligible: true,
       queue,
       bannedActiveAccountIds: banned.map((a) => String(a._id ?? a.id)),
       onlineAccountIds: online.map((a) => String(a._id ?? a.id)),
-      warmupNeededAccountIds: [],
-      hasHealthyProxy: true
+      warmupNeededAccountIds,
+      hasHealthyProxy
     });
+  }
+
+  // Proxy pool projection (gated) — real available count vs threshold so the
+  // reconciler can auto-replenish only when proxy management is enabled.
+  let proxyPool = { available: 0, threshold: 0, batchSize: 1 };
+  if (ctx.config?.proxyEnabled && ctx.proxyRepo) {
+    const availableProxies = await ctx.proxyRepo.findAvailable({});
+    proxyPool = {
+      available: availableProxies.length,
+      threshold: ctx.config?.proxyPoolThreshold ?? 0,
+      batchSize: ctx.config?.proxyBatchSize ?? 1,
+      geo: ctx.config?.proxyGeo
+    };
   }
 
   const campaigns = [];
@@ -75,7 +106,7 @@ export async function projectSnapshot(ctx, { platform, source = 'purchase' } = {
     pool: { available },
     devices,
     campaigns,
-    proxyPool: { available: 0, threshold: 0, batchSize: 1 }
+    proxyPool
   };
 }
 

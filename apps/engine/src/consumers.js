@@ -7,6 +7,8 @@ import { bringOnlineHandler } from './handlers/bring-online.handler.js';
 import { probeHealthHandler } from './handlers/probe-health.handler.js';
 import { replaceBannedHandler } from './handlers/replace-banned.handler.js';
 import { acquireHandler } from './handlers/acquire.handler.js';
+import { warmupHandler } from './handlers/warmup.handler.js';
+import { assignProxyHandler } from './handlers/assign-proxy.handler.js';
 
 // Queue -> handler map for the engine's job consumers (TZ §8.3). Generic across
 // ALL platforms (not whatsapp-only) — bring-online/probe/replace/action drive
@@ -14,11 +16,15 @@ import { acquireHandler } from './handlers/acquire.handler.js';
 // land as their vendor adapters are configured.
 export const ENGINE_HANDLERS = {
   'engine.acquire': acquireHandler,
+  // Generate reuses the acquire consumer's generate path (source:'generate').
+  'engine.generate': (ctx, payload) => acquireHandler(ctx, { ...payload, source: 'generate' }),
   'engine.action': runActionTaskHandler,
   'engine.queue-fill': fillQueueHandler,
   'engine.bring-online': bringOnlineHandler,
   'engine.probe': probeHealthHandler,
-  'engine.replace': replaceBannedHandler
+  'engine.replace': replaceBannedHandler,
+  'engine.warmup': warmupHandler,
+  'engine.proxy-assign': assignProxyHandler
 };
 
 // Registers a DLQ-wrapped consumer per handler queue. Each consumer routes the

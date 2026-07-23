@@ -194,7 +194,16 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       maxUnitPriceUsdCents: env.maxUnitPriceUsdCents ?? null,
       expectedUnitUsdCents: env.expectedUnitUsdCents ?? null,
       priceDriftTolerance: env.priceDriftTolerance ?? 0.2,
-      maxTotalUsdCents: env.maxTotalUsdCents ?? null
+      maxTotalUsdCents: env.maxTotalUsdCents ?? null,
+      deviceTargetDepth: env.deviceTargetDepth ?? 3,
+      // Warmup + proxy planning are opt-in: default target 0 / disabled keeps the
+      // reconciler from emitting warmup/proxy intents until an operator enables
+      // them (and a proxy pool is populated).
+      warmupTargetLevel: env.warmupTargetLevel ?? 0,
+      proxyEnabled: Boolean(env.proxyEnabled),
+      proxyPoolThreshold: env.proxyPoolThreshold ?? 0,
+      proxyBatchSize: env.proxyBatchSize ?? 1,
+      proxyGeo: env.proxyGeo ?? null
     },
     owner
   };

@@ -43,6 +43,34 @@ describe('projectSnapshot (real projection)', () => {
     expect(snap.devices).toHaveLength(0);
   });
 
+  it('projects warmup-needed accounts and real proxy pool when enabled (gated)', async () => {
+    const ctx = fakeCtx();
+    ctx.config.warmupTargetLevel = 2;
+    ctx.config.proxyEnabled = true;
+    ctx.config.proxyPoolThreshold = 5;
+    // online accounts o1 (level 0), o2 (level 3) -> only o1 needs warmup.
+    ctx.accountRepo.find = async (f) => {
+      if (f.status === 'banned') return [{ _id: 'b1' }];
+      if (f.status === 'online') return [{ _id: 'o1', warmup: { level: 0 } }, { _id: 'o2', warmup: { level: 3 } }];
+      return [];
+    };
+    ctx.proxyRepo = {
+      findByDevice: async () => null, // device has no proxy -> hasHealthyProxy false
+      findAvailable: async () => [{ _id: 'px1' }, { _id: 'px2' }]
+    };
+    const snap = await projectSnapshot(ctx, { platform: 'telegram' });
+    expect(snap.devices[0].warmupNeededAccountIds).toEqual(['o1']);
+    expect(snap.devices[0].hasHealthyProxy).toBe(false);
+    expect(snap.proxyPool).toMatchObject({ available: 2, threshold: 5 });
+  });
+
+  it('keeps warmup/proxy projection inert by default (no intents unless enabled)', async () => {
+    const snap = await projectSnapshot(fakeCtx(), { platform: 'telegram' });
+    expect(snap.devices[0].warmupNeededAccountIds).toEqual([]);
+    expect(snap.devices[0].hasHealthyProxy).toBe(true);
+    expect(snap.proxyPool).toMatchObject({ available: 0, threshold: 0 });
+  });
+
   it('planForPlatform feeds the projection into reconcile', async () => {
     const ctx = fakeCtx();
     ctx.reconcile = (snap) => [{ type: 'seen', devices: snap.devices.length, campaigns: snap.campaigns.length }];
