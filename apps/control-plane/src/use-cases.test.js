@@ -14,8 +14,10 @@ function fakeCtx() {
     accountRepo: {
       countAvailable: async () => 7,
       find: async (f) => (f._id ? [accounts[f._id]].filter(Boolean) : Object.values(accounts).filter((a) => a.platform === f.platform)),
-      save: async (a) => { accounts[a.id] = { ...accounts[a.id], status: a.status, assignedDeviceId: a.assignedDeviceId, version: a.version }; return a; }
+      save: async (a) => { accounts[a.id] = { ...accounts[a.id], status: a.status, assignedDeviceId: a.assignedDeviceId, version: a.version }; return a; },
+      tag: async (id, { add = [] }) => ({ _id: id, tags: add })
     },
+    actionTaskRepo: { markTask: async (key, status) => ({ ...key, status }) },
     campaignRepo: {
       createCampaign: async (input) => { const _id = `c${(seq += 1)}`; campaigns[_id] = { _id, ...input }; return campaigns[_id]; },
       findCampaign: async (id) => campaigns[id] ?? null,
@@ -175,5 +177,30 @@ describe('control-plane use-cases through the facade', () => {
     const { facade } = build();
     const res = await facade.execute('verification.rent', { role: 'operator', args: { country: 'US', service: 'telegram' } });
     expect(res.error.code).toBe('VERIFICATION_PROVIDER_UNAVAILABLE');
+  });
+
+  it('account.refreshSession marks an online account for re-login (online -> bringing_online)', async () => {
+    const { facade } = build();
+    const res = await facade.execute('account.refreshSession', { role: 'operator', args: { accountId: 'a1' } });
+    expect(res.data).toMatchObject({ accountId: 'a1', status: 'bringing_online' });
+  });
+
+  it('account.tag adds tags through the facade', async () => {
+    const { facade } = build();
+    const res = await facade.execute('account.tag', { role: 'operator', args: { accountId: 'a1', add: ['vip', 'us'] } });
+    expect(res.data).toMatchObject({ accountId: 'a1', tags: ['vip', 'us'] });
+  });
+
+  it('action.retry re-opens a failed action task', async () => {
+    const { facade } = build();
+    const res = await facade.execute('action.retry', { role: 'operator', args: { campaignId: 'c1', accountId: 'a1', target: '@t', actionType: 'view' } });
+    expect(res.data).toMatchObject({ campaignId: 'c1', status: 'pending' });
+  });
+
+  it('account.bulk applies a transition to matching accounts', async () => {
+    const { facade } = build();
+    const res = await facade.execute('account.bulk', { role: 'operator', args: { platform: 'telegram', to: 'cooldown' } });
+    expect(res.data.requested).toBeGreaterThanOrEqual(1);
+    expect(res.data.applied).toBeGreaterThanOrEqual(1);
   });
 });

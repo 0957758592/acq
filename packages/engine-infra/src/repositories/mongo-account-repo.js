@@ -37,6 +37,13 @@ export function createMongoAccountRepo({ model, tenantId = 'default' } = {}) {
     async countAvailable(filter = {}) {
       return model.countDocuments({ tenantId, status: 'acquired', assignedDeviceId: null, ...filter });
     },
+    async tag(accountId, { add = [], remove = [] } = {}) {
+      const ops = {};
+      if (add.length) ops.$addToSet = { tags: { $each: add } };
+      if (remove.length) ops.$pull = { tags: { $in: remove } };
+      if (!ops.$addToSet && !ops.$pull) return model.findOne({ _id: accountId, tenantId }).lean();
+      return model.findOneAndUpdate({ _id: accountId, tenantId }, ops, { new: true }).lean();
+    },
     async save(account) {
       const updated = await model.findOneAndUpdate(
         { _id: account.id, tenantId, version: account.version - 1 },

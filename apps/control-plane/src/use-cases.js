@@ -64,6 +64,17 @@ export function buildUseCases(ctx) {
       if (args.campaignId) return { campaign: await ctx.campaignRepo.findCampaign(args.campaignId) };
       return { campaigns: await ctx.campaignRepo.listActiveCampaigns(args.platform) };
     },
+    'action.retry': async (args = {}) => {
+      const key = {
+        campaignId: require$(args, 'campaignId', 'CAMPAIGN_ID_REQUIRED'),
+        accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'),
+        target: require$(args, 'target', 'TARGET_REQUIRED'),
+        actionType: require$(args, 'actionType', 'ACTION_TYPE_REQUIRED')
+      };
+      const updated = await ctx.actionTaskRepo.markTask(key, 'pending');
+      if (!updated) throw Object.assign(new Error('ACTION_TASK_NOT_FOUND: task not found'), { code: 'ACTION_TASK_NOT_FOUND' });
+      return { ...key, status: 'pending' };
+    },
     'campaign.pause': async (args = {}) => setStatus(ctx, args, 'paused'),
     'campaign.resume': async (args = {}) => setStatus(ctx, args, 'active'),
     'campaign.stop': async (args = {}) => setStatus(ctx, args, 'stopped'),
@@ -81,6 +92,30 @@ export function buildUseCases(ctx) {
       deviceId: require$(args, 'deviceId', 'DEVICE_ID_REQUIRED')
     }),
     'account.probe': async (args = {}) => probeAccount(ctx, { accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED') }),
+    'account.refreshSession': async (args = {}) =>
+      // Mark an online account for re-login; the engine's bring-online flow
+      // re-imports/re-authenticates it back to online (online -> bringing_online).
+      applyAccountTransition(ctx, { accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'), to: 'bringing_online' }),
+    'account.tag': async (args = {}) => {
+      const doc = await ctx.accountRepo.tag(require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'), { add: args.add ?? [], remove: args.remove ?? [] });
+      return { accountId: args.accountId, tags: doc?.tags ?? [] };
+    },
+    'account.bulk': async (args = {}) => {
+      const to = require$(args, 'to', 'TO_REQUIRED'); // target lifecycle state
+      const limit = Math.min(args.limit ?? 100, 500);
+      const rows = await ctx.accountRepo.find({ platform: args.platform, ...(args.status ? { status: args.status } : {}) });
+      const targets = rows.slice(0, limit);
+      const results = [];
+      for (const doc of targets) {
+        try {
+          const r = await applyAccountTransition(ctx, { accountId: String(doc._id), to });
+          results.push({ accountId: String(doc._id), ok: true, status: r.status });
+        } catch (err) {
+          results.push({ accountId: String(doc._id), ok: false, code: err.code ?? 'ERROR' });
+        }
+      }
+      return { requested: targets.length, applied: results.filter((r) => r.ok).length, results };
+    },
     'account.action': async (args = {}) => runAccountAction(ctx, {
       accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'),
       actionType: require$(args, 'actionType', 'ACTION_TYPE_REQUIRED'),
