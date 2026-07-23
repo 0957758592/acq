@@ -13,6 +13,7 @@ function buildIdempotencyKey({ queueName, jobName, targetType, targetId, payload
 export async function dispatchEngineJob({
   queueName,
   jobName,
+  tenantId = 'default',
   targetType = '',
   targetId = null,
   payload = {},
@@ -27,9 +28,10 @@ export async function dispatchEngineJob({
     idempotencyKey || buildIdempotencyKey({ queueName, jobName, targetType, targetId, payload });
 
   const jobRun = await EngineJobRun.findOneAndUpdate(
-    { queueName, idempotencyKey: resolvedIdempotencyKey },
+    { tenantId, queueName, idempotencyKey: resolvedIdempotencyKey },
     {
       $setOnInsert: {
+        tenantId,
         queueName,
         jobName,
         targetType,

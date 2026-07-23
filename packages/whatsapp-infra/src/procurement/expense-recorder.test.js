@@ -24,7 +24,7 @@ describe('expenseRecorder', () => {
 
     expect(model.calls).toHaveLength(1);
     const { filter, update, options } = model.calls[0];
-    expect(filter).toEqual({ provider: 'dark_shopping', externalReference: 'o1' });
+    expect(filter).toEqual({ tenantId: 'default', provider: 'dark_shopping', externalReference: 'o1' });
     expect(update.$set.category).toBe('account');
     expect(update.$set.provider).toBe('dark_shopping');
     expect(update.$set.amountCents).toBe(500);

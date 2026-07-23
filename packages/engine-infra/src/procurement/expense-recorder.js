@@ -5,14 +5,15 @@ import { EngineExpense } from '@acq/core/models/engine-finance';
 // ANY provider. Idempotent via upsert on (provider, externalReference); a
 // non-positive amount is never written (no zero-rows). Shared by the generic
 // engine acquire flow and the per-platform apps — single source, no dup.
-export function createExpenseRecorder({ model = EngineExpense } = {}) {
+export function createExpenseRecorder({ model = EngineExpense, tenantId = 'default' } = {}) {
   return {
     async record({ provider, externalReference, amountUsdCents, category = 'account', platform, quantity, accountId = null, deviceId = null, description = '' }) {
       if (!(amountUsdCents > 0)) return null;
       return model.findOneAndUpdate(
-        { provider, externalReference },
+        { tenantId, provider, externalReference },
         {
           $set: {
+            tenantId,
             category,
             provider,
             amountCents: amountUsdCents,

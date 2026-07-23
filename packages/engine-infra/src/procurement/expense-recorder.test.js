@@ -17,7 +17,7 @@ describe('generic createExpenseRecorder', () => {
     const rec = createExpenseRecorder({ model });
     const row = await rec.record({ provider: 'shop-abc', externalReference: 'ORD-1', amountUsdCents: 250, platform: 'telegram', quantity: 5 });
     expect(row).toMatchObject({ provider: 'shop-abc', amountCents: 250, category: 'account' });
-    expect(model.calls[0].filter).toEqual({ provider: 'shop-abc', externalReference: 'ORD-1' });
+    expect(model.calls[0].filter).toEqual({ tenantId: 'default', provider: 'shop-abc', externalReference: 'ORD-1' });
     expect(model.calls[0].opts.upsert).toBe(true);
     expect(model.calls[0].update.$set.metadata).toMatchObject({ platform: 'telegram', quantity: 5 });
   });

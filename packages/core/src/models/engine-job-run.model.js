@@ -4,6 +4,7 @@ const JOB_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'cancelled'];
 
 const jobRunSchema = new mongoose.Schema(
   {
+    tenantId: { type: String, trim: true, default: 'default', index: true },
     queueName: { type: String, trim: true, required: true, index: true },
     jobName: { type: String, trim: true, required: true, index: true },
     idempotencyKey: { type: String, trim: true, required: true },
@@ -27,7 +28,7 @@ const jobRunSchema = new mongoose.Schema(
   { collection: 'engine_job_runs', timestamps: true }
 );
 
-jobRunSchema.index({ queueName: 1, idempotencyKey: 1 }, { unique: true });
+jobRunSchema.index({ tenantId: 1, queueName: 1, idempotencyKey: 1 }, { unique: true });
 jobRunSchema.index({ status: 1, nextRetryAt: 1 });
 
 export const EngineJobRun =

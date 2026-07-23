@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const expenseSchema = new mongoose.Schema(
   {
+    tenantId: { type: String, trim: true, default: 'default', index: true },
     category: { type: String, trim: true, required: true, index: true },
     provider: { type: String, trim: true, default: '' },
     amountCents: { type: Number, required: true },
@@ -18,6 +19,7 @@ const expenseSchema = new mongoose.Schema(
 
 const djekxaOrderSchema = new mongoose.Schema(
   {
+    tenantId: { type: String, trim: true, default: 'default', index: true },
     externalOrderId: { type: String, trim: true, required: true },
     platform: { type: String, enum: ['tiktok', 'instagram', 'youtube'], required: true, index: true },
     status: { type: String, trim: true, default: 'created', index: true },
