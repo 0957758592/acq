@@ -22,7 +22,9 @@
     "@acq/intelligence": "*",
     "@acq/account-gen": "*",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "yup": "^1.4.0"
+    "yup": "^1.4.0",
+    "ws": "^8.18.0",
+    "graphql": "^16.9.0"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",

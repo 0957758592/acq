@@ -5,6 +5,7 @@ import { httpStatusFor, authenticate } from './http-mapping.js';
 import { attachEventStream } from './sse.js';
 import { correlationMiddleware } from './correlation.js';
 import { createRateLimiter } from './rate-limit.js';
+import { runGraphql } from './graphql-surface.js';
 
 // REST surface over the single command facade (TZ §11.4). Thin presentation:
 // auth + envelope + status mapping only, zero business logic. Every operation
@@ -17,6 +18,7 @@ export function createRestServer({
   eventSource = null,
   webhookProcessor = null,
   mcpHandler = null,
+  graphqlSchema = null,
   rateLimit = { max: 300, windowMs: 60_000 }
 } = {}) {
   const app = express();
@@ -74,6 +76,19 @@ export function createRestServer({
     app.get('/v1/events', (req, res) => {
       attachEventStream(res, eventSource);
       logger?.info?.('sse open', { role: req.auth.role });
+    });
+  }
+
+  // GraphQL control surface (TZ §11.4) — one `op(operation, args)` field over the
+  // facade; RBAC role comes from the authenticated actor.
+  if (graphqlSchema) {
+    app.post('/v1/graphql', async (req, res) => {
+      const result = await runGraphql(graphqlSchema, {
+        query: req.body?.query,
+        variables: req.body?.variables ?? {},
+        context: { role: req.auth.role, actor: req.auth.actor, correlationId: req.correlationId }
+      });
+      res.json(result);
     });
   }
 

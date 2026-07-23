@@ -20,6 +20,8 @@ import { createAcqMcpServer } from './mcp-server.js';
 import { createMcpHttpHandler } from './mcp-http.js';
 import { authenticate } from './http-mapping.js';
 import { buildValidators } from './validators.js';
+import { attachWsControl } from './ws-surface.js';
+import { buildGraphqlSchema } from './graphql-surface.js';
 
 export async function main({ env } = {}) {
   await connectMongo(env.mongoUri);
@@ -61,11 +63,14 @@ export async function main({ env } = {}) {
     logger
   });
 
-  const app = createRestServer({ facade, tokens: env.tokens, logger, eventSource, webhookProcessor, mcpHandler });
+  const graphqlSchema = buildGraphqlSchema(facade);
+  const app = createRestServer({ facade, tokens: env.tokens, logger, eventSource, webhookProcessor, mcpHandler, graphqlSchema });
 
   const server = await new Promise((resolve) => {
     const s = app.listen(env.port, () => resolve(s));
   });
+  // WebSocket control surface (realtime, same facade) on /v1/ws.
+  attachWsControl({ server, facade, tokens: env.tokens ?? {}, eventSource });
   logger.info?.('control-plane up', { port: env.port });
 
   const shutdown = async () => {
