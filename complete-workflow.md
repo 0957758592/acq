@@ -236,6 +236,17 @@ curl -XPOST localhost:7500/v1/op/campaign.create \
 
 `target` is the thing being reported (phone for WhatsApp, `@handle`/channel for Telegram, user/server for Discord, page/profile for Facebook). The report's platform is the reporting account's platform. Each report is confirmed **verify-by-fact** on-device (`ACTION_NOT_CONFIRMED` if the app wasn't actually foreground).
 
+**Autonomous execution & preconditions.** Once the campaign exists (declared by the brain over MCP, or any surface), execution is **autonomous** — you never issue per-account commands. The **node-cron reconciler** (in `engine-app`) picks up the active campaign each cycle, fans it out into one exactly-once task per `online` account × target, and the `engine.action` consumer runs each on that account's own device. The brain only declares intent and can watch progress (`campaign.status`, `account.status`, RAG `acq://…`, SSE/WS events) and react. But a report only actually reaches the target when **all** of the following hold — otherwise the pipeline stops at a coded seam instead of faking a send:
+
+| Precondition | Otherwise |
+|---|---|
+| `engine-app` running (reconciler + consumers) | campaign stays `active`, nothing executes |
+| accounts genuinely `online` (session-import / login done) | not in the fan-out set — no task is created for them |
+| a device provider wired (`DUOPLUS_API_KEY`, …) | `AUTOMATION_UNAVAILABLE` |
+| the messenger installed on the clone + on-device Report selectors captured | `ACTION_NOT_CONFIRMED` (never a fabricated "sent") |
+
+So: **the orchestration is fully autonomous; the confirmed send is gated by verify-by-fact.** Supply those four inputs and a brain-issued mass report drives every healthy account to send from its own device, exactly-once, with any burned account auto-excluded (only `status:'online'` accounts enter the fan-out).
+
 For **every** type, the lifecycle (§5) and surfaces (§7) are identical — only the descriptor differs. That is the whole point of "generic".
 
 ## 7. Management surfaces
@@ -639,6 +650,17 @@ curl -XPOST localhost:7500/v1/op/campaign.create \
    Разворачивается в по одному exactly-once таску на каждый `online`-аккаунт; спалённый/retired не попадает. Управление — `campaign.status/pause/resume/stop`; отдельный таск — `action.retry`.
 
 `target` — это цель репорта (телефон для WhatsApp, `@handle`/канал для Telegram, user/server для Discord, page/profile для Facebook). Платформа репорта = платформа репортящего аккаунта. Каждый report подтверждается **verify-by-fact** на устройстве (`ACTION_NOT_CONFIRMED`, если приложения не было на переднем плане).
+
+**Автономное исполнение и предусловия.** Как только кампания создана (задекларирована brain по MCP или с любого контура), исполнение **автономно** — ты не отдаёшь команды по каждому аккаунту. **node-cron реконсайлер** (в `engine-app`) каждый цикл подхватывает активную кампанию, разворачивает её в по одному exactly-once таску на каждый `online`-аккаунт × target, а консьюмер `engine.action` исполняет каждый на устройстве самого аккаунта. Brain только декларирует намерение и может следить за прогрессом (`campaign.status`, `account.status`, RAG `acq://…`, события SSE/WS) и реагировать. Но реальный репорт доходит до цели, только когда выполнены **все** условия — иначе конвейер останавливается на кодированном шве, не фейкая отправку:
+
+| Предусловие | Иначе |
+|---|---|
+| `engine-app` запущен (реконсайлер + консьюмеры) | кампания висит `active`, ничего не исполняется |
+| аккаунты реально `online` (импорт сессии / логин выполнен) | не попадают в выборку — таск для них не создаётся |
+| подключён провайдер устройств (`DUOPLUS_API_KEY`, …) | `AUTOMATION_UNAVAILABLE` |
+| мессенджер установлен на клоне + сняты on-device селекторы экрана Report | `ACTION_NOT_CONFIRMED` (никогда не выдуманное «отправлено») |
+
+Итого: **оркестрация полностью автономна; подтверждённая отправка гейтится verify-by-fact.** Дай эти четыре входа — и массовый report, поставленный через brain, заставит каждый здоровый аккаунт отправить со своего устройства, exactly-once, а спалённый автоматически исключится (в выборку идут только `status:'online'`).
 
 Для **каждого** типа жизненный цикл (§5) и контуры (§7) идентичны — отличается только дескриптор. В этом весь смысл «генеричности».
 
