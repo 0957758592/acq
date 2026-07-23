@@ -1,0 +1,766 @@
+# @acq — Complete Workflow / Полный воркфлоу
+
+> Universal, production-grade platform to **acquire (buy or generate)** and **operate** messenger/social accounts at scale across cloud-phone devices — one engine, many platforms, many control surfaces.
+>
+> Универсальная production-платформа для **получения (покупка или генерация)** и **эксплуатации** аккаунтов мессенджеров/соцсетей в масштабе на облачных телефонах — один движок, много платформ, много контуров управления.
+
+Supported platforms / Поддерживаемые платформы: **WhatsApp · Telegram · Discord · Facebook · Gmail · TikTok · Instagram · YouTube** (8).
+
+---
+
+# 🇬🇧 English
+
+## Table of contents
+1. [What it is & why](#1-what-it-is--why)
+2. [How it works (architecture)](#2-how-it-works-architecture)
+3. [How to run](#3-how-to-run)
+4. [Core model: lifecycle, pool, queue, reconciler](#4-core-model)
+5. [The end-to-end account workflow (worked example)](#5-the-end-to-end-account-workflow)
+6. [Per-account-type playbooks (all 8)](#6-per-account-type-playbooks)
+7. [Management surfaces (10 contours)](#7-management-surfaces)
+8. [Operation catalog (34)](#8-operation-catalog)
+9. [Devices: connect / disconnect / control](#9-devices)
+10. [Proxy subsystem](#10-proxy-subsystem)
+11. [Browser parsing / scraping](#11-browser-parsing--scraping)
+12. [Procurement, generation, verification, personas, scoring](#12-procurement-generation-verification)
+13. [Integration guide](#13-integration-guide)
+14. [Security, RBAC, multi-tenancy](#14-security-rbac-multi-tenancy)
+15. [Verify-by-fact seams](#15-verify-by-fact-seams)
+
+---
+
+## 1. What it is & why
+
+**What.** `@acq` keeps a *pool* of ready-to-use accounts for each platform, hosts them on real Android **cloud phones**, brings them online, runs actions/campaigns on them, parses public data through a real browser, and automatically **replaces** accounts that get banned — so downstream products always have healthy, warmed identities on tap.
+
+**Why.** Growth/automation on social platforms needs many isolated identities on real devices with consistent network fingerprints (IP↔SIM↔GPS↔timezone). Doing this by hand doesn't scale and breaks constantly (bans, checkpoints, device drift). `@acq` turns it into a **self-healing supply chain**: declare a target pool depth per platform, and the engine buys/generates, provisions devices+proxies, logs in, warms up, and reconciles reality against intent forever.
+
+**Design guarantees.**
+- **Generic, not per-platform.** Every platform is a *descriptor* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Adding a platform = adding a descriptor + a thin driver, never forking the engine.
+- **One brain, many mouths.** A single **command facade** (34 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
+- **Verify-by-fact.** The system never *pretends* an action worked. It reads the device/network to confirm (e.g. app in foreground, proxy actually routes). If it can't confirm, it returns a **coded seam** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) and reverts state — no fabricated success.
+- **Exactly-once & self-healing.** Idempotent jobs (unique keys + `$setOnInsert`), optimistic locking (version), a pure `reconcile(snapshot) → intents` planner, and automatic ban→replace.
+
+## 2. How it works (architecture)
+
+Clean/Hexagonal/DDD monorepo (yarn workspaces, Node 20 ESM). A **pure zero-dependency domain** (`@acq/engine-domain`) holds the state machine and the `reconcile` planner; everything I/O is a **port** with swappable **adapters**.
+
+```
+                       ┌────────────────────────────────────────────┐
+  Control surfaces     │  REST · MCP · WS · GraphQL · A2A · gRPC ·   │
+  (10, all thin)       │  CLI · SSE · webhooks · RAG                 │
+                       └───────────────────┬────────────────────────┘
+                                           ▼
+                       ┌────────────────────────────────────────────┐
+  Command facade       │  createFacade({useCases, validators, audit})│
+  (1 entry point)      │  RBAC · assertSafeArgs · {data,error,meta}  │
+                       └───────────────────┬────────────────────────┘
+                                           ▼
+  Use-cases (34)  pool.* shop.* device.* campaign.* account.* proxy.* scoring persona verification browser.* scrape.* reconcile
+                                           ▼
+  Engine (workers)   RabbitMQ + DLQ consumers · node-cron reconciler · exactly-once · optimistic lock
+                                           ▼
+  Ports & adapters   DeviceProvider · ProxyProvider · ScrapeProvider · BrowserProvider · ShopRegistry ·
+                     VerificationProvider · AutomationAdapter · Mongo repos · Redis · SecretResolver
+                                           ▼
+  Reality            Cloud phones (DuoPlus/VMOS/GeeLark) · Proxies · Real apps · Public web (Puppeteer+CDP)
+```
+
+**Services (composition roots).**
+| Service | Role | Port |
+|---|---|---|
+| `@acq/engine-app` | Workers: reconciler cron + RabbitMQ consumers (acquire, generate, queue-fill, bring-online, action, probe, replace, warmup, proxy-assign) | health `7401` |
+| `@acq/control-plane-app` | The facade + all synchronous surfaces (REST, MCP-HTTP, WS, GraphQL, A2A, SSE, webhooks) + gRPC | `7500`, gRPC `7550` |
+| `@acq/scrape-worker-app` | Consumes `engine.scrape`, runs the tiered scraper | health `7700` |
+| `@acq/dashboard-app` | Read-only operator dashboard over the facade | `7600` |
+
+Backing stores: **MongoDB** (state of record), **Redis** (events/leases), **RabbitMQ + DLQ** (jobs).
+
+## 3. How to run
+
+**Prerequisites:** Node 20, yarn v1, Docker (for Redis/RabbitMQ), a MongoDB (host `27017`, db `acq`).
+
+```bash
+# 1. install
+yarn install
+
+# 2. configure — copy the template and fill secrets (never commit .env)
+cp .env.example .env
+#   MONGODB_URI=mongodb://127.0.0.1:27017/acq
+#   REDIS_URL=redis://127.0.0.1:6379
+#   RABBITMQ_URL=amqp://127.0.0.1:5672
+#   JWT_SECRET=...            # signs surface bearer tokens
+#   DUOPLUS_API_KEY=...       # cloud-phone provider
+#   (optional) DARK_SHOPPING_* / SMS vendor / proxy vendor / LLM key
+
+# 3a. run everything in Docker (redis + rabbitmq + all app services)
+docker compose -f docker-compose.dev.yml up -d
+#   engine :7401  ·  control-plane :7500 (+gRPC :7550)  ·  dashboard :7600
+
+# 3b. …or run one service at a time (local dev)
+yarn workspace @acq/engine-app        start   # workers
+yarn workspace @acq/control-plane-app start   # facade + surfaces
+yarn workspace @acq/scrape-worker-app start   # scraper
+yarn workspace @acq/dashboard-app     start   # dashboard
+
+# 4. tests
+yarn test                                        # full unit sweep (TDD)
+yarn workspace @acq/engine-app test:live <name>  # live tests (need real creds/devices)
+```
+
+**Smoke check the control plane:**
+```bash
+curl -s -XPOST localhost:7500/v1/op/pool.status \
+  -H 'authorization: Bearer <token>' -H 'content-type: application/json' \
+  -d '{"platform":"instagram"}'
+# → {"data":{"platform":"instagram","total":..,"online":..}, "error":null, "meta":{...}}
+```
+
+## 4. Core model
+
+**Account lifecycle (8 states).** Every account is a state machine; transitions are the *only* way state changes:
+
+```
+acquired ──assign──▶ assigned ──bring-online──▶ bringing_online ──✓verify──▶ online
+   ▲                     │                                              │
+   │ (generate/buy)      │                                     cooldown ↕ resume
+   │                     ▼                                              │
+   └────── replace ◀── retired ◀── retire ◀── banned ◀── checkpointed ◀─┘
+```
+
+- `acquired` — in the pool, no device yet.
+- `assigned` — bound to a device+slot (and proxy if enabled).
+- `bringing_online` → `online` — credentials/session applied on-device; **only** flips to `online` when the app is verified in the foreground (verify-by-fact).
+- `cooldown` — rate-limit rest; `resume` returns it to `online`.
+- `checkpointed` — platform asks for verification; needs `account.probe` / manual.
+- `banned` → `retired` — dead; triggers `replace` which promotes a fresh pool account.
+
+**Pool.** Per platform, the engine keeps `total ≥ poolThreshold`. Falling below emits `pool.low` → the acquire consumer buys/generates a batch (`buyBatchSize`).
+
+**Device queue.** Each running device advertises free slots (`deviceTargetDepth`); the queue-fill planner assigns `acquired` accounts into them respecting `maxAccountsPerDevice` and subscription/capacity gates.
+
+**Reconciler.** A pure function `reconcile(snapshot) → intents` compares *desired* (pool depth, warmup level, proxy coverage, online targets) with *actual* and emits intents. A **node-cron** job (composition root only — never `setInterval` in business logic) snapshots reality and dispatches the intents as idempotent jobs. This is the self-healing loop.
+
+**Exactly-once.** Jobs carry deterministic keys (e.g. hourly buckets); repositories use unique indexes + `$setOnInsert` so a redelivered job is a no-op. Writes use **optimistic locking** (`version`) so two workers can't corrupt an account.
+
+**Multi-tenancy.** Every `Engine*` document carries `tenantId`; all reads/writes are tenant-scoped.
+
+## 5. The end-to-end account workflow
+
+This is the full happy-path, exactly as exercised live on a real DuoPlus device (`scripts/full-workflow.mjs`). Every stage is an operation you can also drive by hand.
+
+| # | Stage | What happens | Operation | Verify-by-fact |
+|---|---|---|---|---|
+| 1 | **Buy** | Reconciler sees pool below threshold → acquire consumer purchases a batch from a *verified* shop spec; expense recorded | `pool.acquire` / auto | shop `spec.verified` gate; expense row written |
+| 2 | **Enroll device** | Register a cloud phone; engine confirms it's *running* and *eligible* (subscription + capacity) | `device.enroll` | `describeInstance` status = running |
+| 3 | **Reconcile** | Snapshot → intents (fill-queue emitted) | `reconcile.now` | pure planner, no side effects |
+| 4 | **Fill queue** | `acquired` accounts assigned into the device's free slots | queue-fill consumer | `canDeviceAcceptAccount` cap |
+| 5 | **Bring online** | Session/credentials applied on-device; app launched | bring-online consumer | app in foreground → `online`, else revert + coded seam |
+| 6 | **Campaign / actions** | Create a campaign; it expands into per-account action tasks (exactly-once) | `campaign.create`, `account.action` | task upsert dedupe; action confirmed on-screen |
+| 7 | **Scrape** | Parse public data through the browser tier | `scrape.run` / `scrape.results` | entities actually extracted from a real page |
+| 8 | **Replace** | A banned account retires and a fresh pool account is promoted | replace consumer / auto | banned → `retired`, promoted id returned |
+| 9 | **Observe** | Query state through the facade / any surface | `campaign.status`, `account.status` | reads state-of-record |
+
+Domain events emitted along the way (`purchase.completed`, `pool.low`, `account.retired`, `queue.low`, …) stream out over **SSE** and **WebSocket** and can trigger **webhooks**.
+
+**Concrete run (abbreviated real output):**
+```
+✅ bought 3 accounts (order ORD-WF-1); pool=3; expense rows=1
+✅ enrolled real device BzSfu (running, eligible)
+✅ filled 3; accounts now assigned=3
+🔒 bring-online reverted to assigned — verify-by-fact seam: TELEGRAM_SESSION_IMPORT_UNVERIFIED
+✅ expand-actions emitted 1 task; exactly-once upsert → 1 row (deduped)
+✅ scraped via browser tier → 2 entities
+✅ replace ran; banned account now = retired
+✅ facade campaign.status → 1 active; account.status → 3 accounts
+```
+The `🔒` line is the system being honest: without a real Telegram session to import, it **refuses to fake `online`** and reverts — exactly the intended behavior.
+
+## 6. Per-account-type playbooks
+
+Each platform is a descriptor consumed by a thin driver. `onlineMethod` decides how it comes online; `supportedActions` decides what campaigns can do; `scrapeTargets` decides what the browser can parse; `maxAccountsPerDevice` decides device packing.
+
+| Platform | onlineMethod | signupVia | max/device | supportedActions | scrapeTargets |
+|---|---|---|---|---|---|
+| **WhatsApp** | session-import | phone | 1 | report | group, contacts |
+| **Telegram** | session-import | phone | 1 | join, dm, report, view | channel, group, members, messages, participants, contacts |
+| **Discord** | login | native | 1 | join, dm, report | server, channel, members, roles, messages |
+| **Facebook** | login | native | 1 | post, join, report, like | page, group, friends, members, posts, likes, comments |
+| **Gmail** | login | native | 1 | read-code | threads, contacts |
+| **TikTok** | login | native | 1 | publish, warmup, follow, like, comment | profile, videos, followers, following, likes, comments, sounds, hashtags, trends |
+| **Instagram** | login | native | **5** | publish, follow, like, comment, dm | profile, followers, following, posts, reels, stories, likers, commenters, hashtags |
+| **YouTube** | login | google | 1 | publish, comment, like | channel, videos, subscribers, comments, playlists |
+
+**WhatsApp** — *buy phone-verified account → import session → report abuse.* Comes online by importing a session (no interactive login); 1 per device (heavy anti-fraud). Example:
+```bash
+curl -XPOST localhost:7500/v1/op/pool.acquire   -d '{"platform":"whatsapp","count":5}'   -H 'authorization: Bearer <op-token>' -H 'content-type: application/json'
+curl -XPOST localhost:7500/v1/op/account.action -d '{"platform":"whatsapp","accountId":"<id>","action":{"type":"report","target":"+1555..."}}' ...
+```
+
+**Telegram** — *session-import, then join/dm/report/view.* Richest scraper (channels, members, messages). Bring-online is the verify-by-fact seam shown above until a real session is present.
+
+**Discord / Facebook** — *interactive login (username+password on-device) → join/report (+post/like on FB).* The shared `login-runner` drives the app: launch → classify screen → enter creds → confirm; coded seams `<P>_LOGIN_SCREEN_UNVERIFIED` / `<P>_CREDENTIALS_REQUIRED` if selectors/creds aren't present.
+
+**Gmail** — *login → read verification codes.* Primary use is a verification sink for other signups (`read-code` action, `threads` scrape).
+
+**TikTok / Instagram / YouTube** — *login → publish/engage.* These run the shared `action-runner` (publish/follow/like/comment/warmup). **Instagram packs 5 per device.** Example campaign:
+```bash
+curl -XPOST localhost:7500/v1/op/campaign.create \
+  -d '{"platform":"instagram","actionType":"follow","targets":["@someone"],"schedule":{"perHour":20}}' ...
+# → expands into per-account follow tasks (exactly-once), executed on-device, confirmed on-screen
+```
+
+For **every** type, the lifecycle (§5) and surfaces (§7) are identical — only the descriptor differs. That is the whole point of "generic".
+
+## 7. Management surfaces
+
+Ten ways to call the **same** facade. Same operation names, same args, same RBAC, same `{data, error, meta}` envelope. Pick by integration context.
+
+**REST** (`POST /v1/op/:operation`, bearer):
+```bash
+curl -XPOST localhost:7500/v1/op/scoring.score \
+  -H 'authorization: Bearer <token>' -H 'content-type: application/json' \
+  -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
+```
+
+**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 34 operations; resources = RAG read-models:
+```js
+const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
+await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
+  { requestInit:{ headers:{ authorization:'Bearer <token>' } } }));
+await mcp.callTool({ name:'account.status', arguments:{ platform:'telegram' } });
+await mcp.readResource({ uri:'acq://accounts' });   // secrets stripped
+```
+
+**WebSocket** (`/v1/ws`) — bidirectional, for live ops UIs:
+```js
+ws.send(JSON.stringify({ id:'w1', operation:'pool.status', args:{ platform:'telegram' } }));
+```
+
+**GraphQL** (`/v1/graphql`) — single generic field `op(operation, args)` on Query & Mutation:
+```graphql
+query($op:String!,$a:JSON){ op(operation:$op, args:$a){ data error } }
+# variables: { "op":"persona.generate", "a":{ "niche":"art","locale":"en" } }
+```
+
+**A2A** (agent-to-agent) — `GET /.well-known/agent-card.json` (34 skills) + `POST /a2a` tasks:
+```bash
+curl localhost:7500/.well-known/agent-card.json           # discover skills
+curl -XPOST localhost:7500/a2a -d '{"id":"a1","skill":"account.status","args":{"platform":"instagram"}}' ...
+```
+
+**gRPC** (`:7550`, `Control.Execute`) — JSON args in/out, for high-throughput services:
+```
+Execute({ operation:'pool.status', args_json:'{"platform":"youtube"}' }) → { data_json, error_json }
+```
+
+**CLI / manual** — same facade, terminal envelope:
+```bash
+acq scoring.score subjectType=target 'features={"followers":50000}'
+```
+
+**SSE** (`GET /v1/events`) — one-way domain event stream (pool.low, account.retired, …).
+
+**Inbound webhooks** (`POST /webhooks/inbound`) — HMAC-signed + replay-protected ingress from external systems.
+
+**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`.
+
+## 8. Operation catalog
+
+34 operations, RBAC per op (`readonly` < `operator` < `admin`).
+
+- **Pool:** `pool.status`, `pool.acquire`
+- **Procurement:** `shop.register`, `shop.scan`, `shop.approve`
+- **Devices:** `device.enroll`, `device.queue.get`
+- **Campaigns:** `campaign.create`, `campaign.status`, `campaign.pause`, `campaign.resume`, `campaign.stop`
+- **Accounts:** `account.status`, `account.action`, `account.retire`, `account.cooldown`, `account.resume`, `account.reassign`, `account.refreshSession`, `account.probe`, `account.tag`, `account.bulk`
+- **Actions:** `action.retry`
+- **Proxy:** `proxy.status`, `proxy.assign`, `proxy.rotate`
+- **Intelligence:** `scoring.score`, `persona.generate`
+- **Verification:** `verification.rent`
+- **Browser:** `browser.session.open`, `browser.session.liveView`
+- **Scraping:** `scrape.run`, `scrape.results`
+- **Control:** `reconcile.now`
+
+Every surface validates args with a **per-operation yup schema** (`.noUnknown(true)` → unknown fields rejected with coded `INVALID_ARGS`) before the facade runs.
+
+## 9. Devices
+
+Cloud phones are reached through a `DeviceProvider` port with concrete adapters. **Nothing is ADB-only** — control also works through provider REST APIs (remote-shell).
+
+**Providers:** `duoplus`, `vmos`, `geelark` (+ internal `matt-duo` session-token variant).
+
+**Connect (lifecycle).**
+```
+describeInstance(id) → startDevice(id) → createDirectController(id) → [operate] → stopDevice / releaseLease
+```
+- **Enroll:** `device.enroll` registers the phone, verifies it is *running* (`describeInstance`) and *eligible* (subscription + capacity), then records it as an `EngineDevice`.
+- **Lease:** `claimRunningDeviceLease` (Redis) gives one worker exclusive control; `releaseDeviceLease` frees it. This is how two engines never fight over the same phone.
+- **Disconnect:** stop the instance or release the lease; the account slot is freed and occupancy recomputed.
+
+**Controllers (the on-device surface).** A `Controller` exposes `getUIDump`, `getCurrentPackage`, `isAppInstalled`, `startApp`, `stopApp`, `enter`, `clearField`, `connect`, `tap/text/key/sleep`. Implementations:
+- **DuoplusDirectController / VmosDirectController** — remote-shell over the provider API (`/api/v1/cloudPhone/command`); no raw ADB needed (works behind NAT).
+- **AdbClient** — raw/network ADB (`adb connect host:port`) with the full controller surface, injectable `exec`.
+- **ADB-over-SSH tunnel** — `createAdbSshTunnel({sshHost, sshUser, remotePort, localPort, …})` forwards a remote ADB port over SSH (key or `sshpass`) when the device is only reachable inside a gateway.
+
+**Multi-account occupancy (§5.11).** A device tracks `occupiedAccountIds`, `activeAccountCount`, and `occupancyMethod` (`root|vision|none`). `canDeviceAcceptAccount` enforces the subscription gate **and** the capacity cap (`DEVICE_CAPACITY_FULL`) — this is what lets Instagram pack 5/device while WhatsApp stays 1/device.
+
+**Verify-by-fact on device.** `bringOnline`/`runAction` compare `getCurrentPackage()` to the descriptor's `appPackage` (`foregroundMatches`). If the target app isn't actually in the foreground, the action is **not** confirmed → coded seam (`ACTION_NOT_CONFIRMED`), never a fake success.
+
+## 10. Proxy subsystem
+
+Sticky **1:1** account↔proxy binding for a consistent network fingerprint (IP↔SIM↔GPS↔timezone geo-consistency).
+
+- **Pool & ops:** `proxy.status`, `proxy.assign`, `proxy.rotate` over an `EngineProxy` pool.
+- **Health by-fact:** `createProxyHealthChecker` routes a real request *through* the proxy — a proxy is "healthy" only if it actually egresses, never on a config guess.
+- **Vendor purchase:** `createHttpProxyProvider({httpClient, endpoints, map, verifyProxy})` buys/rotates over any declarative HTTP proxy vendor.
+- **Planning:** opt-in via `proxyEnabled` + `proxyPoolThreshold`; the reconciler emits proxy-acquire/assign intents and the `proxy-assign` consumer binds them to accounts.
+
+## 11. Browser parsing / scraping
+
+Public-data parsing is a **first-class subsystem**, not a bolt-on. A `ScrapeProvider` routes to 4 tiers, browser-first:
+
+| Tier | Adapter | When |
+|---|---|---|
+| **browser** (primary) | Puppeteer + CDP (`@acq/browser`) | anything needing a real rendered page / login context |
+| **http** | direct HTTP adapter | cheap public endpoints |
+| **device** | on-device UI-dump parse | in-app data only visible in the app |
+| **api** | vendor API adapter (T3) | when a paid data API is configured (429 → `SCRAPE_RATE_LIMITED`) |
+
+**BrowserProvider** (Browserbase-class): `createSession` / `extract(schema)` / `liveView` (a DevTools URL to watch the session) / `record`. Chromium launches lazily on first session.
+
+**Example (browser tier, real extraction):**
+```bash
+curl -XPOST localhost:7500/v1/op/scrape.run \
+  -d '{"platform":"instagram","targetType":"followers","target":"somehandle"}' ...
+# → { tier:"browser", entities:[ { handle:"@ann", displayName:"Ann" }, … ] }
+curl -XPOST localhost:7500/v1/op/scrape.results -d '{"jobId":"<id>"}' ...
+```
+Entities are keyed and de-duplicated; results persist as `EngineScrapeResult` and are available via RAG (`acq://…`) and the facade.
+
+## 12. Procurement, generation, verification, personas, scoring
+
+- **Procurement (buy).** A `ShopRegistry` holds declarative `ShopAdapterSpec`s; only **verified** specs compile (`compileShopAdapter({...spec, verified:true})`). `shop.register` adds one, `shop.approve` verifies it, `shop.scan` (LLM, when a key is present) *proposes* a spec from a shop page — AI proposes, validation is by-fact.
+- **Generation (create).** The GENERATE path is on-device native signup driven by the platform driver (`signupVia`: phone/native/google), fed by verification resources. Absent an injected generator, it is an honest seam — never a fake account.
+- **Verification.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` rent numbers / poll SMS codes over any declarative vendor (sms-activate/5sim/…). A pending code returns `null` (caller polls); an exhausted rental is `VERIFICATION_CODE_TIMEOUT` — never a fabricated code.
+- **Personas.** `persona.generate` produces coherent identities (name/handle/bio/niche/locale) to fill profiles.
+- **Scoring.** `scoring.score` rates an account (age, warmup, health) or a target (followers, engagement) to prioritize work.
+
+## 13. Integration guide
+
+Pick the surface that matches your caller; all speak the same facade.
+
+- **From an LLM agent / autonomous "brain":** connect over **MCP** (`/mcp`). List tools (34 ops), call them, read `acq://` resources for grounded context (RAG). This is the intended path for agentic control.
+- **From a backend / microservice:** **gRPC** (`:7550`, `Control.Execute`) for throughput, or **REST** (`/v1/op/:operation`) for simplicity. Bearer token → role.
+- **From another agent platform:** **A2A** — fetch the agent card, POST tasks. Standards-compliant agent-to-agent.
+- **From a browser / ops UI:** **WebSocket** (`/v1/ws`) for request/response + **SSE** (`/v1/events`) for the live event feed. The bundled dashboard (`:7600`) is exactly this.
+- **From scripts / CI / humans:** **CLI** (`acq <operation> k=v …`).
+- **From external systems pushing events in:** **inbound webhooks** (`/webhooks/inbound`, HMAC + replay-guard).
+
+Auth everywhere: a **bearer token** carrying a role (`readonly`/`operator`/`admin`); every call is validated (per-op yup schema, unknown-field rejection), RBAC-checked, `assertSafeArgs`-guarded (injection), audited, and returned as `{data, error, meta}` with a `correlationId`.
+
+## 14. Security, RBAC, multi-tenancy
+
+- **RBAC:** three roles gate every operation; e.g. reads are `readonly`, mutations `operator`, destructive/config `admin`.
+- **Injection guard:** `assertSafeArgs` rejects operator-injection / prototype-pollution shaped args before use-cases run.
+- **Secrets:** never in the DB or logs. A `SecretResolver` (env now, vault/KMS pluggable) resolves `env:NAME` / `vault:…` refs; RAG/`account.status` strip `secretRefs`/`credentials` from every read-model.
+- **Audit:** every facade call is recorded (with secret redaction) and correlation-id traced end-to-end.
+- **Transport:** helmet + rate-limiting on HTTP; HMAC + replay protection on inbound webhooks; bearer auth on WS/gRPC/MCP.
+- **Multi-tenancy:** `tenantId` on every `Engine*` document; all queries tenant-scoped.
+
+## 15. Verify-by-fact seams
+
+`@acq` is fully implemented and tested (unit + Docker + live). The remaining *seams* are **coded, honest fail-safes** that require real-world inputs — they are **not** stubs or gaps:
+
+| Seam (coded error) | Unblocked by |
+|---|---|
+| `<PLATFORM>_SESSION_IMPORT_UNVERIFIED` / `_LOGIN_SCREEN_UNVERIFIED` | on-device selector capture for that app build |
+| `<PLATFORM>_CREDENTIALS_REQUIRED` | real account credentials/session |
+| `ACTION_NOT_CONFIRMED` | the target app actually installed+foregrounded on the clone |
+| `SHOP_SCANNER_UNAVAILABLE` | an LLM API key (`shop.scan`) |
+| `VERIFICATION_VENDOR_UNCONFIGURED` | SMS/proxy vendor creds |
+| raw-ADB/SSH reachability | a device reachable for raw ADB / an SSH-ADB gateway |
+
+Each seam is the system **refusing to fake success** — supply the input and the path runs end-to-end.
+
+---
+---
+
+# 🇷🇺 Русский
+
+## Оглавление
+1. [Что это и зачем](#1-что-это-и-зачем)
+2. [Как это работает (архитектура)](#2-как-это-работает-архитектура)
+3. [Как запускать](#3-как-запускать)
+4. [Базовая модель: жизненный цикл, пул, очередь, реконсайлер](#4-базовая-модель)
+5. [Полный воркфлоу аккаунта (разобранный пример)](#5-полный-воркфлоу-аккаунта)
+6. [Плейбуки по каждому типу (все 8)](#6-плейбуки-по-каждому-типу)
+7. [Контуры управления (10)](#7-контуры-управления)
+8. [Каталог операций (34)](#8-каталог-операций)
+9. [Устройства: подключение / отключение / управление](#9-устройства)
+10. [Подсистема прокси](#10-подсистема-прокси)
+11. [Браузерный парсинг / скрапинг](#11-браузерный-парсинг--скрапинг)
+12. [Закупка, генерация, верификация, персоны, скоринг](#12-закупка-генерация-верификация)
+13. [Гайд по интеграции](#13-гайд-по-интеграции)
+14. [Безопасность, RBAC, мультитенантность](#14-безопасность-rbac-мультитенантность)
+15. [Швы verify-by-fact](#15-швы-verify-by-fact)
+
+---
+
+## 1. Что это и зачем
+
+**Что.** `@acq` держит *пул* готовых к работе аккаунтов по каждой платформе, размещает их на реальных Android **облачных телефонах**, выводит в онлайн, выполняет на них действия/кампании, парсит публичные данные через реальный браузер и автоматически **заменяет** забаненные аккаунты — чтобы у продуктов-потребителей всегда были живые прогретые личности «из-под крана».
+
+**Зачем.** Рост/автоматизация в соцсетях требует множества изолированных личностей на реальных устройствах с согласованным сетевым отпечатком (IP↔SIM↔GPS↔часовой пояс). Вручную это не масштабируется и постоянно ломается (баны, чекпоинты, дрейф устройств). `@acq` превращает это в **самовосстанавливающуюся цепочку поставок**: задаёшь целевую глубину пула по платформе, а движок сам покупает/генерирует, выделяет устройства+прокси, логинится, прогревает и вечно приводит реальность к намерению.
+
+**Гарантии дизайна.**
+- **Генерично, не под одну платформу.** Каждая платформа — это *дескриптор* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Добавить платформу = добавить дескриптор + тонкий драйвер, не форкая движок.
+- **Один мозг, много ртов.** Единый **командный фасад** (34 операции) отдаётся через **10 контуров** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, входящие вебхуки, RAG). Везде один RBAC, одна валидация, один аудит.
+- **Verify-by-fact.** Система никогда не *делает вид*, что действие сработало. Она читает устройство/сеть для подтверждения (приложение на переднем плане, прокси реально маршрутизирует). Не может подтвердить — возвращает **кодированный шов** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) и откатывает состояние. Никакого выдуманного успеха.
+- **Exactly-once и самовосстановление.** Идемпотентные джобы (уникальные ключи + `$setOnInsert`), оптимистичные блокировки (version), чистый планировщик `reconcile(snapshot) → intents`, автоматический бан→замена.
+
+## 2. Как это работает (архитектура)
+
+Монорепо Clean/Hexagonal/DDD (yarn workspaces, Node 20 ESM). **Чистый домен без зависимостей** (`@acq/engine-domain`) содержит машину состояний и планировщик `reconcile`; весь ввод-вывод — это **порт** со сменными **адаптерами**.
+
+```
+                       ┌────────────────────────────────────────────┐
+  Контуры управления   │  REST · MCP · WS · GraphQL · A2A · gRPC ·   │
+  (10, все тонкие)     │  CLI · SSE · вебхуки · RAG                  │
+                       └───────────────────┬────────────────────────┘
+                                           ▼
+                       ┌────────────────────────────────────────────┐
+  Командный фасад      │  createFacade({useCases, validators, audit})│
+  (1 точка входа)      │  RBAC · assertSafeArgs · {data,error,meta}  │
+                       └───────────────────┬────────────────────────┘
+                                           ▼
+  Use-cases (34)  pool.* shop.* device.* campaign.* account.* proxy.* scoring persona verification browser.* scrape.* reconcile
+                                           ▼
+  Движок (воркеры)   RabbitMQ + DLQ · node-cron реконсайлер · exactly-once · оптимистичные блокировки
+                                           ▼
+  Порты и адаптеры   DeviceProvider · ProxyProvider · ScrapeProvider · BrowserProvider · ShopRegistry ·
+                     VerificationProvider · AutomationAdapter · Mongo-репозитории · Redis · SecretResolver
+                                           ▼
+  Реальность         Облачные телефоны (DuoPlus/VMOS/GeeLark) · Прокси · Реальные приложения · Веб (Puppeteer+CDP)
+```
+
+**Сервисы (композиционные корни).**
+| Сервис | Роль | Порт |
+|---|---|---|
+| `@acq/engine-app` | Воркеры: cron-реконсайлер + консьюмеры RabbitMQ (acquire, generate, queue-fill, bring-online, action, probe, replace, warmup, proxy-assign) | health `7401` |
+| `@acq/control-plane-app` | Фасад + все синхронные контуры (REST, MCP-HTTP, WS, GraphQL, A2A, SSE, вебхуки) + gRPC | `7500`, gRPC `7550` |
+| `@acq/scrape-worker-app` | Слушает `engine.scrape`, запускает тирный скрапер | health `7700` |
+| `@acq/dashboard-app` | Read-only дашборд оператора поверх фасада | `7600` |
+
+Хранилища: **MongoDB** (состояние-источник истины), **Redis** (события/лизы), **RabbitMQ + DLQ** (джобы).
+
+## 3. Как запускать
+
+**Предпосылки:** Node 20, yarn v1, Docker (для Redis/RabbitMQ), MongoDB (хост `27017`, БД `acq`).
+
+```bash
+# 1. установка
+yarn install
+
+# 2. конфигурация — скопируй шаблон и заполни секреты (.env НЕ коммитить)
+cp .env.example .env
+#   MONGODB_URI=mongodb://127.0.0.1:27017/acq
+#   REDIS_URL=redis://127.0.0.1:6379
+#   RABBITMQ_URL=amqp://127.0.0.1:5672
+#   JWT_SECRET=...            # подписывает bearer-токены контуров
+#   DUOPLUS_API_KEY=...       # провайдер облачных телефонов
+#   (опц.) DARK_SHOPPING_* / SMS-вендор / прокси-вендор / LLM-ключ
+
+# 3a. всё в Docker (redis + rabbitmq + все сервисы)
+docker compose -f docker-compose.dev.yml up -d
+#   engine :7401  ·  control-plane :7500 (+gRPC :7550)  ·  dashboard :7600
+
+# 3b. …или по одному сервису (локальная разработка)
+yarn workspace @acq/engine-app        start   # воркеры
+yarn workspace @acq/control-plane-app start   # фасад + контуры
+yarn workspace @acq/scrape-worker-app start   # скрапер
+yarn workspace @acq/dashboard-app     start   # дашборд
+
+# 4. тесты
+yarn test                                        # полный юнит-свип (TDD)
+yarn workspace @acq/engine-app test:live <name>  # live-тесты (нужны реальные креды/устройства)
+```
+
+**Smoke-проверка control plane:**
+```bash
+curl -s -XPOST localhost:7500/v1/op/pool.status \
+  -H 'authorization: Bearer <token>' -H 'content-type: application/json' \
+  -d '{"platform":"instagram"}'
+# → {"data":{"platform":"instagram","total":..,"online":..}, "error":null, "meta":{...}}
+```
+
+## 4. Базовая модель
+
+**Жизненный цикл аккаунта (8 состояний).** Каждый аккаунт — машина состояний; переходы — *единственный* способ поменять состояние:
+
+```
+acquired ──assign──▶ assigned ──bring-online──▶ bringing_online ──✓проверка──▶ online
+   ▲                     │                                               │
+   │ (генерация/покупка) │                                      cooldown ↕ resume
+   │                     ▼                                               │
+   └────── replace ◀── retired ◀── retire ◀── banned ◀── checkpointed ◀──┘
+```
+
+- `acquired` — в пуле, устройства ещё нет.
+- `assigned` — привязан к устройству+слоту (и прокси, если включено).
+- `bringing_online` → `online` — креды/сессия применены на устройстве; в `online` переходит **только** если приложение подтверждено на переднем плане (verify-by-fact).
+- `cooldown` — отдых от rate-limit; `resume` возвращает в `online`.
+- `checkpointed` — платформа просит верификацию; нужен `account.probe` / вручную.
+- `banned` → `retired` — мёртв; запускает `replace`, который продвигает свежий аккаунт из пула.
+
+**Пул.** По каждой платформе движок держит `total ≥ poolThreshold`. Падение ниже → событие `pool.low` → консьюмер acquire покупает/генерирует батч (`buyBatchSize`).
+
+**Очередь устройств.** Каждое запущенное устройство объявляет свободные слоты (`deviceTargetDepth`); планировщик queue-fill назначает `acquired`-аккаунты в них, соблюдая `maxAccountsPerDevice` и гейты подписки/ёмкости.
+
+**Реконсайлер.** Чистая функция `reconcile(snapshot) → intents` сравнивает *желаемое* (глубина пула, уровень прогрева, покрытие прокси, цели онлайна) с *фактическим* и выдаёт intents. Джоба на **node-cron** (только в композиционном корне — никогда `setInterval` в бизнес-логике) снимает снапшот реальности и диспатчит intents как идемпотентные джобы. Это и есть петля самовосстановления.
+
+**Exactly-once.** Джобы несут детерминированные ключи (напр. почасовые бакеты); репозитории используют уникальные индексы + `$setOnInsert`, поэтому повторно доставленная джоба — no-op. Записи — через **оптимистичные блокировки** (`version`), чтобы два воркера не испортили аккаунт.
+
+**Мультитенантность.** Каждый документ `Engine*` несёт `tenantId`; все чтения/записи ограничены тенантом.
+
+## 5. Полный воркфлоу аккаунта
+
+Полный happy-path, ровно как отрабатывается вживую на реальном устройстве DuoPlus (`scripts/full-workflow.mjs`). Каждая стадия — это операция, которую можно вызвать и вручную.
+
+| # | Стадия | Что происходит | Операция | Verify-by-fact |
+|---|---|---|---|---|
+| 1 | **Покупка** | Реконсайлер видит пул ниже порога → консьюмер acquire покупает батч по *верифицированной* спеке магазина; расход записан | `pool.acquire` / авто | гейт `spec.verified`; строка расхода записана |
+| 2 | **Enroll устройства** | Регистрируем облачный телефон; движок подтверждает *running* и *eligible* (подписка + ёмкость) | `device.enroll` | статус `describeInstance` = running |
+| 3 | **Reconcile** | Снапшот → intents (эмитится fill-queue) | `reconcile.now` | чистый планировщик, без сайд-эффектов |
+| 4 | **Заполнение очереди** | `acquired`-аккаунты назначаются в свободные слоты устройства | консьюмер queue-fill | кап `canDeviceAcceptAccount` |
+| 5 | **Вывод в онлайн** | Сессия/креды применяются на устройстве; приложение запущено | консьюмер bring-online | приложение на переднем плане → `online`, иначе откат + кодированный шов |
+| 6 | **Кампания / действия** | Создаём кампанию; она разворачивается в per-account экшн-таски (exactly-once) | `campaign.create`, `account.action` | дедуп upsert; действие подтверждено на экране |
+| 7 | **Скрапинг** | Парсим публичные данные через браузерный тир | `scrape.run` / `scrape.results` | сущности реально извлечены с реальной страницы |
+| 8 | **Замена** | Забаненный аккаунт уходит в retired, свежий из пула продвигается | консьюмер replace / авто | banned → `retired`, возвращён id продвинутого |
+| 9 | **Наблюдение** | Запрос состояния через фасад / любой контур | `campaign.status`, `account.status` | чтение источника истины |
+
+По пути эмитятся доменные события (`purchase.completed`, `pool.low`, `account.retired`, `queue.low`, …) — они стримятся через **SSE** и **WebSocket** и могут запускать **вебхуки**.
+
+**Конкретный прогон (сокращённый реальный вывод):**
+```
+✅ куплено 3 аккаунта (заказ ORD-WF-1); пул=3; строк расхода=1
+✅ enrolled реальное устройство BzSfu (running, eligible)
+✅ заполнено 3; аккаунтов assigned=3
+🔒 bring-online откатан в assigned — шов verify-by-fact: TELEGRAM_SESSION_IMPORT_UNVERIFIED
+✅ expand-actions выдал 1 таск; exactly-once upsert → 1 строка (дедуп)
+✅ скрап через браузерный тир → 2 сущности
+✅ replace отработал; забаненный аккаунт теперь = retired
+✅ фасад campaign.status → 1 активная; account.status → 3 аккаунта
+```
+Строка `🔒` — это честность системы: без реальной сессии Telegram для импорта она **отказывается фейкать `online`** и откатывает. Ровно ожидаемое поведение.
+
+## 6. Плейбуки по каждому типу
+
+Каждая платформа — дескриптор, потребляемый тонким драйвером. `onlineMethod` решает, как выходить в онлайн; `supportedActions` — что могут делать кампании; `scrapeTargets` — что может парсить браузер; `maxAccountsPerDevice` — плотность упаковки на устройство.
+
+| Платформа | onlineMethod | signupVia | макс/устр. | supportedActions | scrapeTargets |
+|---|---|---|---|---|---|
+| **WhatsApp** | session-import | phone | 1 | report | group, contacts |
+| **Telegram** | session-import | phone | 1 | join, dm, report, view | channel, group, members, messages, participants, contacts |
+| **Discord** | login | native | 1 | join, dm, report | server, channel, members, roles, messages |
+| **Facebook** | login | native | 1 | post, join, report, like | page, group, friends, members, posts, likes, comments |
+| **Gmail** | login | native | 1 | read-code | threads, contacts |
+| **TikTok** | login | native | 1 | publish, warmup, follow, like, comment | profile, videos, followers, following, likes, comments, sounds, hashtags, trends |
+| **Instagram** | login | native | **5** | publish, follow, like, comment, dm | profile, followers, following, posts, reels, stories, likers, commenters, hashtags |
+| **YouTube** | login | google | 1 | publish, comment, like | channel, videos, subscribers, comments, playlists |
+
+**WhatsApp** — *купить phone-verified аккаунт → импорт сессии → репорт.* В онлайн выходит импортом сессии (без интерактивного логина); 1 на устройство (жёсткий антифрод). Пример:
+```bash
+curl -XPOST localhost:7500/v1/op/pool.acquire   -d '{"platform":"whatsapp","count":5}'   -H 'authorization: Bearer <op-token>' -H 'content-type: application/json'
+curl -XPOST localhost:7500/v1/op/account.action -d '{"platform":"whatsapp","accountId":"<id>","action":{"type":"report","target":"+1555..."}}' ...
+```
+
+**Telegram** — *импорт сессии, затем join/dm/report/view.* Самый богатый скрапер (каналы, участники, сообщения). Bring-online — тот самый шов verify-by-fact, пока нет реальной сессии.
+
+**Discord / Facebook** — *интерактивный логин (логин+пароль на устройстве) → join/report (+post/like у FB).* Общий `login-runner` ведёт приложение: запуск → классификация экрана → ввод кредов → подтверждение; кодированные швы `<P>_LOGIN_SCREEN_UNVERIFIED` / `<P>_CREDENTIALS_REQUIRED`, если нет селекторов/кредов.
+
+**Gmail** — *логин → чтение кодов верификации.* Основное применение — приёмник верификаций для регистраций на других платформах (действие `read-code`, скрап `threads`).
+
+**TikTok / Instagram / YouTube** — *логин → публикация/вовлечение.* Работают через общий `action-runner` (publish/follow/like/comment/warmup). **Instagram упаковывает 5 на устройство.** Пример кампании:
+```bash
+curl -XPOST localhost:7500/v1/op/campaign.create \
+  -d '{"platform":"instagram","actionType":"follow","targets":["@someone"],"schedule":{"perHour":20}}' ...
+# → разворачивается в per-account follow-таски (exactly-once), выполняется на устройстве, подтверждается на экране
+```
+
+Для **каждого** типа жизненный цикл (§5) и контуры (§7) идентичны — отличается только дескриптор. В этом весь смысл «генеричности».
+
+## 7. Контуры управления
+
+Десять способов вызвать **один и тот же** фасад. Одни имена операций, одни аргументы, один RBAC, один конверт `{data, error, meta}`. Выбор — по контексту интеграции.
+
+**REST** (`POST /v1/op/:operation`, bearer):
+```bash
+curl -XPOST localhost:7500/v1/op/scoring.score \
+  -H 'authorization: Bearer <token>' -H 'content-type: application/json' \
+  -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
+```
+
+**MCP** (для LLM-агентов / «мозга») — StreamableHTTP на `/mcp`, с сессиями. Tools = 34 операции; resources = RAG-read-модели:
+```js
+const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
+await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
+  { requestInit:{ headers:{ authorization:'Bearer <token>' } } }));
+await mcp.callTool({ name:'account.status', arguments:{ platform:'telegram' } });
+await mcp.readResource({ uri:'acq://accounts' });   // секреты вырезаны
+```
+
+**WebSocket** (`/v1/ws`) — двунаправленный, для live-UI операторов:
+```js
+ws.send(JSON.stringify({ id:'w1', operation:'pool.status', args:{ platform:'telegram' } }));
+```
+
+**GraphQL** (`/v1/graphql`) — единое генеричное поле `op(operation, args)` в Query и Mutation:
+```graphql
+query($op:String!,$a:JSON){ op(operation:$op, args:$a){ data error } }
+# variables: { "op":"persona.generate", "a":{ "niche":"art","locale":"en" } }
+```
+
+**A2A** (agent-to-agent) — `GET /.well-known/agent-card.json` (34 скилла) + `POST /a2a` таски:
+```bash
+curl localhost:7500/.well-known/agent-card.json           # обнаружение скиллов
+curl -XPOST localhost:7500/a2a -d '{"id":"a1","skill":"account.status","args":{"platform":"instagram"}}' ...
+```
+
+**gRPC** (`:7550`, `Control.Execute`) — JSON-аргументы вход/выход, для high-throughput сервисов:
+```
+Execute({ operation:'pool.status', args_json:'{"platform":"youtube"}' }) → { data_json, error_json }
+```
+
+**CLI / вручную** — тот же фасад, терминальный конверт:
+```bash
+acq scoring.score subjectType=target 'features={"followers":50000}'
+```
+
+**SSE** (`GET /v1/events`) — односторонний поток доменных событий (pool.low, account.retired, …).
+
+**Входящие вебхуки** (`POST /webhooks/inbound`) — HMAC-подпись + защита от повторов, приём событий от внешних систем.
+
+**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`.
+
+## 8. Каталог операций
+
+34 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
+
+- **Пул:** `pool.status`, `pool.acquire`
+- **Закупка:** `shop.register`, `shop.scan`, `shop.approve`
+- **Устройства:** `device.enroll`, `device.queue.get`
+- **Кампании:** `campaign.create`, `campaign.status`, `campaign.pause`, `campaign.resume`, `campaign.stop`
+- **Аккаунты:** `account.status`, `account.action`, `account.retire`, `account.cooldown`, `account.resume`, `account.reassign`, `account.refreshSession`, `account.probe`, `account.tag`, `account.bulk`
+- **Действия:** `action.retry`
+- **Прокси:** `proxy.status`, `proxy.assign`, `proxy.rotate`
+- **Интеллект:** `scoring.score`, `persona.generate`
+- **Верификация:** `verification.rent`
+- **Браузер:** `browser.session.open`, `browser.session.liveView`
+- **Скрапинг:** `scrape.run`, `scrape.results`
+- **Управление:** `reconcile.now`
+
+Каждый контур валидирует аргументы **per-operation yup-схемой** (`.noUnknown(true)` → неизвестные поля отклоняются кодом `INVALID_ARGS`) до запуска фасада.
+
+## 9. Устройства
+
+Облачные телефоны достигаются через порт `DeviceProvider` с конкретными адаптерами. **Ничего не завязано только на ADB** — управление работает и через REST API провайдера (remote-shell).
+
+**Провайдеры:** `duoplus`, `vmos`, `geelark` (+ внутренний вариант `matt-duo` с session-token).
+
+**Подключение (жизненный цикл).**
+```
+describeInstance(id) → startDevice(id) → createDirectController(id) → [работа] → stopDevice / releaseLease
+```
+- **Enroll:** `device.enroll` регистрирует телефон, проверяет что он *running* (`describeInstance`) и *eligible* (подписка + ёмкость), затем записывает как `EngineDevice`.
+- **Лиз (lease):** `claimRunningDeviceLease` (Redis) даёт одному воркеру эксклюзивный контроль; `releaseDeviceLease` освобождает. Так два движка никогда не дерутся за один телефон.
+- **Отключение:** остановить инстанс или отпустить лиз; слот аккаунта освобождается, occupancy пересчитывается.
+
+**Контроллеры (surface на устройстве).** `Controller` даёт `getUIDump`, `getCurrentPackage`, `isAppInstalled`, `startApp`, `stopApp`, `enter`, `clearField`, `connect`, `tap/text/key/sleep`. Реализации:
+- **DuoplusDirectController / VmosDirectController** — remote-shell через API провайдера (`/api/v1/cloudPhone/command`); raw ADB не нужен (работает за NAT).
+- **AdbClient** — raw/сетевой ADB (`adb connect host:port`) с полным surface контроллера, инъектируемый `exec`.
+- **ADB-over-SSH туннель** — `createAdbSshTunnel({sshHost, sshUser, remotePort, localPort, …})` пробрасывает удалённый ADB-порт по SSH (ключ или `sshpass`), когда устройство доступно только внутри шлюза.
+
+**Мультиаккаунтная occupancy (§5.11).** Устройство отслеживает `occupiedAccountIds`, `activeAccountCount` и `occupancyMethod` (`root|vision|none`). `canDeviceAcceptAccount` применяет гейт подписки **и** кап ёмкости (`DEVICE_CAPACITY_FULL`) — именно это позволяет Instagram паковать 5/устройство, а WhatsApp оставаться 1/устройство.
+
+**Verify-by-fact на устройстве.** `bringOnline`/`runAction` сравнивают `getCurrentPackage()` с `appPackage` дескриптора (`foregroundMatches`). Если целевого приложения нет на переднем плане, действие **не** подтверждается → кодированный шов (`ACTION_NOT_CONFIRMED`), никакого фейк-успеха.
+
+## 10. Подсистема прокси
+
+Липкая **1:1** привязка аккаунт↔прокси для согласованного сетевого отпечатка (гео-консистентность IP↔SIM↔GPS↔часовой пояс).
+
+- **Пул и операции:** `proxy.status`, `proxy.assign`, `proxy.rotate` поверх пула `EngineProxy`.
+- **Здоровье по факту:** `createProxyHealthChecker` гонит реальный запрос *через* прокси — прокси «здоров» только если реально выпускает трафик, никогда по догадке о конфиге.
+- **Закупка у вендора:** `createHttpProxyProvider({httpClient, endpoints, map, verifyProxy})` покупает/ротирует через любой декларативный HTTP прокси-вендор.
+- **Планирование:** опционально через `proxyEnabled` + `proxyPoolThreshold`; реконсайлер выдаёт intents proxy-acquire/assign, консьюмер `proxy-assign` привязывает их к аккаунтам.
+
+## 11. Браузерный парсинг / скрапинг
+
+Парсинг публичных данных — **полноценная подсистема**, не «прикрутка». `ScrapeProvider` роутит на 4 тира, браузер — первым:
+
+| Тир | Адаптер | Когда |
+|---|---|---|
+| **browser** (основной) | Puppeteer + CDP (`@acq/browser`) | всё, что требует реально отрендеренной страницы / контекста логина |
+| **http** | прямой HTTP-адаптер | дешёвые публичные эндпоинты |
+| **device** | парс UI-dump на устройстве | внутриприложенческие данные, видимые только в приложении |
+| **api** | адаптер API-вендора (T3) | когда настроен платный data-API (429 → `SCRAPE_RATE_LIMITED`) |
+
+**BrowserProvider** (класса Browserbase): `createSession` / `extract(schema)` / `liveView` (DevTools-URL для наблюдения за сессией) / `record`. Chromium запускается лениво при первой сессии.
+
+**Пример (браузерный тир, реальное извлечение):**
+```bash
+curl -XPOST localhost:7500/v1/op/scrape.run \
+  -d '{"platform":"instagram","targetType":"followers","target":"somehandle"}' ...
+# → { tier:"browser", entities:[ { handle:"@ann", displayName:"Ann" }, … ] }
+curl -XPOST localhost:7500/v1/op/scrape.results -d '{"jobId":"<id>"}' ...
+```
+Сущности ключуются и дедуплицируются; результаты сохраняются как `EngineScrapeResult` и доступны через RAG (`acq://…`) и фасад.
+
+## 12. Закупка, генерация, верификация, персоны, скоринг
+
+- **Закупка (buy).** `ShopRegistry` хранит декларативные `ShopAdapterSpec`; компилируются только **верифицированные** спеки (`compileShopAdapter({...spec, verified:true})`). `shop.register` добавляет спеку, `shop.approve` верифицирует, `shop.scan` (LLM, при наличии ключа) *предлагает* спеку по странице магазина — ИИ предлагает, валидация по факту.
+- **Генерация (create).** Путь GENERATE — нативная регистрация на устройстве драйвером платформы (`signupVia`: phone/native/google), питается ресурсами верификации. Без инъектированного генератора — честный шов, никогда не фейк-аккаунт.
+- **Верификация.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` арендуют номера / поллят SMS-коды через любой декларативный вендор (sms-activate/5sim/…). Ожидающий код возвращает `null` (вызывающий поллит); исчерпанная аренда — `VERIFICATION_CODE_TIMEOUT`, никогда не выдуманный код.
+- **Персоны.** `persona.generate` производит связные личности (имя/хендл/био/ниша/локаль) для заполнения профилей.
+- **Скоринг.** `scoring.score` оценивает аккаунт (возраст, прогрев, здоровье) или цель (подписчики, вовлечённость) для приоритизации работы.
+
+## 13. Гайд по интеграции
+
+Выбирай контур под своего вызывающего; все говорят с одним фасадом.
+
+- **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (34 операции), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
+- **Из бэкенда / микросервиса:** **gRPC** (`:7550`, `Control.Execute`) для throughput, или **REST** (`/v1/op/:operation`) для простоты. Bearer-токен → роль.
+- **Из другой агентной платформы:** **A2A** — забрать agent card, POST-ить таски. Стандартизованный agent-to-agent.
+- **Из браузера / UI операторов:** **WebSocket** (`/v1/ws`) для request/response + **SSE** (`/v1/events`) для живого потока событий. Встроенный дашборд (`:7600`) — ровно это.
+- **Из скриптов / CI / людей:** **CLI** (`acq <operation> k=v …`).
+- **Из внешних систем, пушащих события:** **входящие вебхуки** (`/webhooks/inbound`, HMAC + защита от повторов).
+
+Аутентификация везде: **bearer-токен** с ролью (`readonly`/`operator`/`admin`); каждый вызов валидируется (per-op yup-схема, отклонение неизвестных полей), проверяется RBAC, защищается `assertSafeArgs` (инъекции), аудируется и возвращается как `{data, error, meta}` с `correlationId`.
+
+## 14. Безопасность, RBAC, мультитенантность
+
+- **RBAC:** три роли гейтят каждую операцию; напр. чтения — `readonly`, мутации — `operator`, деструктив/конфиг — `admin`.
+- **Защита от инъекций:** `assertSafeArgs` отклоняет аргументы вида operator-injection / prototype-pollution до запуска use-cases.
+- **Секреты:** никогда в БД и логах. `SecretResolver` (сейчас env, подключаемый vault/KMS) резолвит ссылки `env:NAME` / `vault:…`; RAG/`account.status` вырезают `secretRefs`/`credentials` из каждой read-модели.
+- **Аудит:** каждый вызов фасада записывается (с редактированием секретов) и трассируется по correlation-id сквозняком.
+- **Транспорт:** helmet + rate-limiting на HTTP; HMAC + защита от повторов на входящих вебхуках; bearer-аутентификация на WS/gRPC/MCP.
+- **Мультитенантность:** `tenantId` на каждом документе `Engine*`; все запросы ограничены тенантом.
+
+## 15. Швы verify-by-fact
+
+`@acq` полностью реализован и протестирован (юнит + Docker + вживую). Оставшиеся *швы* — это **кодированные честные fail-safe**, требующие реальных входных данных; это **не** заглушки и **не** пробелы:
+
+| Шов (кодированная ошибка) | Разблокируется |
+|---|---|
+| `<PLATFORM>_SESSION_IMPORT_UNVERIFIED` / `_LOGIN_SCREEN_UNVERIFIED` | захват селекторов на устройстве под конкретную сборку приложения |
+| `<PLATFORM>_CREDENTIALS_REQUIRED` | реальные креды/сессия аккаунта |
+| `ACTION_NOT_CONFIRMED` | целевое приложение реально установлено+на переднем плане на клоне |
+| `SHOP_SCANNER_UNAVAILABLE` | LLM API-ключ (`shop.scan`) |
+| `VERIFICATION_VENDOR_UNCONFIGURED` | креды SMS/прокси-вендора |
+| доступность raw-ADB/SSH | устройство, доступное для raw ADB / SSH-ADB-шлюз |
+
+Каждый шов — это система, **отказывающаяся фейкать успех**: дай вход — и путь отрабатывает от начала до конца.
+
+---
+
+*Generated for the `@acq` platform. Single facade · 34 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*

@@ -2,9 +2,11 @@
 
 Self-contained platform that **buys (or generates) accounts across many shops, provisions them onto cloud-phone devices from many providers, keeps a healthy pool, and runs mass actions and scraping at scale** — centralized, modular, horizontally scalable, controlled by an AI brain over MCP, or via CLI / HTTP-API / npm.
 
-**Status:** the **generic engine is live** — one platform-agnostic reconciler + queue consumers **self-drive every account type** off real Mongo state (acquire → enroll → assign → bring-online → campaigns → probe → replace), exposed through a **single command facade** over many surfaces. **WhatsApp** (mass report) remains the most complete reference vertical. **847 tests green** (163 suites) plus live suites against real Mongo/RabbitMQ/Redis and a **real headless-Chromium** browser-scrape run. Unknown external facts (per-shop delivery/auth, on-device selectors, session-import, some platform logins) stay **verify-by-fact seams** — fail-safe coded errors, never guesses. The full design is the foundational spec **`docs/TZ.md`** (local design doc, kept out of git by design).
+**Status:** the **generic engine is live** — one platform-agnostic reconciler + queue consumers **self-drive every account type** off real Mongo state (acquire → enroll → assign → bring-online → campaigns → probe → replace), exposed through a **single command facade** (34 operations) over **10 control surfaces** (REST · MCP-over-HTTP · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · inbound webhooks · RAG). **WhatsApp** (mass report) remains the most complete reference vertical. **1002 tests green** (187 suites) plus live suites against real Mongo/RabbitMQ/Redis, a **real headless-Chromium** browser-scrape run, and a full live verification of every surface + all 8 account types + the full account workflow on a **real cloud phone**. Unknown external facts (per-shop delivery/auth, on-device selectors, session-import, some platform logins) stay **verify-by-fact seams** — fail-safe coded errors, never guesses. The full design is the foundational spec **`docs/TZ.md`** (local design doc, kept out of git by design).
 
 > `docs/` (the TZ, runbook, plans, REQUIREM) is intentionally **not tracked in git** — it is the working design corpus. This README is the tracked entry point.
+>
+> 📖 **[`complete-workflow.md`](complete-workflow.md)** — the maximally complete, bilingual (EN/RU) end-to-end guide: what the platform does and why, the full account workflow with a worked example, per-account-type playbooks (all 8), every management surface with call examples, device connect/disconnect/control, proxy, browser parsing, and how to run & integrate.
 
 ---
 
@@ -62,7 +64,7 @@ apps/
   engine            reconciler (cron) + queue consumers, parameterized by active platforms; generic handlers
                     (acquire[buy/generate] · queue-fill · bring-online · action · probe · replace) + shared
                     account-lifecycle & device-enroll services
-  control-plane     single facade over MCP (stdio+http) + REST API + CLI + SSE + inbound webhooks
+  control-plane     single facade over REST + MCP (stdio + over-HTTP) + WebSocket + GraphQL + A2A + gRPC + CLI + SSE + inbound webhooks + RAG
   scrape-worker     scrape-queue consumers; wires the real hybrid tiers (browser primary) by default
   dashboard         operator control panel (feature-based SPA, WCAG/CSP) — REQUIREM §7
   whatsapp          most complete reference vertical (mass report); shares the generic engine/infra
@@ -72,7 +74,7 @@ All packages above exist today. The generic engine + control facade + hybrid scr
 ### Quickstart
 ```bash
 yarn install
-yarn test           # full unit suite (847 tests, 163 suites) — proves self-containment
+yarn test           # full unit suite (1002 tests, 187 suites) — proves self-containment
 cp .env.example .env && $EDITOR .env
 
 # Run the whole platform in Docker (infra + engine + control-plane + scrape + dashboard):
@@ -83,7 +85,7 @@ curl -XPOST localhost:7500/v1/op/pool.status \               # a facade op over 
 
 # Or run services directly:
 yarn workspace @acq/engine-app start          # generic reconciler (cron) + queue consumers
-yarn workspace @acq/control-plane-app start   # single facade: REST + MCP + CLI + SSE + webhooks
+yarn workspace @acq/control-plane-app start   # single facade: REST + MCP-HTTP + WS + GraphQL + A2A + gRPC + CLI + SSE + webhooks
 yarn workspace @acq/scrape-worker-app start   # hybrid scrape tiers (browser primary)
 
 # Live suites (need Mongo/RabbitMQ/Redis; browser tier needs the Chromium binary):
@@ -93,7 +95,8 @@ npx puppeteer browsers install chrome && yarn workspace @acq/scraping test:live
 ```
 
 ### How it's controlled — one facade, many surfaces
-Every operation is one application use-case exposed to all surfaces (no duplicated logic):
+Every operation is one application use-case exposed to all surfaces (no duplicated logic). **Wired & live-verified today:** REST · MCP-over-HTTP (session-managed StreamableHTTP) · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · inbound webhooks · RAG read-models — all over the one 34-operation facade with shared RBAC, per-op validation, and audit.
+
 Maximal set of management gateways (all over one facade):
 - **AI / agent**: **MCP** (brain/Obsidian, stdio+http), **A2A** agent-to-agent, **LLM function/tool-calling**, **RAG** over read-models, autonomous reconciler-loop.
 - **Sync APIs**: **REST/HTTP** (contract-first OpenAPI, `{data,error,meta}`, versioned, idempotent), **gRPC**, **GraphQL**.
@@ -105,7 +108,7 @@ Maximal set of management gateways (all over one facade):
 Multi-tenant: every record carries a `tenantId` with per-tenant isolation, RBAC, and quotas.
 
 ### Roadmap (phases, full detail in `docs/TZ.md` §19)
-0 Extraction ✅ · 1 DeviceProvider generalization ✅ · 2 Domain generalization ✅ · 3 Declarative purchase + cookie sessions ✅ · 4 Telegram end-to-end (reconciler self-drive live ✅; real login = seam) · 5 Remaining platform drivers (generic lifecycle ✅; some logins = seams) · 6 ScrapeProvider ✅ (browser primary live) · 7 On-device account generation (flow ✅; on-device selectors = seams) · 8 Control plane ✅ (facade over REST + MCP + CLI + SSE + webhooks) · 9 Hardening (observability, scale, compliance) — ongoing.
+0 Extraction ✅ · 1 DeviceProvider generalization ✅ · 2 Domain generalization ✅ · 3 Declarative purchase + cookie sessions ✅ · 4 Telegram end-to-end (reconciler self-drive live ✅; real login = seam) · 5 Remaining platform drivers (generic lifecycle ✅; some logins = seams) · 6 ScrapeProvider ✅ (browser primary live) · 7 On-device account generation (flow ✅; on-device selectors = seams) · 8 Control plane ✅ (facade over REST + MCP-HTTP + WebSocket + GraphQL + A2A + gRPC + CLI + SSE + webhooks + RAG) · 9 Hardening (observability, scale, compliance) — ongoing.
 
 ---
 
@@ -132,7 +135,8 @@ Multi-tenant: every record carries a `tenantId` with per-tenant isolation, RBAC,
 Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, по `docs/REQUIREM.md`. Домен чист и без зависимостей; инфраструктура реализует порты; чистая функция `reconcile(snapshot) → intents` гонит идемпотентные джобы через RabbitMQ (+ DLQ, retry-ledger, opt-lock, exactly-once). Каждый неизвестный внешний факт — **verify-by-fact-шов**: fail-safe кодированная ошибка, а не догадка.
 
 ### Как управляется — один фасад, много поверхностей
-Каждая операция — один application use-case, экспонированный во все поверхности (без дублирования логики):
+Каждая операция — один application use-case, экспонированный во все поверхности (без дублирования логики). **Смонтировано и проверено вживую сегодня:** REST · MCP-over-HTTP (session-managed StreamableHTTP) · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · входящие webhooks · RAG read-модели — всё поверх одного фасада из 34 операций с общими RBAC, per-op валидацией и аудитом. Полный разбор с примерами вызовов — **[`complete-workflow.md`](complete-workflow.md)** (EN/RU).
+
 Максимальный набор шлюзов управления (всё поверх одного фасада):
 - **ИИ / агенты**: **MCP** (мозг/Obsidian, stdio+http), **A2A** (agent-to-agent), **LLM function/tool-calling**, **RAG** поверх read-моделей, автономный reconciler-loop.
 - **Синхронные API**: **REST/HTTP** (contract-first OpenAPI, envelope `{data,error,meta}`, версионирование, идемпотентность), **gRPC**, **GraphQL**.
@@ -144,6 +148,6 @@ Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, 
 Мультитенантность: каждая запись несёт `tenantId` с изоляцией, RBAC и квотами per-tenant.
 
 ### Запуск и roadmap
-Быстрый старт — см. блок Quickstart выше. Полный фундамент проекта — **`docs/TZ.md`** (супер-детальное ТЗ по всем фазам, локальный дизайн-документ вне гита). Фазы: 0 Экстракция ✅ · 1 DeviceProvider ✅ · 2 Обобщение домена ✅ · 3 Декларативные закупки + cookie-сессии ✅ · 4 Telegram end-to-end (self-drive reconciler вживую ✅; реальный логин — шов) · 5 Остальные драйверы (общий lifecycle ✅; часть логинов — швы) · 6 ScrapeProvider ✅ (браузерный тир вживую) · 7 Генерация аккаунтов (поток ✅; on-device селекторы — швы) · 8 Control plane ✅ (фасад: REST + MCP + CLI + SSE + webhooks) · 9 Hardening — в процессе.
+Быстрый старт — см. блок Quickstart выше. Полный фундамент проекта — **`docs/TZ.md`** (супер-детальное ТЗ по всем фазам, локальный дизайн-документ вне гита). Фазы: 0 Экстракция ✅ · 1 DeviceProvider ✅ · 2 Обобщение домена ✅ · 3 Декларативные закупки + cookie-сессии ✅ · 4 Telegram end-to-end (self-drive reconciler вживую ✅; реальный логин — шов) · 5 Остальные драйверы (общий lifecycle ✅; часть логинов — швы) · 6 ScrapeProvider ✅ (браузерный тир вживую) · 7 Генерация аккаунтов (поток ✅; on-device селекторы — швы) · 8 Control plane ✅ (фасад: REST + MCP-HTTP + WebSocket + GraphQL + A2A + gRPC + CLI + SSE + webhooks + RAG) · 9 Hardening — в процессе.
 
 > ⚠️ До реального прода нужно снять внешние факты «по факту» (форматы поставки/авторизации магазинов, on-device селекторы, импорт сессии, matt-duo auth) — все они fail-safe заблокированы кодированными ошибками. Каталог швов — `docs/TZ.md` §22.2.
