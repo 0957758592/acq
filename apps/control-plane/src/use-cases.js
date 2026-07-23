@@ -4,6 +4,7 @@ import { applyAccountTransition, reassignAccount } from '../../engine/src/servic
 import { enrollDevice } from '../../engine/src/services/device-enroll.js';
 import { probeAccount, runAccountAction } from '../../engine/src/services/account-ops.js';
 import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/src/services/proxy-ops.js';
+import { scanShop } from '../../engine/src/services/scan-shop.js';
 import { scoreAccount, scoreTarget } from '@acq/intelligence';
 import { generatePersona } from '@acq/account-gen';
 
@@ -136,6 +137,7 @@ export function buildUseCases(ctx) {
       if (!doc) throw Object.assign(new Error('SHOP_NOT_FOUND: shop not found'), { code: 'SHOP_NOT_FOUND' });
       return { shopId: doc.shopId, verified: doc.verified };
     },
+    'shop.scan': async (args = {}) => scanShop(ctx, { shopUrl: require$(args, 'shopUrl', 'SHOP_URL_REQUIRED'), dryRun: Boolean(args.dryRun) }),
 
     // ---- Proxies (1:1 sticky pool) -----------------------------------------
     'proxy.status': async (args = {}) => proxyStatus(ctx, { deviceId: args.deviceId }),

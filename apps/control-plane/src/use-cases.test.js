@@ -30,6 +30,16 @@ function fakeCtx() {
       register: async (spec) => ({ shopId: spec.shopId, verified: false }),
       approve: async (shopId) => ({ shopId, verified: true })
     },
+    shopScanner: {
+      propose: async ({ shopUrl }) => ({
+        shopId: 'scanned', baseUrl: shopUrl, title: 'S', platform: 'telegram', auth: { kind: 'api-key', config: {} },
+        endpoints: {
+          balance: { method: 'GET', path: '/b', responseMap: {} }, offers: { method: 'GET', path: '/o', responseMap: {} },
+          purchase: { method: 'POST', path: '/p', responseMap: {} }, delivery: { method: 'POST', path: '/d', responseMap: {}, deliveryFormat: { format: 'json-array', itemMap: { identifier: 'x' } } }
+        }, verified: false
+      })
+    },
+    httpClient: {}, secretResolver: { put: async (n) => n }, compileShopAdapter: () => ({ getBalance: async () => ({ balanceUsdCents: 1000 }) }),
     scrapeResultRepo: { listResults: async (filter) => [{ platform: filter.platform, type: 'follower', data: { handle: '@z' } }] },
     proxyRepo: {
       list: async (f = {}) => [{ _id: 'px1', status: f.assignedDeviceId ? 'assigned' : 'available', geo: 'us', assignedDeviceId: f.assignedDeviceId ?? '', version: 0, health: { ok: true, latencyMs: 90 } }],
@@ -128,6 +138,20 @@ describe('control-plane use-cases through the facade', () => {
     const { facade } = build();
     const res = await facade.execute('shop.approve', { role: 'operator', args: { shopId: 's9' } });
     expect(res.error.code).toBe('FORBIDDEN');
+  });
+
+  it('shop.scan proposes + validates + registers a spec UNVERIFIED through the facade', async () => {
+    const { facade } = build();
+    const res = await facade.execute('shop.scan', { role: 'operator', args: { shopUrl: 'https://shop.example' } });
+    expect(res.data).toMatchObject({ shopId: 'scanned', verified: false });
+  });
+
+  it('shop.scan is an honest seam when no scanner is wired', async () => {
+    const ctx = fakeCtx();
+    ctx.shopScanner = null;
+    const facade = createFacade({ useCases: buildUseCases(ctx), audit: { record: async () => {} } });
+    const res = await facade.execute('shop.scan', { role: 'operator', args: { shopUrl: 'https://x' } });
+    expect(res.error.code).toBe('SHOP_SCANNER_UNAVAILABLE');
   });
 
   it('scrape.results reads normalized read-models', async () => {

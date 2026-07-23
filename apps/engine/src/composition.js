@@ -9,8 +9,9 @@ import {
   createExpenseRecorder
 } from '@acq/engine-infra';
 import { reconcile } from '@acq/engine-domain';
-import { createShopRegistry, createShopHttpClient, compileShopAdapter } from '@acq/procurement';
+import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner } from '@acq/procurement';
 import { createBrowserProvider } from '@acq/browser';
+import { createOpenRouterClient } from '@acq/integrations';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
 import { createDeviceProvider } from '@acq/device-control';
 import { EngineAccount } from '@acq/core/models/engine-account';
@@ -59,6 +60,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createShopRegistry,
     createShopHttpClient,
     compileShopAdapter,
+    createLlmShopScanner,
+    createOpenRouterClient,
     createBrowserProvider,
     createDeviceProvider,
     reconcile,
@@ -101,6 +104,24 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     maxConcurrent: env.browserConcurrency ?? 4,
     debugPort: env.browserDebugPort ?? 0
   });
+  // AI shop scanner (TZ §6.3 SCAN): reads shop pages via the browser + an LLM to
+  // PROPOSE a spec. Wired only when an LLM key is present; absent -> shop.scan is
+  // an honest seam (SHOP_SCANNER_UNAVAILABLE). AI proposes; validation is by-fact.
+  const shopScanner =
+    D.shopScanner ??
+    (env.llmApiKey
+      ? D.createLlmShopScanner({
+          llmClient: D.createOpenRouterClient({ apiKey: env.llmApiKey, model: env.llmModel }),
+          fetchShopText: async ({ shopUrl }) => {
+            const { sessionId } = await browserProvider.createSession({});
+            try {
+              return await browserProvider.extract(sessionId, { url: shopUrl, pageFunction: () => document.body.innerText });
+            } finally {
+              await browserProvider.close(sessionId);
+            }
+          }
+        })
+      : null);
   const httpClient = D.httpClient ?? D.createShopHttpClient({ secretResolver });
   const expenseRecorder = D.expenseRecorder ?? D.createExpenseRecorder();
 
@@ -136,6 +157,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     scrapeResultRepo,
     proxyRepo,
     browserProvider,
+    shopScanner,
     deviceModel: D.EngineDevice,
     canDeviceAcceptAccount: D.canDeviceAcceptAccount,
     secretResolver,
