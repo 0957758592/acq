@@ -9,7 +9,7 @@ function subscriptionExpiresInFuture(value) {
   return Number.isFinite(timestamp) && timestamp > Date.now();
 }
 
-export function canDeviceAcceptAccount(device) {
+export function canDeviceAcceptAccount(device, _platform, { maxAccountsPerDevice } = {}) {
   if (!device) {
     return {
       ok: false,
@@ -19,21 +19,38 @@ export function canDeviceAcceptAccount(device) {
     };
   }
 
-  if (device.provider !== 'duoplus') return { ok: true };
+  // DuoPlus subscription gate (a device without an active subscription is unusable).
+  if (device.provider === 'duoplus') {
+    const meta = device.providerMeta || {};
+    const status = String(meta.subscriptionStatus || '').trim().toLowerCase();
+    const hasVerifiedSubscription = meta.subscriptionVerified === true && status === 'active';
+    const subscriptionNotExpired = subscriptionExpiresInFuture(meta.subscriptionExpiresAt);
+    if (!(hasVerifiedSubscription && subscriptionNotExpired)) {
+      return {
+        ok: false,
+        status: 409,
+        code: 'DEVICE_SUBSCRIPTION_REQUIRED',
+        message: `DuoPlus device ${deviceLabel(device)} does not have a verified subscription; account assignment is blocked.`
+      };
+    }
+  }
 
-  const meta = device.providerMeta || {};
-  const status = String(meta.subscriptionStatus || '').trim().toLowerCase();
-  const hasVerifiedSubscription = meta.subscriptionVerified === true && status === 'active';
-  const subscriptionNotExpired = subscriptionExpiresInFuture(meta.subscriptionExpiresAt);
+  // Multi-account occupancy cap (TZ §5.11): a device hosts up to N accounts for
+  // the platform (N = platform's maxAccountsPerDevice, else the device's
+  // configured maxAccounts, default 1). Current occupancy = occupiedAccountIds
+  // (falling back to the scalar activeAccountCount).
+  const cap = Number(maxAccountsPerDevice ?? device.capacity?.maxAccounts ?? 1);
+  const occupied = device.capacity?.occupiedAccountIds?.length ?? device.capacity?.activeAccountCount ?? 0;
+  if (occupied >= cap) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'DEVICE_CAPACITY_FULL',
+      message: `Device ${deviceLabel(device)} is at capacity (${occupied}/${cap} accounts).`
+    };
+  }
 
-  if (hasVerifiedSubscription && subscriptionNotExpired) return { ok: true };
-
-  return {
-    ok: false,
-    status: 409,
-    code: 'DEVICE_SUBSCRIPTION_REQUIRED',
-    message: `DuoPlus device ${deviceLabel(device)} does not have a verified subscription; account assignment is blocked.`
-  };
+  return { ok: true };
 }
 
 export function assertDeviceCanAcceptAccount(device) {

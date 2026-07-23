@@ -11,7 +11,9 @@ export async function projectSnapshot(ctx, { platform, source = 'purchase' } = {
   for (const d of deviceDocs) {
     const deviceId = String(d._id);
     if (ctx.canDeviceAcceptAccount) {
-      const elig = ctx.canDeviceAcceptAccount(d, platform);
+      const elig = ctx.canDeviceAcceptAccount(d, platform, {
+        maxAccountsPerDevice: ctx.capabilitiesOf?.(platform)?.maxAccountsPerDevice
+      });
       if (elig && elig.ok === false) continue;
     }
     const queueDoc = ctx.deviceQueueRepo ? await ctx.deviceQueueRepo.find(deviceId, platform) : null;

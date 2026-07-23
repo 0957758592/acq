@@ -19,7 +19,12 @@ const deviceCapacitySchema = new mongoose.Schema(
   {
     maxAccounts: { type: Number, default: 1 },
     activeAccountCount: { type: Number, default: 0 },
-    operationConcurrency: { type: Number, default: 1 }
+    operationConcurrency: { type: Number, default: 1 },
+    // Multi-account occupancy (TZ §5.11): the accounts currently hosted on the
+    // device and HOW they are isolated. up to N:1 (e.g. instagram 5:1) via
+    // app-cloning/switching; occupancyMethod records the isolation mechanism.
+    occupiedAccountIds: { type: [String], default: () => [] },
+    occupancyMethod: { type: String, enum: ['root', 'vision', 'none'], default: 'none' }
   },
   { _id: false }
 );
