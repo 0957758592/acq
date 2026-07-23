@@ -9,7 +9,7 @@
 import http from 'node:http';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { createFacade } from '@acq/control';
 import { createScrapeProvider, createBrowserScrapeAdapter, createPuppeteerBrowserProvider } from '@acq/scraping';
 import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
@@ -17,7 +17,6 @@ import { EngineAccount } from '@acq/core/models/engine-account';
 
 import { buildEngineContext } from '../apps/engine/src/composition.js';
 import { buildUseCases } from '../apps/control-plane/src/use-cases.js';
-import { createAcqMcpServer } from '../apps/control-plane/src/mcp-server.js';
 import { runCli } from '../apps/control-plane/src/cli.js';
 
 const URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/acq';
@@ -47,13 +46,13 @@ async function main() {
   const ctx = buildEngineContext({ env: { platforms: PLATFORMS } });
   const facade = createFacade({ useCases: buildUseCases(ctx), audit: { record: async () => {} } });
 
-  // ── SURFACE 1 — MCP (real protocol: client ↔ server over in-memory transport) ──
-  console.log('\n[MCP] brain/agent contour — real MCP protocol round-trip');
-  const { attachTransport } = createAcqMcpServer({ facade, ctx, role: 'brain' });
-  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
-  await attachTransport(serverT);
+  // ── SURFACE 1 — MCP over HTTP (real network: brain ↔ dockerized server :7500/mcp) ──
+  console.log('\n[MCP/HTTP] brain/agent contour — real MCP over the network (:7500/mcp)');
+  const mcpTransport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1:7500/mcp'), {
+    requestInit: { headers: { authorization: 'Bearer admin-dev-token' } }
+  });
   const mcp = new Client({ name: 'brain', version: '1.0' }, { capabilities: {} });
-  await mcp.connect(clientT);
+  await mcp.connect(mcpTransport);
   const { tools } = await mcp.listTools();
   ok('listTools', `${tools.length} operations exposed to the brain`);
   // Drive an op PER ACCOUNT TYPE via MCP.

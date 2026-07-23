@@ -16,7 +16,7 @@ export function createRestServer({
   logger = null,
   eventSource = null,
   webhookProcessor = null,
-  mcpTransport = null,
+  mcpHandler = null,
   rateLimit = { max: 300, windowMs: 60_000 }
 } = {}) {
   const app = express();
@@ -44,24 +44,11 @@ export function createRestServer({
   }
 
   // MCP-over-HTTP endpoint (TZ §11.3) — the brain/agent contour served over the
-  // network via StreamableHTTP. Bearer-gated (fail-closed); the transport routes
-  // JSON-RPC to the generic MCP server (tools = OPERATIONS, resources = acq://
-  // RAG read-models), all through the SAME facade. POST = client→server calls,
-  // GET = server→client SSE stream.
-  if (mcpTransport) {
-    app.all('/mcp', async (req, res, next) => {
-      const auth = authenticate(req.headers.authorization, { tokens });
-      if (!auth) {
-        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'missing or invalid bearer token' });
-      }
-      try {
-        await mcpTransport.handleRequest(req, res, req.body);
-      } catch (err) {
-        logger?.error?.('mcp http request failed', { error: err.message });
-        if (!res.headersSent) res.status(500).json({ code: 'INTERNAL', message: 'internal error' });
-        else next(err);
-      }
-    });
+  // network via StreamableHTTP (session-managed in mcpHandler). Bearer-gated;
+  // routes JSON-RPC to the generic MCP server (tools = OPERATIONS, resources =
+  // acq:// RAG read-models), all through the SAME facade.
+  if (mcpHandler) {
+    app.all('/mcp', mcpHandler);
   }
 
   // Bearer auth (fail-closed) for everything under /v1.
