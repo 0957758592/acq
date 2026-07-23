@@ -9,5 +9,6 @@ export { extractEmbeddedJson } from './embedded-json.js';
 export { createScrapeProvider } from './scrape-provider.js';
 export { createHttpScrapeAdapter } from './adapters/http-scrape-adapter.js';
 export { createDeviceScrapeAdapter } from './adapters/device-scrape-adapter.js';
+export { createApiScrapeAdapter } from './adapters/api-scrape-adapter.js';
 export { createBrowserScrapeAdapter } from './adapters/browser-scrape-adapter.js';
 export { createPuppeteerBrowserProvider } from './adapters/puppeteer-browser-provider.js';

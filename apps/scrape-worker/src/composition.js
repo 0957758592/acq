@@ -2,7 +2,8 @@ import {
   createPuppeteerBrowserProvider,
   createBrowserScrapeAdapter,
   createHttpScrapeAdapter,
-  createDeviceScrapeAdapter
+  createDeviceScrapeAdapter,
+  createApiScrapeAdapter
 } from '@acq/scraping';
 
 // An empty selector registry — the verify-by-fact default. Every platform is
@@ -19,6 +20,7 @@ export function buildScrapeAdapters({
   browserSelectors = EMPTY_REGISTRY,
   httpSelectors = null,
   deviceScrape = null,
+  apiEndpoints = null,
   browserProvider = null,
   maxConcurrency = 4
 } = {}) {
@@ -32,6 +34,15 @@ export function buildScrapeAdapters({
   }
   if (deviceScrape?.provider && deviceScrape?.extractRows) {
     adapters.device = createDeviceScrapeAdapter({ provider: deviceScrape.provider, extractRows: deviceScrape.extractRows, keyOf: deviceScrape.keyOf });
+  }
+  // T3 api tier — wired when a per-platform endpoint registry (or resolver) is
+  // supplied; otherwise absent (an api-routed scrape then surfaces the tier seam).
+  if (apiEndpoints?.forPlatform || (apiEndpoints?.resolveEndpoint && apiEndpoints?.pickItems)) {
+    adapters.api = createApiScrapeAdapter(
+      apiEndpoints.forPlatform
+        ? { endpointRegistry: apiEndpoints }
+        : { resolveEndpoint: apiEndpoints.resolveEndpoint, pickItems: apiEndpoints.pickItems }
+    );
   }
 
   return { adapters, browserProvider: provider };
