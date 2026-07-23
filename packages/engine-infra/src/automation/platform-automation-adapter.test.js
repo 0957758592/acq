@@ -52,6 +52,22 @@ describe('createPlatformAutomationAdapter (generic, any platform)', () => {
     expect(res).toMatchObject({ ok: false, banned: true });
   });
 
+  it('runAction dispatches to a NAMED driver method when the driver has no generic runAction (report/publish/…)', async () => {
+    const seen = [];
+    const driver = { report: async (c, action, account, opts) => { seen.push({ action, opts }); return { ok: true, reported: true }; } };
+    const { adapter } = build({ driver });
+    const res = await adapter.runAction({ providerDeviceId: 'd', account: { id: 'a1' }, opts: { actor: 'x' } }, { type: 'report', target: '+1555' });
+    expect(res).toMatchObject({ ok: true, reported: true });
+    expect(seen[0].action).toEqual({ type: 'report', target: '+1555' });
+  });
+
+  it('runAction fails safe with ACTION_METHOD_UNSUPPORTED when neither runAction nor the named method exists', async () => {
+    const driver = { publish: async () => ({ ok: true }) }; // has publish, but we call follow
+    const { adapter } = build({ driver });
+    await expect(adapter.runAction({ providerDeviceId: 'd', account: {} }, { type: 'follow', target: '@x' }))
+      .rejects.toMatchObject({ code: 'ACTION_METHOD_UNSUPPORTED' });
+  });
+
   it('runAction downgrades a claimed success to ACTION_NOT_CONFIRMED when the app is NOT foreground', async () => {
     const driver = { runAction: async () => ({ ok: true, echo: 'view' }) };
     const { adapter } = build({

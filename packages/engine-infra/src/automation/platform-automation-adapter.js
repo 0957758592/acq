@@ -93,7 +93,16 @@ export function createPlatformAutomationAdapter({
 
     async runAction(ctx, action) {
       const controller = controllerFor(ctx);
-      const result = await driver.runAction(controller, action, ctx.account ?? {}, ctx.opts ?? {});
+      // Generic dispatch: a driver exposes EITHER a uniform runAction(action) OR
+      // a named method per action type (report / publish / follow / like / …).
+      // Map action.type -> the driver method so EVERY platform's actions are
+      // reachable through the generic engine.action consumer (no TypeError, no
+      // whatsapp-only path). An unsupported action is an honest coded seam.
+      const method = typeof driver.runAction === 'function' ? 'runAction' : action?.type;
+      if (typeof driver[method] !== 'function') {
+        throw Object.assign(new Error(`ACTION_METHOD_UNSUPPORTED: ${platform} has no '${action?.type}' action`), { code: 'ACTION_METHOD_UNSUPPORTED' });
+      }
+      const result = await driver[method](controller, action, ctx.account ?? {}, ctx.opts ?? {});
       const normalized = { ...result, ok: Boolean(result?.ok), banned: result?.banned, checkpointed: result?.checkpointed };
       // Verify-by-fact (§9.5): an action counts as done ONLY if the platform's own
       // app was actually foreground — otherwise the driver acted on/read the wrong
