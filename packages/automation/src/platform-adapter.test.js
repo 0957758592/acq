@@ -8,7 +8,9 @@ test('returns platform adapters for Instagram, TikTok, and YouTube', () => {
     expect(typeof adapter.login).toBe('function');
     expect(typeof adapter.setupProfile).toBe('function');
     expect(typeof adapter.healthCheck).toBe('function');
-    expect(typeof adapter.publish).toBe('function');
+    // Generic §9.4 action contract: every driver exposes runAction (which handles
+    // publish + follow/like/comment) reachable through the generic engine.
+    expect(typeof adapter.runAction).toBe('function');
   }
 });
 

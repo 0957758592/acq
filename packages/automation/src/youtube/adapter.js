@@ -1,3 +1,5 @@
+import { buildActionRunner } from '../shared/action-runner.js';
+
 import {
   checkYouTubeLoginState,
   loginYouTube,
@@ -5,6 +7,15 @@ import {
   setupYouTubeChannel,
   warmupYouTubeAccount
 } from './ui-flows.js';
+import {
+  YOUTUBE_BAN_TEXTS,
+  YOUTUBE_CHECKPOINT_TEXTS,
+  YOUTUBE_DISMISS_TEXTS,
+  YOUTUBE_LIKE_TEXTS,
+  YOUTUBE_LIKE_CONFIRM_TEXTS,
+  YOUTUBE_COMMENT_TEXTS,
+  YOUTUBE_COMMENT_CONFIRM_TEXTS
+} from './constants.js';
 
 function credentialsFrom(account = {}) {
   return {
@@ -51,7 +62,16 @@ export const youtubeAdapter = {
     return warmupYouTubeAccount(controller, opts);
   },
 
-  publish(controller, post, account, opts = {}) {
-    return publishYouTubeShort(controller, publishPayload(post, opts));
-  }
+  // Unified action runner (TZ §9.4): publish + like/comment.
+  runAction: buildActionRunner({
+    platform: 'youtube',
+    banTexts: YOUTUBE_BAN_TEXTS,
+    checkpointTexts: YOUTUBE_CHECKPOINT_TEXTS,
+    dismissTexts: YOUTUBE_DISMISS_TEXTS,
+    actions: {
+      like: { triggerTexts: YOUTUBE_LIKE_TEXTS, confirmTexts: YOUTUBE_LIKE_CONFIRM_TEXTS },
+      comment: { triggerTexts: YOUTUBE_COMMENT_TEXTS, confirmTexts: YOUTUBE_COMMENT_CONFIRM_TEXTS }
+    },
+    special: { publish: (controller, post, account, opts = {}) => publishYouTubeShort(controller, publishPayload(post, opts)) }
+  })
 };

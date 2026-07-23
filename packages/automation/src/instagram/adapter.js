@@ -1,3 +1,5 @@
+import { buildActionRunner } from '../shared/action-runner.js';
+
 import {
   checkInstagramLoginState,
   loginInstagram,
@@ -5,6 +7,17 @@ import {
   setupInstagramProfile,
   warmupInstagramAccount
 } from './ui-flows.js';
+import {
+  INSTAGRAM_BAN_TEXTS,
+  INSTAGRAM_CHECKPOINT_TEXTS,
+  INSTAGRAM_DISMISS_TEXTS,
+  INSTAGRAM_FOLLOW_TEXTS,
+  INSTAGRAM_FOLLOW_CONFIRM_TEXTS,
+  INSTAGRAM_LIKE_TEXTS,
+  INSTAGRAM_LIKE_CONFIRM_TEXTS,
+  INSTAGRAM_COMMENT_TEXTS,
+  INSTAGRAM_COMMENT_CONFIRM_TEXTS
+} from './constants.js';
 
 function credentialsFrom(account = {}, opts = {}) {
   return {
@@ -50,7 +63,18 @@ export const instagramAdapter = {
     return warmupInstagramAccount(controller, account.health?.warmupConfig || {});
   },
 
-  publish(controller, post, account, opts = {}) {
-    return publishInstagramReel(controller, publishPayload(post, opts));
-  }
+  // Unified action runner (TZ §9.4): publish + follow/like/comment. The generic
+  // engine dispatches every campaign action here; selectors are verify-by-fact.
+  runAction: buildActionRunner({
+    platform: 'instagram',
+    banTexts: INSTAGRAM_BAN_TEXTS,
+    checkpointTexts: INSTAGRAM_CHECKPOINT_TEXTS,
+    dismissTexts: INSTAGRAM_DISMISS_TEXTS,
+    actions: {
+      follow: { triggerTexts: INSTAGRAM_FOLLOW_TEXTS, confirmTexts: INSTAGRAM_FOLLOW_CONFIRM_TEXTS },
+      like: { triggerTexts: INSTAGRAM_LIKE_TEXTS, confirmTexts: INSTAGRAM_LIKE_CONFIRM_TEXTS },
+      comment: { triggerTexts: INSTAGRAM_COMMENT_TEXTS, confirmTexts: INSTAGRAM_COMMENT_CONFIRM_TEXTS }
+    },
+    special: { publish: (controller, post, account, opts = {}) => publishInstagramReel(controller, publishPayload(post, opts)) }
+  })
 };

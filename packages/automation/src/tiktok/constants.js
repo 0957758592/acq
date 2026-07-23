@@ -70,3 +70,13 @@ export const TIKTOK_POST_TEXTS = ['Post', 'Share'];
 export const TIKTOK_CREATE_FALLBACK_POINT = { x: 360, y: 1_185 };
 export const TIKTOK_NEWEST_MEDIA_FALLBACK_POINT = { x: 115, y: 330 };
 export const TIKTOK_FIRST_SOUND_RESULT_FALLBACK_POINT = { x: 360, y: 330 };
+
+// Action selector seeds (TZ §9.4/§22.2 VERIFY-BY-FACT).
+export const TIKTOK_BAN_TEXTS = ['account banned', 'account suspended', 'permanently banned'];
+export const TIKTOK_CHECKPOINT_TEXTS = ['verify', 'confirm it\'s you', 'suspicious activity', 'security check'];
+export const TIKTOK_FOLLOW_TEXTS = ['Follow'];
+export const TIKTOK_FOLLOW_CONFIRM_TEXTS = ['Following', 'Message', 'Friends'];
+export const TIKTOK_LIKE_TEXTS = ['Like'];
+export const TIKTOK_LIKE_CONFIRM_TEXTS = ['Liked', 'Unlike'];
+export const TIKTOK_COMMENT_TEXTS = ['Add comment', 'Post'];
+export const TIKTOK_COMMENT_CONFIRM_TEXTS = ['Reply', 'View', 'comment'];

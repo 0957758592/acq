@@ -33,3 +33,11 @@ export const YOUTUBE_CODE_REJECT_TEXTS = ['wrong code', 'try again', 'incorrect'
 
 export const YOUTUBE_CREATE_FALLBACK_POINT = { x: 360, y: 1_185 };
 export const YOUTUBE_NEWEST_MEDIA_FALLBACK_POINT = { x: 115, y: 330 };
+
+// Action selector seeds (TZ §9.4/§22.2 VERIFY-BY-FACT).
+export const YOUTUBE_BAN_TEXTS = ['account terminated', 'channel terminated', 'account suspended'];
+export const YOUTUBE_CHECKPOINT_TEXTS = ['verify it\'s you', 'confirm your identity', 'unusual activity'];
+export const YOUTUBE_LIKE_TEXTS = ['Like', 'like this video'];
+export const YOUTUBE_LIKE_CONFIRM_TEXTS = ['Unlike', 'Liked'];
+export const YOUTUBE_COMMENT_TEXTS = ['Add a comment', 'Comment'];
+export const YOUTUBE_COMMENT_CONFIRM_TEXTS = ['Reply', 'pinned', 'comment'];
