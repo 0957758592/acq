@@ -11,3 +11,4 @@ export { createPlatformAutomationAdapter } from './automation/platform-automatio
 export { createExpenseRecorder } from './procurement/expense-recorder.js';
 export { createProxyHealthChecker } from './proxy/proxy-health-checker.js';
 export { conflictError } from './errors.js';
+export { createHttpProxyProvider } from './proxy/http-proxy-provider.js';

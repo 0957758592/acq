@@ -16,7 +16,8 @@
     "@acq/engine-domain": "*",
     "@acq/automation": "*",
     "@acq/platform-registry": "*",
-    "@acq/integrations": "*"
+    "@acq/integrations": "*",
+    "@acq/proxy": "*"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
