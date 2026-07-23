@@ -36,7 +36,7 @@ export function makeExecuteHandler({ facade, authenticate, tokens = {}, defaultR
         data_json: envelope.data != null ? JSON.stringify(envelope.data) : '',
         error_json: envelope.error ? JSON.stringify(envelope.error) : ''
       });
-    } catch (err) {
+    } catch {
       callback(null, { data_json: '', error_json: JSON.stringify({ code: 'INTERNAL', message: 'internal error' }) });
     }
   };
