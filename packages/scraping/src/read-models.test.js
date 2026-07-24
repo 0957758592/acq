@@ -67,6 +67,61 @@ describe('normalizeEntities — members', () => {
   });
 });
 
+describe('naturalKey — group content', () => {
+  test('message key is platform:message:group:id (idempotent per message)', () => {
+    expect(naturalKey({ platform: 'telegram', type: 'message', data: { group: 'g1', id: '42' } })).toBe(
+      'telegram:message:g1:42'
+    );
+  });
+  test('participant key is platform:participant:group:handle', () => {
+    expect(naturalKey({ platform: 'telegram', type: 'participant', data: { group: 'g1', handle: '@u1' } })).toBe(
+      'telegram:participant:g1:@u1'
+    );
+  });
+});
+
+describe('normalizeEntities — messages (group content + who wrote each)', () => {
+  test('maps group messages keyed by group+id, capturing text + author handle + ts', () => {
+    const out = normalizeEntities({
+      platform: 'telegram',
+      targetType: 'messages',
+      target: 'g1',
+      rawItems: [
+        { id: '42', text: 'how do I reset it?', author: { username: 'ann' }, ts: '2026-07-24T10:00:00Z' },
+        { message_id: 43, message: 'me too', from: 'bob', date: 1700000000 }
+      ]
+    });
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({
+      type: 'message',
+      key: 'telegram:message:g1:42',
+      data: { group: 'g1', id: '42', text: 'how do I reset it?', author: '@ann' }
+    });
+    // author is normalized whether raw carries an object (`author.username`) or a bare string (`from`)
+    expect(out[1]).toMatchObject({ type: 'message', key: 'telegram:message:g1:43', data: { id: '43', text: 'me too', author: '@bob' } });
+  });
+});
+
+describe('normalizeEntities — participants (distinct users in a group)', () => {
+  test('maps participants keyed by group+handle', () => {
+    const out = normalizeEntities({
+      platform: 'telegram',
+      targetType: 'participants',
+      target: 'g1',
+      rawItems: [{ username: 'ann' }, { handle: '@bob' }]
+    });
+    expect(out.map((e) => e.key)).toEqual(['telegram:participant:g1:@ann', 'telegram:participant:g1:@bob']);
+    expect(out[0]).toMatchObject({ type: 'participant', data: { group: 'g1', handle: '@ann' } });
+  });
+});
+
+describe('normalizeEntities — target stamping', () => {
+  test('every normalized entity carries the top-level target it was scraped for (persisted by the repo)', () => {
+    const out = normalizeEntities({ platform: 'telegram', targetType: 'messages', target: 'g1', rawItems: [{ id: '1', text: 'hi', from: 'ann' }] });
+    expect(out[0].target).toBe('g1');
+  });
+});
+
 describe('normalizeEntities — unknown target type', () => {
   test('throws SCRAPE_TARGET_UNSUPPORTED', () => {
     try {

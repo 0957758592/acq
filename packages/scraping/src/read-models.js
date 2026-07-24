@@ -4,10 +4,23 @@ import { domainError } from '@acq/engine-domain';
 // idempotent upsert (EngineScrapeResult unique per platform:type:...:entityId,
 // §12.2). Every tier's raw output is reduced to these canonical shapes.
 
-function handleOf(raw) {
-  const h = String(raw.handle ?? raw.username ?? raw.user ?? '').trim();
+// Normalize any handle-ish value (bare string or already @-prefixed) to `@lower`.
+function toHandle(value) {
+  const h = String(value ?? '').trim();
   if (!h) return '';
   return h.startsWith('@') ? h.toLowerCase() : `@${h.toLowerCase()}`;
+}
+
+function handleOf(raw) {
+  return toHandle(raw.handle ?? raw.username ?? raw.user);
+}
+
+// A message's author may arrive as a nested object (`author`/`from`/`sender`) or
+// as a bare handle string — resolve either to a normalized handle.
+function authorOf(raw) {
+  const a = raw.author ?? raw.from ?? raw.sender;
+  if (a && typeof a === 'object') return handleOf(a);
+  return a != null ? toHandle(a) : handleOf(raw);
 }
 
 export function naturalKey(entity) {
@@ -21,6 +34,10 @@ export function naturalKey(entity) {
       return `${platform}:post:${data.id}`;
     case 'member':
       return `${platform}:member:${data.group}:${data.handle}`;
+    case 'participant':
+      return `${platform}:participant:${data.group}:${data.handle}`;
+    case 'message':
+      return `${platform}:message:${data.group}:${data.id}`;
     default:
       throw domainError('SCRAPE_TARGET_UNSUPPORTED', `no natural key for type '${type}'`);
   }
@@ -58,8 +75,23 @@ function post(platform, raw) {
   });
 }
 
-function member(platform, group, raw) {
-  return wrap(platform, 'member', { group, handle: handleOf(raw), role: raw.role ?? 'member' });
+// Group-user shape shared by `members` (the roster) and `participants` (distinct
+// users active in the group) — same fields, distinct entity type/key.
+function groupUser(platform, type, group, raw) {
+  return wrap(platform, type, { group, handle: handleOf(raw), role: raw.role ?? 'member' });
+}
+
+// A group message: the CONTENT (text/questions) plus WHO wrote it (author) — the
+// pair that feeds intelligence and yields the set of users who commented.
+function message(platform, group, raw) {
+  return wrap(platform, 'message', {
+    group,
+    id: String(raw.id ?? raw.message_id ?? raw.messageId ?? ''),
+    author: authorOf(raw),
+    text: raw.text ?? raw.message ?? raw.caption ?? '',
+    ts: raw.ts ?? raw.date ?? raw.createdAt ?? null,
+    replyToId: raw.replyToId ?? raw.reply_to ?? raw.replyTo ?? null
+  });
 }
 
 const HANDLERS = {
@@ -67,7 +99,9 @@ const HANDLERS = {
   followers: ({ platform, target, rawItems }) => rawItems.map((raw) => follower(platform, target, raw)),
   following: ({ platform, target, rawItems }) => rawItems.map((raw) => follower(platform, target, raw)),
   posts: ({ platform, rawItems }) => rawItems.map((raw) => post(platform, raw)),
-  members: ({ platform, target, rawItems }) => rawItems.map((raw) => member(platform, target, raw))
+  members: ({ platform, target, rawItems }) => rawItems.map((raw) => groupUser(platform, 'member', target, raw)),
+  participants: ({ platform, target, rawItems }) => rawItems.map((raw) => groupUser(platform, 'participant', target, raw)),
+  messages: ({ platform, target, rawItems }) => rawItems.map((raw) => message(platform, target, raw))
 };
 
 export function normalizeEntities({ platform, targetType, target, rawItems = [] }) {
@@ -75,5 +109,8 @@ export function normalizeEntities({ platform, targetType, target, rawItems = [] 
   if (!handler) {
     throw domainError('SCRAPE_TARGET_UNSUPPORTED', `unsupported scrape targetType '${targetType}'`);
   }
-  return handler({ platform, target, rawItems });
+  // Stamp the scraped target on every entity so results record which
+  // group/profile/channel they belong to (the repo persists `entity.target`,
+  // enabling per-target reads and cleanup — §10.3).
+  return handler({ platform, target, rawItems }).map((entity) => ({ ...entity, target }));
 }
