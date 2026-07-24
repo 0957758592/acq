@@ -3,7 +3,8 @@ import {
   createBrowserScrapeAdapter,
   createHttpScrapeAdapter,
   createDeviceScrapeAdapter,
-  createApiScrapeAdapter
+  createApiScrapeAdapter,
+  createTelegramBotApiEndpoints
 } from '@acq/scraping';
 
 // An empty selector registry — the verify-by-fact default. Every platform is
@@ -21,9 +22,16 @@ export function buildScrapeAdapters({
   httpSelectors = null,
   deviceScrape = null,
   apiEndpoints = null,
+  telegramBotToken = null,
+  telegramApiBase,
   browserProvider = null,
   maxConcurrency = 4
 } = {}) {
+  // Telegram Bot API api-tier registry — wired only when a bot token is supplied
+  // (opt-in). The browser (web) tier stays the default; callers reach this by
+  // passing params.via='bot-api'. An explicit apiEndpoints still takes priority.
+  const resolvedApiEndpoints =
+    apiEndpoints ?? (telegramBotToken ? createTelegramBotApiEndpoints({ botToken: telegramBotToken, apiBase: telegramApiBase }) : null);
   const provider = browserProvider ?? createPuppeteerBrowserProvider({ maxConcurrency });
   const adapters = {
     browser: createBrowserScrapeAdapter({ browserProvider: provider, selectorRegistry: browserSelectors })
@@ -37,11 +45,11 @@ export function buildScrapeAdapters({
   }
   // T3 api tier — wired when a per-platform endpoint registry (or resolver) is
   // supplied; otherwise absent (an api-routed scrape then surfaces the tier seam).
-  if (apiEndpoints?.forPlatform || (apiEndpoints?.resolveEndpoint && apiEndpoints?.pickItems)) {
+  if (resolvedApiEndpoints?.forPlatform || (resolvedApiEndpoints?.resolveEndpoint && resolvedApiEndpoints?.pickItems)) {
     adapters.api = createApiScrapeAdapter(
-      apiEndpoints.forPlatform
-        ? { endpointRegistry: apiEndpoints }
-        : { resolveEndpoint: apiEndpoints.resolveEndpoint, pickItems: apiEndpoints.pickItems }
+      resolvedApiEndpoints.forPlatform
+        ? { endpointRegistry: resolvedApiEndpoints }
+        : { resolveEndpoint: resolvedApiEndpoints.resolveEndpoint, pickItems: resolvedApiEndpoints.pickItems }
     );
   }
 

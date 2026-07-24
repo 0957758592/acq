@@ -57,6 +57,8 @@ export async function main({ env, deps = {} } = {}) {
         browserSelectors: deps.browserSelectors,
         httpSelectors: deps.httpSelectors,
         deviceScrape: deps.deviceScrape,
+        apiEndpoints: deps.apiEndpoints,
+        telegramBotToken: env.telegramBotToken,
         maxConcurrency: env.browserConcurrency
       });
 
@@ -95,7 +97,9 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       mongoUri: process.env.MONGODB_URI,
       rabbitUrl: process.env.RABBITMQ_URL,
       redisUrl: process.env.REDIS_URL,
-      healthPort: Number(process.env.SCRAPE_HEALTH_PORT || 7700)
+      healthPort: Number(process.env.SCRAPE_HEALTH_PORT || 7700),
+      // Opt-in Telegram Bot API tier — absent by default (web scraper remains primary).
+      telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || null
     }
   }).catch((err) => {
     console.error('scrape-worker failed to start', err);

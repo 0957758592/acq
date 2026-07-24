@@ -25,4 +25,13 @@ describe('scrape-worker composition (default tier wiring)', () => {
     const { adapters } = buildScrapeAdapters({ browserSelectors });
     expect(typeof adapters.browser.scrape).toBe('function');
   });
+
+  it('wires the api tier (Telegram Bot API) only when a bot token is supplied (opt-in; browser stays default)', () => {
+    const fakeBP = { openPage: async () => {} };
+    expect(buildScrapeAdapters({ browserProvider: fakeBP }).adapters.api).toBeUndefined();
+    const withBot = buildScrapeAdapters({ browserProvider: fakeBP, telegramBotToken: 'BOT-TOKEN' });
+    expect(typeof withBot.adapters.api.scrape).toBe('function');
+    // browser is still present as the default tier
+    expect(typeof withBot.adapters.browser.scrape).toBe('function');
+  });
 });

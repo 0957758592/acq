@@ -34,6 +34,23 @@ describe('createScrapeProvider.scrape', () => {
     expect(result.entities[0].data.followers).toBe(5);
   });
 
+  test('defaults to the browser (web) tier for telegram, but opts into the api tier via params.via="bot-api"', async () => {
+    const provider = createScrapeProvider({
+      adapters: {
+        browser: fakeAdapter([{ id: '1', text: 'from web', from: 'ann' }]),
+        api: fakeAdapter([{ id: '9', text: 'from bot', from: 'bob' }])
+      }
+    });
+    // DEFAULT — no params → web scraper (browser)
+    const web = await provider.scrape({ platform: 'telegram', targetType: 'messages', target: 'g1' });
+    expect(web.tier).toBe('browser');
+    expect(web.entities[0].data.text).toBe('from web');
+    // OPT-IN via params → bot-api (api tier)
+    const bot = await provider.scrape({ platform: 'telegram', targetType: 'messages', target: 'g1', params: { via: 'bot-api' } });
+    expect(bot.tier).toBe('api');
+    expect(bot.entities[0].data.text).toBe('from bot');
+  });
+
   test('throws SCRAPE_TIER_UNAVAILABLE when the selected tier has no adapter', async () => {
     const provider = createScrapeProvider({ adapters: { http: fakeAdapter([]) } });
     await expect(
