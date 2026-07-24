@@ -6,7 +6,8 @@ import {
   createApiScrapeAdapter,
   createTelegramBotApiEndpoints,
   createTelegramWebSelectors,
-  createBrowserSelectorRegistry
+  createBrowserSelectorRegistry,
+  createTelegramMtprotoAdapter
 } from '@acq/scraping';
 
 // Default browser selector registry: Telegram web (web.telegram.org) selectors
@@ -29,6 +30,7 @@ export function buildScrapeAdapters({
   apiEndpoints = null,
   telegramBotToken = null,
   telegramApiBase,
+  mtprotoClient = null,
   browserProvider = null,
   maxConcurrency = 4
 } = {}) {
@@ -56,6 +58,12 @@ export function buildScrapeAdapters({
         ? { endpointRegistry: resolvedApiEndpoints }
         : { resolveEndpoint: resolvedApiEndpoints.resolveEndpoint, pickItems: resolvedApiEndpoints.pickItems }
     );
+  }
+  // MTProto tier (full history + full roster) — wired only when a client is
+  // supplied (api_id/api_hash + user session); otherwise a params.via='mtproto'
+  // scrape surfaces the MTPROTO_CLIENT_UNAVAILABLE / SCRAPE_TIER_UNAVAILABLE seam.
+  if (mtprotoClient?.getMessages && mtprotoClient?.getParticipants) {
+    adapters.mtproto = createTelegramMtprotoAdapter({ client: mtprotoClient });
   }
 
   return { adapters, browserProvider: provider };

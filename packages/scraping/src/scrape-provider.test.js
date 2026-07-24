@@ -51,6 +51,21 @@ describe('createScrapeProvider.scrape', () => {
     expect(bot.entities[0].data.text).toBe('from bot');
   });
 
+  test('opts into the mtproto tier via params.via="mtproto" (default stays browser; bot-api still → api)', async () => {
+    const provider = createScrapeProvider({
+      adapters: {
+        browser: fakeAdapter([{ id: '1', text: 'web', from: 'ann' }]),
+        api: fakeAdapter([{ id: '2', text: 'bot', from: 'bob' }]),
+        mtproto: fakeAdapter([{ id: '3', text: 'mtproto full history', from: 'carol' }])
+      }
+    });
+    expect((await provider.scrape({ platform: 'telegram', targetType: 'messages', target: 'g' })).tier).toBe('browser');
+    expect((await provider.scrape({ platform: 'telegram', targetType: 'messages', target: 'g', params: { via: 'bot-api' } })).tier).toBe('api');
+    const mt = await provider.scrape({ platform: 'telegram', targetType: 'messages', target: 'g', params: { via: 'mtproto' } });
+    expect(mt.tier).toBe('mtproto');
+    expect(mt.entities[0].data.text).toBe('mtproto full history');
+  });
+
   test('throws SCRAPE_TIER_UNAVAILABLE when the selected tier has no adapter', async () => {
     const provider = createScrapeProvider({ adapters: { http: fakeAdapter([]) } });
     await expect(

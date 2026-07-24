@@ -1,6 +1,6 @@
 // Hybrid scrape tiers (TZ §10.1). Browser is the primary/default tier; the
 // others are chosen when they clearly fit.
-export const SCRAPE_TIERS = ['browser', 'http', 'device', 'api'];
+export const SCRAPE_TIERS = ['browser', 'http', 'device', 'api', 'mtproto'];
 
 // Deterministic tier selection. Rules, in priority order:
 //  - appOnly (data only visible inside the mobile app) -> on-device (T2)

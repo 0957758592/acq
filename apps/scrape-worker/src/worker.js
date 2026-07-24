@@ -59,6 +59,7 @@ export async function main({ env, deps = {} } = {}) {
         deviceScrape: deps.deviceScrape,
         apiEndpoints: deps.apiEndpoints,
         telegramBotToken: env.telegramBotToken,
+        mtprotoClient: deps.mtprotoClient,
         maxConcurrency: env.browserConcurrency
       });
 

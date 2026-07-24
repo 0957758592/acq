@@ -12,5 +12,6 @@ export { createDeviceScrapeAdapter } from './adapters/device-scrape-adapter.js';
 export { createApiScrapeAdapter } from './adapters/api-scrape-adapter.js';
 export { createTelegramBotApiEndpoints } from './adapters/telegram-bot-api.js';
 export { createTelegramWebSelectors, createBrowserSelectorRegistry } from './adapters/telegram-web-selectors.js';
+export { createTelegramMtprotoAdapter } from './adapters/telegram-mtproto.js';
 export { createBrowserScrapeAdapter } from './adapters/browser-scrape-adapter.js';
 export { createPuppeteerBrowserProvider } from './adapters/puppeteer-browser-provider.js';

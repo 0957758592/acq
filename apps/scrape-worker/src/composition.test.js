@@ -36,6 +36,15 @@ describe('scrape-worker composition (default tier wiring)', () => {
       .rejects.toMatchObject({ code: 'SCRAPE_SELECTORS_UNVERIFIED' });
   });
 
+  it('wires the mtproto tier only when an MTProto client is supplied (opt-in; browser stays default)', () => {
+    const fakeBP = { openPage: async () => {} };
+    expect(buildScrapeAdapters({ browserProvider: fakeBP }).adapters.mtproto).toBeUndefined();
+    const client = { getMessages: async () => [], getParticipants: async () => [] };
+    const withMt = buildScrapeAdapters({ browserProvider: fakeBP, mtprotoClient: client });
+    expect(typeof withMt.adapters.mtproto.scrape).toBe('function');
+    expect(typeof withMt.adapters.browser.scrape).toBe('function');
+  });
+
   it('wires the api tier (Telegram Bot API) only when a bot token is supplied (opt-in; browser stays default)', () => {
     const fakeBP = { openPage: async () => {} };
     expect(buildScrapeAdapters({ browserProvider: fakeBP }).adapters.api).toBeUndefined();

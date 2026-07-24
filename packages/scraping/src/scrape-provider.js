@@ -9,10 +9,12 @@ import { normalizeEntities } from './read-models.js';
 // domain); a captcha wall is a hard-stop that propagates unchanged (§10.3).
 export function createScrapeProvider({ adapters = {} } = {}) {
   async function scrape({ platform, targetType, target, params = {}, routing = {} }) {
-    // Browser (web) is the default tier. A caller OPTS IN to the api tier (e.g.
-    // Telegram Bot API) per-request via params.via='bot-api' — no default change.
-    const effectiveRouting = params.via === 'bot-api' ? { ...routing, hasApi: true, needsLogin: false } : routing;
-    const tier = selectTier(effectiveRouting);
+    // Browser (web) is the DEFAULT tier. A caller OPTS IN to a specific tier
+    // per-request via params.via — no default change:
+    //   'bot-api'  -> Telegram Bot API (api tier)
+    //   'mtproto'  -> Telegram MTProto full-history/roster (mtproto tier)
+    const VIA_TIER = { 'bot-api': 'api', mtproto: 'mtproto' };
+    const tier = VIA_TIER[params.via] ?? selectTier(routing);
     const adapter = adapters[tier];
     if (!adapter) {
       throw domainError('SCRAPE_TIER_UNAVAILABLE', `no adapter for scrape tier '${tier}'`);
