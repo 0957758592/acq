@@ -37,6 +37,7 @@ const SCHEMAS = {
   'shop.approve': schema({ shopId: str.required(), approvedBy: str.nullable() }),
   'shop.signup': schema({ shopId: str.required(), emailRef: str.required(), passwordRef: str.required(), usernameRef: str, extraFields: obj }),
   'shop.signup.confirm': schema({ shopId: str.required(), emailRef: str.required(), imapPasswordRef: str.required(), extraFields: obj }),
+  'device.status': schema({ status: str, provider: str }),
   'device.selectors': schema({ platform: str.required() }),
   'device.selectors.set': schema({ platform: str.required(), selectors: obj.required(), updatedBy: str.nullable() }),
   // Devices

@@ -51,6 +51,11 @@ export function buildUseCases(ctx) {
       const platform = require$(args, 'platform', 'PLATFORM_REQUIRED');
       return ctx.deviceQueueRepo.find(deviceId, platform);
     },
+    // List enrolled cloud-phone devices (read-model for the dashboard/brain).
+    'device.status': async (args = {}) => {
+      const filter = { ...(args.status ? { status: args.status } : {}), ...(args.provider ? { provider: args.provider } : {}) };
+      return { devices: ctx.deviceModel ? await ctx.deviceModel.find(filter).lean() : [] };
+    },
     // On-device selector overrides (read/tune the login/action/report selector
     // text sets for a live app build). Absent store -> honest coded seam.
     'device.selectors': async (args = {}) => {

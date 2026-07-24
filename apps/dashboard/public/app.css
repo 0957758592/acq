@@ -8,6 +8,10 @@ label { display: block; font-size: 0.8rem; }
 input, button { padding: 0.5rem; font: inherit; }
 button { cursor: pointer; }
 main { margin-top: 1.5rem; }
+#nav { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; border-bottom: 1px solid rgba(128,128,128,0.3); padding-bottom: 0.5rem; }
+#nav button { background: transparent; border: 1px solid transparent; border-radius: 6px; }
+#nav button[aria-current="page"] { border-color: currentColor; font-weight: 600; }
+.chips { margin-top: 0.5rem; }
 .chip { display: inline-block; margin-right: var(--gap); padding: 0.15rem 0.6rem; border: 1px solid currentColor; border-radius: 999px; font-size: 0.85rem; }
 table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
 th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid rgba(128,128,128,0.3); }
