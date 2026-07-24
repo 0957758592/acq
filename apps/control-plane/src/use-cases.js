@@ -105,7 +105,8 @@ export function buildUseCases(ctx) {
 
     // ---- Accounts ----------------------------------------------------------
     'account.status': async (args = {}) => {
-      const rows = await ctx.accountRepo.find(args.accountId ? { _id: args.accountId } : { platform: args.platform });
+      const filter = args.accountId ? { _id: args.accountId } : args.platform ? { platform: args.platform } : {};
+      const rows = await ctx.accountRepo.find(filter);
       return { accounts: rows };
     },
     'account.retire': async (args = {}) => applyAccountTransition(ctx, { accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'), to: 'retired' }),
