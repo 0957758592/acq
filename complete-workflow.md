@@ -393,7 +393,17 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 ```
 *Verified live* (`scripts/scrape-telegram-live.mjs`, real Mongo + Docker REST): group messages (content + author) and participants normalize, persist, read back via `scrape.results`, yield the distinct commenters, and re-scraping is exactly-once.
 
-**Telegram extraction is a verify-by-fact seam.** The normalize → dedup → persist → retrieve pipeline above is fully real; what it needs is the Telegram-specific *raw extraction* that feeds it `rawItems`: a **web.telegram.org selector registry** (browser tier), on-device **Telegram UI-dump** selectors (device tier), or a **Telegram API (MTProto / Bot API) adapter** (`api` tier). The default selector registry is empty → an unconfigured platform fail-safes with a coded seam (`SCRAPE_TARGET_UNSUPPORTED`/`SCRAPE_TIER_UNAVAILABLE`) until you supply one. That extractor is where you plug in your Telegram access; the intelligence side downstream is done.
+**Telegram raw extraction — web scraper by default, Bot API opt-in.** The normalize → dedup → persist → retrieve pipeline above is fully real; it just needs the Telegram-specific *raw extraction* that feeds it `rawItems`. Three ways to source it:
+- **Web scraper (browser tier) — the DEFAULT.** No `params.via`. It needs a **web.telegram.org selector registry** (`resolveUrl`/`extractItems`); the default registry is empty → an unconfigured platform fail-safes with a coded seam (`SCRAPE_SELECTORS_UNVERIFIED`/`SCRAPE_TIER_UNAVAILABLE`) until you supply selectors. Best for public content at scale.
+- **Telegram Bot API (api tier) — OPT-IN, built.** Pass `params.via:'bot-api'` and start the worker with `TELEGRAM_BOT_TOKEN`. Real adapter: `getUpdates → messages` (what the bot has received while in the chat), `getChatAdministrators → participants`. Legal/official; limited to what a bot can see (not arbitrary history; roster = admins). Verified live end-to-end.
+  ```bash
+  # worker: TELEGRAM_BOT_TOKEN=123:ABC  (opt-in tier)
+  curl -XPOST localhost:7500/v1/op/scrape.run \
+    -d '{"platform":"telegram","targetType":"messages","target":"<group>","params":{"via":"bot-api"}}' ...
+  ```
+- **MTProto / device UI-dump — seams.** A full MTProto client (whole history + full member lists) or on-device Telegram UI-dump remain verify-by-fact seams you plug in the same way.
+
+The default stays the web scraper; the Bot API is a parameter-selected tier; the intelligence side downstream is done in all cases.
 
 ## 12. Procurement, generation, verification, personas, scoring
 
@@ -862,7 +872,17 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 ```
 *Проверено вживую* (`scripts/scrape-telegram-live.mjs`, реальный Mongo + Docker REST): сообщения группы (контент + автор) и участники нормализуются, сохраняются, читаются через `scrape.results`, дают уникальных комментаторов, повторный скрап — exactly-once.
 
-**Извлечение из Telegram — шов verify-by-fact.** Конвейер normalize → dedup → persist → retrieve выше полностью реальный; ему нужно только Telegram-специфичное *сырое извлечение*, которое подаёт `rawItems`: **реестр селекторов web.telegram.org** (браузерный тир), on-device **UI-dump** селекторы Telegram (device-тир) или адаптер **Telegram API (MTProto / Bot API)** (`api`-тир). Дефолтный реестр селекторов пустой → ненастроенная платформа fail-safe’ит кодированным швом (`SCRAPE_TARGET_UNSUPPORTED`/`SCRAPE_TIER_UNAVAILABLE`), пока не дашь. Этот экстрактор — место, куда подключается твой доступ к Telegram; intelligence-часть ниже по потоку готова.
+**Сырое извлечение из Telegram — по умолчанию веб-скрапер, Bot API опционально.** Конвейер normalize → dedup → persist → retrieve выше полностью реальный; ему нужно лишь Telegram-специфичное *сырое извлечение*, подающее `rawItems`. Три источника:
+- **Веб-скрапер (браузерный тир) — ДЕФОЛТ.** Без `params.via`. Нужен **реестр селекторов web.telegram.org** (`resolveUrl`/`extractItems`); дефолтный реестр пустой → ненастроенная платформа fail-safe’ит кодированным швом (`SCRAPE_SELECTORS_UNVERIFIED`/`SCRAPE_TIER_UNAVAILABLE`), пока не дашь селекторы. Лучше для публичного контента в масштабе.
+- **Telegram Bot API (api-тир) — ОПЦИЯ, реализовано.** Передаёшь `params.via:'bot-api'` и стартуешь воркер с `TELEGRAM_BOT_TOKEN`. Реальный адаптер: `getUpdates → messages` (что бот получил, будучи в чате), `getChatAdministrators → participants`. Легально/официально; ограничено тем, что видит бот (не вся история; ростер = админы). Проверено вживую end-to-end.
+  ```bash
+  # воркер: TELEGRAM_BOT_TOKEN=123:ABC  (опциональный тир)
+  curl -XPOST localhost:7500/v1/op/scrape.run \
+    -d '{"platform":"telegram","targetType":"messages","target":"<group>","params":{"via":"bot-api"}}' ...
+  ```
+- **MTProto / device UI-dump — швы.** Полноценный MTProto-клиент (вся история + полные списки участников) или on-device UI-dump Telegram остаются verify-by-fact швами, подключаются так же.
+
+Дефолт остаётся веб-скрапером; Bot API — тир, выбираемый параметром; intelligence-часть ниже по потоку готова во всех случаях.
 
 ## 12. Закупка, генерация, верификация, персоны, скоринг
 
