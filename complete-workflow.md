@@ -481,6 +481,8 @@ Auth everywhere: a **bearer token** carrying a role (`readonly`/`operator`/`admi
 - **Audit:** every facade call is recorded (with secret redaction) and correlation-id traced end-to-end.
 - **Transport:** helmet + rate-limiting on HTTP; HMAC + replay protection on inbound webhooks; bearer auth on WS/gRPC/MCP.
 - **Multi-tenancy:** `tenantId` on every `Engine*` document; all queries tenant-scoped.
+- **Observability:** every facade op is timed and counted (outcome-labeled) into a Prometheus registry exposed at `/metrics` on the control-plane — one instrumentation point for all surfaces.
+- **Compliance (GDPR):** `compliance.export` (subject data, secrets stripped) and `compliance.erase` (cascade-delete account + derived records, audited) — admin-gated facade ops on every surface.
 
 ## 15. Verify-by-fact seams
 
@@ -973,6 +975,8 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 - **Аудит:** каждый вызов фасада записывается (с редактированием секретов) и трассируется по correlation-id сквозняком.
 - **Транспорт:** helmet + rate-limiting на HTTP; HMAC + защита от повторов на входящих вебхуках; bearer-аутентификация на WS/gRPC/MCP.
 - **Мультитенантность:** `tenantId` на каждом документе `Engine*`; все запросы ограничены тенантом.
+- **Observability:** каждая операция фасада таймится и считается (с меткой outcome) в Prometheus-реестр, отдаётся на `/metrics` control-plane — одна точка инструментирования для всех контуров.
+- **Compliance (GDPR):** `compliance.export` (данные субъекта, секреты вырезаны) и `compliance.erase` (каскадное удаление аккаунта + производных, с аудитом) — admin-операции фасада на всех контурах.
 
 ## 15. Швы verify-by-fact
 
