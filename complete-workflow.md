@@ -300,7 +300,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Inbound webhooks** (`POST /webhooks/inbound`) — HMAC-signed + replay-protected ingress from external systems.
 
-**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`.
+**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (scraped group content + commenters).
 
 ## 8. Operation catalog
 
@@ -392,6 +392,8 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 # → messages with { author, text, group } ; distinct authors = the users who commented
 ```
 *Verified live* (`scripts/scrape-telegram-live.mjs`, real Mongo + Docker REST): group messages (content + author) and participants normalize, persist, read back via `scrape.results`, yield the distinct commenters, and re-scraping is exactly-once.
+
+**Managed via every surface.** `scrape.run` (dispatch — including `params.via:'bot-api'`) and `scrape.results` (read) are facade operations, so the scrape system — web parser **and** Bot API — is driven identically through **MCP · REST/HTTP · gRPC · WebSocket · GraphQL · A2A · CLI (manual)**, and results are grounded for the brain via the **`acq://scrape`** RAG resource. Verified live end-to-end across all of them (`scripts/scrape-surfaces-live.mjs`).
 
 **Telegram raw extraction — web scraper by default, Bot API opt-in.** The normalize → dedup → persist → retrieve pipeline above is fully real; it just needs the Telegram-specific *raw extraction* that feeds it `rawItems`. Three ways to source it:
 - **Web scraper (browser tier) — the DEFAULT.** No `params.via`. It needs a **web.telegram.org selector registry** (`resolveUrl`/`extractItems`); the default registry is empty → an unconfigured platform fail-safes with a coded seam (`SCRAPE_SELECTORS_UNVERIFIED`/`SCRAPE_TIER_UNAVAILABLE`) until you supply selectors. Best for public content at scale.
@@ -779,7 +781,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Входящие вебхуки** (`POST /webhooks/inbound`) — HMAC-подпись + защита от повторов, приём событий от внешних систем.
 
-**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`.
+**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (контент групп + комментаторы).
 
 ## 8. Каталог операций
 
@@ -871,6 +873,8 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 # → сообщения с { author, text, group } ; уникальные author = юзеры, которые комментили
 ```
 *Проверено вживую* (`scripts/scrape-telegram-live.mjs`, реальный Mongo + Docker REST): сообщения группы (контент + автор) и участники нормализуются, сохраняются, читаются через `scrape.results`, дают уникальных комментаторов, повторный скрап — exactly-once.
+
+**Управляется через все контуры.** `scrape.run` (диспатч — включая `params.via:'bot-api'`) и `scrape.results` (чтение) — это операции фасада, поэтому система скрапа — веб-парсер **и** Bot API — управляется одинаково через **MCP · REST/HTTP · gRPC · WebSocket · GraphQL · A2A · CLI (вручную)**, а результаты заземляются для brain через RAG-ресурс **`acq://scrape`**. Проверено вживую end-to-end по всем контурам (`scripts/scrape-surfaces-live.mjs`).
 
 **Сырое извлечение из Telegram — по умолчанию веб-скрапер, Bot API опционально.** Конвейер normalize → dedup → persist → retrieve выше полностью реальный; ему нужно лишь Telegram-специфичное *сырое извлечение*, подающее `rawItems`. Три источника:
 - **Веб-скрапер (браузерный тир) — ДЕФОЛТ.** Без `params.via`. Нужен **реестр селекторов web.telegram.org** (`resolveUrl`/`extractItems`); дефолтный реестр пустой → ненастроенная платформа fail-safe’ит кодированным швом (`SCRAPE_SELECTORS_UNVERIFIED`/`SCRAPE_TIER_UNAVAILABLE`), пока не дашь селекторы. Лучше для публичного контента в масштабе.
