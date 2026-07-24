@@ -19,6 +19,8 @@ export const OPERATIONS = [
   { name: 'shop.signup.confirm', mutating: true, roles: R.ops },
   { name: 'device.enroll', mutating: true, roles: R.staff },
   { name: 'device.queue.get', mutating: false, roles: R.all },
+  { name: 'device.selectors', mutating: false, roles: R.all },
+  { name: 'device.selectors.set', mutating: true, roles: R.ops },
   { name: 'campaign.create', mutating: true, roles: R.ops },
   { name: 'campaign.status', mutating: false, roles: R.all },
   { name: 'campaign.pause', mutating: true, roles: R.ops },

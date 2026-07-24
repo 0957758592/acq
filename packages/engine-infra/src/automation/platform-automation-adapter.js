@@ -28,11 +28,21 @@ export function createPlatformAutomationAdapter({
   platform,
   provider,
   secretResolver,
+  selectorProvider = null,
   getAdapter = getPlatformAdapter,
   capabilitiesOf = getPlatformCapabilities
 } = {}) {
   const driver = getAdapter(platform);
   const controllerFor = (ctx) => provider.createDirectController(ctx.providerDeviceId, ctx.controllerOpts);
+  // Resolve operator on-device selector overrides for this platform (tuned to
+  // the live app build via device.selectors.*); merged into driver opts so the
+  // shared login/action runners union them over their built-in seeds.
+  async function optsWithSelectors(ctx) {
+    const base = ctx.opts ?? {};
+    if (!selectorProvider?.forPlatform) return base;
+    const selectors = await selectorProvider.forPlatform(platform).catch(() => ({}));
+    return { ...base, selectors: { ...(base.selectors ?? {}), ...(selectors ?? {}) } };
+  }
 
   function capsOf() {
     try {
@@ -76,7 +86,7 @@ export function createPlatformAutomationAdapter({
       const sessionRef = ctx.account?.secretRefs?.session;
       const session = sessionRef ? await secretResolver.resolve(sessionRef) : undefined;
       const account = { ...ctx.account, secretRefs: { ...(ctx.account?.secretRefs ?? {}), session } };
-      const result = await driver.login(controller, account, ctx.opts ?? {});
+      const result = await driver.login(controller, account, await optsWithSelectors({ ...ctx, account }));
       if (result?.banned) return { ok: false, banned: true };
       if (result?.checkpointed) return { ok: false, checkpointed: true };
       // Verify-by-fact: when the driver can report health, don't trust login's
@@ -102,7 +112,7 @@ export function createPlatformAutomationAdapter({
       if (typeof driver[method] !== 'function') {
         throw Object.assign(new Error(`ACTION_METHOD_UNSUPPORTED: ${platform} has no '${action?.type}' action`), { code: 'ACTION_METHOD_UNSUPPORTED' });
       }
-      const result = await driver[method](controller, action, ctx.account ?? {}, ctx.opts ?? {});
+      const result = await driver[method](controller, action, ctx.account ?? {}, await optsWithSelectors(ctx));
       const normalized = { ...result, ok: Boolean(result?.ok), banned: result?.banned, checkpointed: result?.checkpointed };
       // Verify-by-fact (§9.5): an action counts as done ONLY if the platform's own
       // app was actually foreground — otherwise the driver acted on/read the wrong

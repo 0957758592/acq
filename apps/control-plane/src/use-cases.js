@@ -51,6 +51,16 @@ export function buildUseCases(ctx) {
       const platform = require$(args, 'platform', 'PLATFORM_REQUIRED');
       return ctx.deviceQueueRepo.find(deviceId, platform);
     },
+    // On-device selector overrides (read/tune the login/action/report selector
+    // text sets for a live app build). Absent store -> honest coded seam.
+    'device.selectors': async (args = {}) => {
+      if (!ctx.selectorStore) throw seam('SELECTOR_STORE_UNAVAILABLE', 'selector store not wired');
+      return ctx.selectorStore.get(require$(args, 'platform', 'PLATFORM_REQUIRED'));
+    },
+    'device.selectors.set': async (args = {}) => {
+      if (!ctx.selectorStore) throw seam('SELECTOR_STORE_UNAVAILABLE', 'selector store not wired');
+      return ctx.selectorStore.set(require$(args, 'platform', 'PLATFORM_REQUIRED'), require$(args, 'selectors', 'SELECTORS_REQUIRED'), { updatedBy: args.updatedBy ?? null });
+    },
 
     // ---- Campaigns ---------------------------------------------------------
     'campaign.create': async (args = {}) => {

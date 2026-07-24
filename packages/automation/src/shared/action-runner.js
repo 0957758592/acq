@@ -1,4 +1,5 @@
 import { runConfirmedAction, ConfirmedActionError } from './confirmed-action.js';
+import { unionTexts, mergeActionConfig } from './selectors.js';
 
 // Builds a driver `runAction(controller, action, account, opts)` from a
 // per-platform selector config (TZ §9.4). Dispatches action.type -> its
@@ -16,12 +17,16 @@ export function buildActionRunner({ platform, banTexts = [], checkpointTexts = [
     if (!config) {
       throw new ConfirmedActionError('ACTION_TYPE_UNSUPPORTED', `${platform} does not support action '${type}'`);
     }
+    // Union built-in seeds with operator selector overrides (verify-by-fact,
+    // tuned for the live app build; supplied via opts.selectors).
+    const ov = opts.selectors || {};
+    const merged = mergeActionConfig(config, ov.actions?.[type] || {});
     return runConfirmedAction(controller, {
-      banTexts,
-      checkpointTexts,
-      dismissTexts,
-      triggerTexts: config.triggerTexts,
-      confirmTexts: config.confirmTexts,
+      banTexts: unionTexts(banTexts, ov.banTexts),
+      checkpointTexts: unionTexts(checkpointTexts, ov.checkpointTexts),
+      dismissTexts: unionTexts(dismissTexts, ov.dismissTexts),
+      triggerTexts: merged.triggerTexts,
+      confirmTexts: merged.confirmTexts,
       actor: opts.actor
     });
   };

@@ -1,6 +1,7 @@
 import { findElement, getAllText, parseUIDump, delay } from '@acq/device-control';
 
 import { createHumanActor } from '../human-actor.js';
+import { unionTexts } from './selectors.js';
 
 // Builds a driver `login(controller, account, opts)` from per-platform selector
 // seeds (TZ §9.4). Opens the app, classifies state (already-online / banned /
@@ -32,14 +33,25 @@ export function buildLoginRunner({
 
   return async function login(controller, account = {}, opts = {}) {
     const actor = opts.actor || createHumanActor({ controller });
+    // Union built-in seeds with operator selector overrides (verify-by-fact,
+    // tuned for the live app build; supplied via opts.selectors).
+    const ov = opts.selectors || {};
+    const homeT = unionTexts(homeTexts, ov.homeTexts);
+    const loginT = unionTexts(loginTexts, ov.loginTexts);
+    const banT = unionTexts(banTexts, ov.banTexts);
+    const checkT = unionTexts(checkpointTexts, ov.checkpointTexts);
+    const userH = unionTexts(usernameHints, ov.usernameHints);
+    const passH = unionTexts(passwordHints, ov.passwordHints);
+    const submitT = unionTexts(submitTexts, ov.submitTexts);
+
     if (typeof controller.startApp === 'function') await controller.startApp(appPackage, launcherActivity).catch(() => {});
     await delay(settleMs);
 
     let nodes = parseUIDump(await controller.getUIDump());
-    if (textPresent(nodes, banTexts)) return { ok: false, banned: true };
-    if (textPresent(nodes, checkpointTexts)) return { ok: false, checkpointed: true };
-    if (textPresent(nodes, homeTexts)) return { ok: true }; // already logged in
-    if (loginTexts.length && !textPresent(nodes, loginTexts)) {
+    if (textPresent(nodes, banT)) return { ok: false, banned: true };
+    if (textPresent(nodes, checkT)) return { ok: false, checkpointed: true };
+    if (textPresent(nodes, homeT)) return { ok: true }; // already logged in
+    if (loginT.length && !textPresent(nodes, loginT)) {
       throw seam('LOGIN_SCREEN_UNVERIFIED', 'login screen not recognized (verify selectors on a live device)');
     }
 
@@ -47,23 +59,23 @@ export function buildLoginRunner({
     const password = account.credentials?.password;
     if (!username || !password) throw seam('CREDENTIALS_REQUIRED', 'username/email + password are required to log in');
 
-    const userField = findElement(nodes, ...usernameHints);
+    const userField = findElement(nodes, ...userH);
     if (userField && typeof controller.inputText === 'function') {
       await actor.tapElement(userField, { afterMs: 400 });
       await controller.inputText(username);
     }
-    const passField = findElement(parseUIDump(await controller.getUIDump()), ...passwordHints);
+    const passField = findElement(parseUIDump(await controller.getUIDump()), ...passH);
     if (passField && typeof controller.inputText === 'function') {
       await actor.tapElement(passField, { afterMs: 400 });
       await controller.inputText(password);
     }
-    await actor.findAndTap(submitTexts, { rounds: 2 }).catch(() => {});
+    await actor.findAndTap(submitT, { rounds: 2 }).catch(() => {});
     await delay(settleMs);
 
     nodes = parseUIDump(await controller.getUIDump());
-    if (textPresent(nodes, banTexts)) return { ok: false, banned: true };
-    if (textPresent(nodes, checkpointTexts)) return { ok: false, checkpointed: true };
-    if (textPresent(nodes, homeTexts)) return { ok: true };
+    if (textPresent(nodes, banT)) return { ok: false, banned: true };
+    if (textPresent(nodes, checkT)) return { ok: false, checkpointed: true };
+    if (textPresent(nodes, homeT)) return { ok: true };
     throw seam('LOGIN_UNVERIFIED', 'login not confirmed on-device (verify-by-fact)');
   };
 }

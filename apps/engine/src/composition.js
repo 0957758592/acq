@@ -24,8 +24,10 @@ import { EngineCampaign } from '@acq/core/models/engine-campaign';
 import { EngineShopSpec } from '@acq/core/models/engine-shop-spec';
 import { EngineScrapeResult } from '@acq/core/models/engine-scrape-result';
 import { EngineProxy } from '@acq/core/models/engine-proxy';
+import { EngineSelectorOverride } from '@acq/core/models/engine-selector-override';
 import { canDeviceAcceptAccount } from '@acq/core/utils/device-account-eligibility';
 import { claimRunningDeviceLease, releaseDeviceLease } from '@acq/core/services/device-lease';
+import { createSelectorStore } from './services/selector-store.js';
 import { getRedis } from '@acq/core/db/redis';
 import { createStructuredLogger } from '@acq/logger';
 
@@ -83,6 +85,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     EngineShopSpec,
     EngineScrapeResult,
     EngineProxy,
+    EngineSelectorOverride,
     canDeviceAcceptAccount,
     claimRunningDeviceLease,
     releaseDeviceLease,
@@ -164,10 +167,14 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   // which case automationFor is null and the online/action/probe handlers
   // fail-safe rather than pretending (verify-by-fact: no device, no guessing).
   const provider = D.provider ?? (env.deviceProvider?.type ? D.createDeviceProvider(env.deviceProvider) : null);
+  // On-device selector override store — operators tune login/action/report
+  // selectors for a live app build via device.selectors.*; the adapter resolves
+  // them per platform and passes them into driver calls (opts.selectors).
+  const selectorStore = D.selectorStore ?? createSelectorStore({ model: D.EngineSelectorOverride });
   const automationFor =
     D.automationFor ??
     (provider
-      ? (platform) => D.createPlatformAutomationAdapter({ platform, provider, secretResolver })
+      ? (platform) => D.createPlatformAutomationAdapter({ platform, provider, secretResolver, selectorProvider: selectorStore })
       : null);
 
   const activePlatforms = (env.platforms && env.platforms.length ? env.platforms : D.listPlatforms())
@@ -202,6 +209,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     automationFor,
     shopRegistry,
     shopSignup,
+    selectorStore,
     httpClient,
     compileShopAdapter: D.compileShopAdapter,
     expenseRecorder,

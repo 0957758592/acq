@@ -16,7 +16,8 @@ export function buildRagResources(ctx) {
     { uri: 'acq://campaigns', name: 'Active campaigns', description: 'active action campaigns' },
     { uri: 'acq://proxies', name: 'Proxy pool', description: '1:1 sticky proxy pool' },
     { uri: 'acq://devices', name: 'Devices', description: 'enrolled cloud-phone devices' },
-    { uri: 'acq://scrape', name: 'Scrape results', description: 'normalized scraped read-models (group messages + authors, participants, members, profiles…) for grounding' }
+    { uri: 'acq://scrape', name: 'Scrape results', description: 'normalized scraped read-models (group messages + authors, participants, members, profiles…) for grounding' },
+    { uri: 'acq://selectors', name: 'On-device selectors', description: 'per-platform on-device selector overrides (login/action/report) tuned for the live app build' }
   ];
 
   async function read(uri) {
@@ -35,6 +36,8 @@ export function buildRagResources(ctx) {
         // Scraped read-models (Telegram group content + commenters, etc.) for the
         // brain to ground on — regardless of the tier that produced them (web / bot-api).
         return { results: ctx.scrapeResultRepo ? await ctx.scrapeResultRepo.listResults({}, { limit: 200 }) : [] };
+      case 'acq://selectors':
+        return { selectors: ctx.selectorStore ? await ctx.selectorStore.list() : [] };
       default:
         throw Object.assign(new Error(`RESOURCE_NOT_FOUND: ${uri}`), { code: 'RESOURCE_NOT_FOUND' });
     }
