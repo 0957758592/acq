@@ -142,6 +142,25 @@ export function buildUseCases(ctx) {
       return { shopId: doc.shopId, verified: doc.verified };
     },
     'shop.scan': async (args = {}) => scanShop(ctx, { shopUrl: require$(args, 'shopUrl', 'SHOP_URL_REQUIRED'), dryRun: Boolean(args.dryRun) }),
+    // Register AN ACCOUNT at a shop via an email identity (credentials are REFS,
+    // never plaintext). Absent wiring is an honest coded seam.
+    'shop.signup': async (args = {}) => {
+      if (!ctx.shopSignup) throw seam('SHOP_SIGNUP_PROVIDER_UNAVAILABLE', 'shop signup is not wired');
+      return ctx.shopSignup.signup(require$(args, 'shopId', 'SHOP_ID_REQUIRED'), {
+        emailRef: require$(args, 'emailRef', 'EMAIL_REF_REQUIRED'),
+        passwordRef: require$(args, 'passwordRef', 'PASSWORD_REF_REQUIRED'),
+        usernameRef: args.usernameRef,
+        extraFields: args.extraFields ?? {}
+      });
+    },
+    'shop.signup.confirm': async (args = {}) => {
+      if (!ctx.shopSignup) throw seam('SHOP_SIGNUP_PROVIDER_UNAVAILABLE', 'shop signup is not wired');
+      return ctx.shopSignup.confirm(require$(args, 'shopId', 'SHOP_ID_REQUIRED'), {
+        emailRef: require$(args, 'emailRef', 'EMAIL_REF_REQUIRED'),
+        imapPasswordRef: require$(args, 'imapPasswordRef', 'IMAP_PASSWORD_REF_REQUIRED'),
+        extraFields: args.extraFields ?? {}
+      });
+    },
 
     // ---- Proxies (1:1 sticky pool) -----------------------------------------
     'proxy.status': async (args = {}) => proxyStatus(ctx, { deviceId: args.deviceId }),

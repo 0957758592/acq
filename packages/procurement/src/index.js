@@ -8,3 +8,4 @@ export { createShopHttpClient } from './shop-http-client.js';
 export { createLlmShopScanner } from './shop-scanner.js';
 export { createPolicyApprovalPort } from './approval.js';
 export { createEncryptedCookieSessionStore } from './cookie-session-store.js';
+export { createShopSignup } from './shop-signup.js';

@@ -35,6 +35,8 @@ const SCHEMAS = {
   'shop.register': schema({ spec: obj.required() }),
   'shop.scan': schema({ shopUrl: str.required(), dryRun: bool }),
   'shop.approve': schema({ shopId: str.required(), approvedBy: str.nullable() }),
+  'shop.signup': schema({ shopId: str.required(), emailRef: str.required(), passwordRef: str.required(), usernameRef: str, extraFields: obj }),
+  'shop.signup.confirm': schema({ shopId: str.required(), emailRef: str.required(), imapPasswordRef: str.required(), extraFields: obj }),
   // Devices
   'device.enroll': schema({ provider: str, providerDeviceId: str.required(), name: str, region: str, capacity: obj, status: str }),
   'device.queue.get': schema({ deviceId: str.required(), platform: str.required() }),

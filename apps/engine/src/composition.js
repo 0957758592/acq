@@ -10,9 +10,9 @@ import {
   createProxyHealthChecker
 } from '@acq/engine-infra';
 import { reconcile } from '@acq/engine-domain';
-import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner } from '@acq/procurement';
+import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner, createShopSignup, createEncryptedCookieSessionStore } from '@acq/procurement';
 import { createBrowserProvider } from '@acq/browser';
-import { createOpenRouterClient } from '@acq/integrations';
+import { createOpenRouterClient, EmailCodeFetcher } from '@acq/integrations';
 import { createVerificationResourceProvider, createHttpSmsVendor } from '@acq/account-gen';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
 import { createDeviceProvider } from '@acq/device-control';
@@ -64,6 +64,9 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createShopHttpClient,
     compileShopAdapter,
     createLlmShopScanner,
+    createShopSignup,
+    createEncryptedCookieSessionStore,
+    EmailCodeFetcher,
     createOpenRouterClient,
     createVerificationResourceProvider,
     createHttpSmsVendor,
@@ -131,6 +134,21 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       : null);
   const httpClient = D.httpClient ?? D.createShopHttpClient({ secretResolver });
   const expenseRecorder = D.expenseRecorder ?? D.createExpenseRecorder();
+  // Shop ACCOUNT signup + confirmation (§6.3/§6.4): register at a shop via an
+  // email identity (credentials as refs), confirm by reading the emailed code
+  // over IMAP (any Gmail login/app-password), persist the resulting session. The
+  // per-shop signup endpoints live in the spec; absent -> honest coded seam.
+  const cookieSessionStore =
+    D.cookieSessionStore ?? (env.cookieSessionKey ? D.createEncryptedCookieSessionStore({ key: env.cookieSessionKey }) : null);
+  const shopSignup =
+    D.shopSignup ??
+    D.createShopSignup({
+      shopRegistry,
+      httpClient,
+      secretResolver,
+      emailCodeFetcherFactory: ({ email, password }) => new D.EmailCodeFetcher({ email, password }),
+      cookieSessionStore
+    });
   // Verification resource provider (SMS/email). Wired from an env-configured SMS
   // vendor (declarative endpoints + auth); absent -> verification.rent is an
   // honest coded seam (VERIFICATION_PROVIDER_UNAVAILABLE).
@@ -183,6 +201,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     provider,
     automationFor,
     shopRegistry,
+    shopSignup,
     httpClient,
     compileShopAdapter: D.compileShopAdapter,
     expenseRecorder,
