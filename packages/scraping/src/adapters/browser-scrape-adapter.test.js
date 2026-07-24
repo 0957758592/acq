@@ -81,6 +81,15 @@ describe('createBrowserScrapeAdapter (primary tier)', () => {
     expect(page.events).toContainEqual(['goto', 'https://ig/acme']);
   });
 
+  it('passes the request context (targetType/target) to the in-page extractor so one extractor can serve every target', async () => {
+    let evalArg;
+    const page = fakePage({ batches: [[]] });
+    page.evaluate = async (fn, arg) => { evalArg = arg; return []; };
+    const adapter = createBrowserScrapeAdapter({ browserProvider: providerReturning(page), resolveUrl: () => 'https://x', extractItems, keyOf: (it) => it.id });
+    await adapter.scrape({ platform: 'telegram', targetType: 'participants', target: 'g1', params: { proxy: 'p' } });
+    expect(evalArg).toMatchObject({ targetType: 'participants', target: 'g1', proxy: 'p' });
+  });
+
   it('fails safe (coded) when the platform has no verified selectors — without launching a browser', async () => {
     const page = fakePage();
     let opened = false;

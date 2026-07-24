@@ -4,13 +4,18 @@ import {
   createHttpScrapeAdapter,
   createDeviceScrapeAdapter,
   createApiScrapeAdapter,
-  createTelegramBotApiEndpoints
+  createTelegramBotApiEndpoints,
+  createTelegramWebSelectors,
+  createBrowserSelectorRegistry
 } from '@acq/scraping';
 
-// An empty selector registry — the verify-by-fact default. Every platform is
-// unverified until an operator registers its real URL + in-page extractor, so
-// a scrape of an unconfigured platform is an honest coded seam, never a guess.
-const EMPTY_REGISTRY = { forPlatform: () => null };
+// Default browser selector registry: Telegram web (web.telegram.org) selectors
+// are wired so the DEFAULT web scraper extracts group content out of the box;
+// every OTHER platform stays an honest SCRAPE_SELECTORS_UNVERIFIED seam until an
+// operator registers its real URL + in-page extractor. Telegram's selectors are
+// verify-by-fact/overridable (see createTelegramWebSelectors) — a mismatch
+// yields empty rows, never fabricated data.
+const DEFAULT_BROWSER_SELECTORS = createBrowserSelectorRegistry({ telegram: createTelegramWebSelectors() });
 
 // Scrape-worker tier composition (TZ §10.1). Assembles the hybrid tier adapters
 // for the ScrapeProvider. The BROWSER tier (primary) is always wired over a real
@@ -18,7 +23,7 @@ const EMPTY_REGISTRY = { forPlatform: () => null };
 // and DEVICE tiers are wired only when their config is supplied. Everything is
 // injectable so tests fake the engine and the running worker gets real I/O.
 export function buildScrapeAdapters({
-  browserSelectors = EMPTY_REGISTRY,
+  browserSelectors = DEFAULT_BROWSER_SELECTORS,
   httpSelectors = null,
   deviceScrape = null,
   apiEndpoints = null,

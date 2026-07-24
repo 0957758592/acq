@@ -26,6 +26,16 @@ describe('scrape-worker composition (default tier wiring)', () => {
     expect(typeof adapters.browser.scrape).toBe('function');
   });
 
+  it('wires Telegram web selectors into the DEFAULT browser tier (telegram extracts out of the box; others stay a seam)', async () => {
+    const { adapters } = buildScrapeAdapters({ browserProvider: { openPage: async () => { throw new Error('should not open — selectors resolved first'); } } });
+    // telegram has verified default selectors → resolves past the seam (fails later at openPage, not at selectors)
+    await expect(adapters.browser.scrape({ platform: 'telegram', targetType: 'messages', target: 'g', params: {} }))
+      .rejects.toThrow('should not open');
+    // an unconfigured platform is still the honest SCRAPE_SELECTORS_UNVERIFIED seam
+    await expect(adapters.browser.scrape({ platform: 'reddit', targetType: 'posts', target: 'x', params: {} }))
+      .rejects.toMatchObject({ code: 'SCRAPE_SELECTORS_UNVERIFIED' });
+  });
+
   it('wires the api tier (Telegram Bot API) only when a bot token is supplied (opt-in; browser stays default)', () => {
     const fakeBP = { openPage: async () => {} };
     expect(buildScrapeAdapters({ browserProvider: fakeBP }).adapters.api).toBeUndefined();

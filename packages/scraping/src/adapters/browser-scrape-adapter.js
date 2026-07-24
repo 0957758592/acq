@@ -63,7 +63,9 @@ export function createBrowserScrapeAdapter({
         const seen = new Set();
         const rawItems = [];
         for (let i = 0; i < maxScrolls; i += 1) {
-          const batch = (await page.evaluate(sel.extractItems, params)) ?? [];
+          // Pass the request context alongside params so a single per-platform
+          // extractor can branch on targetType (messages vs participants vs …).
+          const batch = (await page.evaluate(sel.extractItems, { ...params, targetType: req.targetType, target: req.target })) ?? [];
           let fresh = 0;
           for (const item of batch) {
             const key = keyOf(item);
