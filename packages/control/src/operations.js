@@ -48,7 +48,9 @@ export const OPERATIONS = [
   { name: 'browser.session.liveView', mutating: false, roles: R.ops },
   { name: 'scrape.run', mutating: true, roles: R.ops },
   { name: 'scrape.results', mutating: false, roles: R.all },
-  { name: 'reconcile.now', mutating: true, roles: R.ops }
+  { name: 'reconcile.now', mutating: true, roles: R.ops },
+  { name: 'compliance.export', mutating: false, roles: R.admin },
+  { name: 'compliance.erase', mutating: true, roles: R.admin }
 ];
 
 const BY_NAME = new Map(OPERATIONS.map((op) => [op.name, op]));

@@ -7,7 +7,8 @@ import {
   createMongoProxyRepo,
   createPlatformAutomationAdapter,
   createExpenseRecorder,
-  createProxyHealthChecker
+  createProxyHealthChecker,
+  createGdprService
 } from '@acq/engine-infra';
 import { reconcile } from '@acq/engine-domain';
 import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner, createShopSignup, createEncryptedCookieSessionStore } from '@acq/procurement';
@@ -62,6 +63,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createProxyHealthChecker,
     createPlatformAutomationAdapter,
     createExpenseRecorder,
+    createGdprService,
     createShopRegistry,
     createShopHttpClient,
     compileShopAdapter,
@@ -171,6 +173,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   // selectors for a live app build via device.selectors.*; the adapter resolves
   // them per platform and passes them into driver calls (opts.selectors).
   const selectorStore = D.selectorStore ?? createSelectorStore({ model: D.EngineSelectorOverride });
+  const gdpr = D.gdpr ?? D.createGdprService({ accountModel: D.EngineAccount, actionTaskModel: D.EngineActionTask, scrapeResultModel: D.EngineScrapeResult });
   const automationFor =
     D.automationFor ??
     (provider
@@ -210,6 +213,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     shopRegistry,
     shopSignup,
     selectorStore,
+    gdpr,
     httpClient,
     compileShopAdapter: D.compileShopAdapter,
     expenseRecorder,

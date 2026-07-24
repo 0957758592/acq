@@ -18,8 +18,18 @@ function toError(err) {
   return { code: 'INTERNAL', message: 'internal error' };
 }
 
-export function createFacade({ useCases = {}, validators = {}, audit = null } = {}) {
-  async function execute(operationName, { role = 'readonly', args = {}, correlationId, actor } = {}) {
+export function createFacade({ useCases = {}, validators = {}, audit = null, metrics = null } = {}) {
+  // Observability (TZ §15): every execute() is timed and its outcome (ok or the
+  // coded error) recorded into the injected metrics sink — one place, so every
+  // surface is instrumented uniformly. No-op when no metrics are wired.
+  async function execute(operationName, ctx = {}) {
+    const started = Date.now();
+    const result = await run(operationName, ctx);
+    metrics?.recordOp?.({ operation: operationName, role: ctx.role ?? 'readonly', outcome: result.error ? result.error.code : 'ok', ms: Date.now() - started });
+    return result;
+  }
+
+  async function run(operationName, { role = 'readonly', args = {}, correlationId, actor } = {}) {
     const op = getOperation(operationName);
     if (!op) {
       return envelope({ error: { code: 'UNKNOWN_OPERATION', message: `unknown operation ${operationName}` }, operation: operationName, correlationId });

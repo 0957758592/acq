@@ -2,7 +2,8 @@
 // Connects Mongo, builds the engine ctx + use-cases, wraps them in the single
 // command facade, and serves the REST surface. No I/O at import; main() runs
 // on direct execution or when a test calls it with injected env.
-import { createFacade } from '@acq/control';
+import { createFacade, createFacadeMetrics } from '@acq/control';
+import { createMetricsRegistry } from '@acq/core/observability/metrics';
 import { createMongoAuditLog } from '@acq/engine-infra';
 
 import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
@@ -37,7 +38,8 @@ export async function main({ env } = {}) {
   const audit = env.audit ?? createMongoAuditLog({ model: EngineAuditLog });
   // Per-operation yup validators (REQUIREM §2.2) run in the facade before every
   // handler — strict shape + reject-unknown, coded INVALID_ARGS on failure.
-  const facade = createFacade({ useCases, validators: buildValidators(), audit });
+  const metricsRegistry = createMetricsRegistry();
+  const facade = createFacade({ useCases, validators: buildValidators(), audit, metrics: createFacadeMetrics(metricsRegistry) });
 
   // SSE event source (Redis pub/sub) — one-way stream of domain events (§11.5).
   const eventSource = env.redisUrl
@@ -67,7 +69,7 @@ export async function main({ env } = {}) {
 
   const graphqlSchema = buildGraphqlSchema(facade);
   const a2a = { card: buildAgentCard({ baseUrl: env.baseUrl ?? '' }), task: handleA2aTask(facade, { role: 'brain' }) };
-  const app = createRestServer({ facade, tokens: env.tokens, logger, eventSource, webhookProcessor, mcpHandler, graphqlSchema, a2a });
+  const app = createRestServer({ facade, tokens: env.tokens, logger, eventSource, webhookProcessor, mcpHandler, graphqlSchema, a2a, metricsRegistry });
 
   const server = await new Promise((resolve) => {
     const s = app.listen(env.port, () => resolve(s));

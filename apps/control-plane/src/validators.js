@@ -40,6 +40,8 @@ const SCHEMAS = {
   'device.status': schema({ status: str, provider: str }),
   'device.selectors': schema({ platform: str.required() }),
   'device.selectors.set': schema({ platform: str.required(), selectors: obj.required(), updatedBy: str.nullable() }),
+  'compliance.export': schema({ accountId: str.required() }),
+  'compliance.erase': schema({ accountId: str.required(), identifier: str.nullable() }),
   // Devices
   'device.enroll': schema({ provider: str, providerDeviceId: str.required(), name: str, region: str, capacity: obj, status: str }),
   'device.queue.get': schema({ deviceId: str.required(), platform: str.required() }),

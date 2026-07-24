@@ -20,6 +20,7 @@ export function createRestServer({
   mcpHandler = null,
   graphqlSchema = null,
   a2a = null,
+  metricsRegistry = null,
   rateLimit = { max: 300, windowMs: 60_000 }
 } = {}) {
   const app = express();
@@ -30,6 +31,11 @@ export function createRestServer({
 
   // Health is unauthenticated (liveness).
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'control-plane' }));
+  // Observability: Prometheus metrics (TZ §15) — unauthenticated scrape target,
+  // facade op counters/errors/latency populated via createFacadeMetrics.
+  if (metricsRegistry) {
+    app.get('/metrics', (_req, res) => res.type('text/plain; version=0.0.4').send(metricsRegistry.render()));
+  }
 
   // A2A (agent-to-agent, TZ §11.3): public agent card for discovery + a
   // bearer-gated task endpoint routing through the facade.

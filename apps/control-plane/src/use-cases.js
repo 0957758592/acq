@@ -236,6 +236,25 @@ export function buildUseCases(ctx) {
     'reconcile.now': async (args = {}) => {
       const intents = await planForPlatform(ctx, { platform: args.platform, source: args.source });
       return { platform: args.platform, intents };
+    },
+
+    // ---- Compliance (GDPR export / erasure, TZ §14.7) ----------------------
+    'compliance.export': async (args = {}) => {
+      const accountId = require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED');
+      const [account] = await ctx.accountRepo.find({ _id: accountId });
+      if (!account) throw seam('ACCOUNT_NOT_FOUND', `account ${accountId} not found`);
+      const safe = { ...account }; // subject export — never include secret material
+      delete safe.secretRefs;
+      delete safe.credentials;
+      const scrapeResults = ctx.scrapeResultRepo?.listResults && account.identifier
+        ? await ctx.scrapeResultRepo.listResults({ 'data.handle': account.identifier }, { limit: 500 })
+        : [];
+      return { account: safe, scrapeResults };
+    },
+    'compliance.erase': async (args = {}) => {
+      if (!ctx.gdpr) throw seam('COMPLIANCE_UNAVAILABLE', 'gdpr service not wired');
+      const accountId = require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED');
+      return ctx.gdpr.deleteAccount(accountId, { identifier: args.identifier ?? null });
     }
   };
 }
