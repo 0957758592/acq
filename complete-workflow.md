@@ -373,7 +373,27 @@ curl -XPOST localhost:7500/v1/op/scrape.run \
 # → { tier:"browser", entities:[ { handle:"@ann", displayName:"Ann" }, … ] }
 curl -XPOST localhost:7500/v1/op/scrape.results -d '{"jobId":"<id>"}' ...
 ```
-Entities are keyed and de-duplicated; results persist as `EngineScrapeResult` and are available via RAG (`acq://…`) and the facade.
+Entities are keyed and de-duplicated; results persist as `EngineScrapeResult` (each stamped with its `target`) and are available via RAG (`acq://…`) and the facade.
+
+**Group content → intelligence (messages, participants, members).** For messengers (Telegram etc.) the normalizer turns raw group output into canonical entities:
+
+| targetType | entity | data | natural key |
+|---|---|---|---|
+| `messages` | `message` | `{ group, id, author, text, ts, replyToId }` | `platform:message:group:id` |
+| `participants` | `participant` | `{ group, handle, role }` | `platform:participant:group:handle` |
+| `members` | `member` | `{ group, handle, role }` | `platform:member:group:handle` |
+
+So one scrape gives you **the content** (each message's `text` — the questions/comments) **and who wrote it** (`author`); the **set of users who commented** is the distinct `author` across the messages, and `participants`/`members` give the full user roster. Everything persists idempotently (re-scraping the same group never duplicates — dedup by natural key) and is read back per group via `scrape.results {platform, type}` on any surface, then fed to the model / the `intelligence` package.
+
+```bash
+curl -XPOST localhost:7500/v1/op/scrape.run \
+  -d '{"platform":"telegram","targetType":"messages","target":"<group>"}' ...
+curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type":"message"}' ...
+# → messages with { author, text, group } ; distinct authors = the users who commented
+```
+*Verified live* (`scripts/scrape-telegram-live.mjs`, real Mongo + Docker REST): group messages (content + author) and participants normalize, persist, read back via `scrape.results`, yield the distinct commenters, and re-scraping is exactly-once.
+
+**Telegram extraction is a verify-by-fact seam.** The normalize → dedup → persist → retrieve pipeline above is fully real; what it needs is the Telegram-specific *raw extraction* that feeds it `rawItems`: a **web.telegram.org selector registry** (browser tier), on-device **Telegram UI-dump** selectors (device tier), or a **Telegram API (MTProto / Bot API) adapter** (`api` tier). The default selector registry is empty → an unconfigured platform fail-safes with a coded seam (`SCRAPE_TARGET_UNSUPPORTED`/`SCRAPE_TIER_UNAVAILABLE`) until you supply one. That extractor is where you plug in your Telegram access; the intelligence side downstream is done.
 
 ## 12. Procurement, generation, verification, personas, scoring
 
@@ -822,7 +842,27 @@ curl -XPOST localhost:7500/v1/op/scrape.run \
 # → { tier:"browser", entities:[ { handle:"@ann", displayName:"Ann" }, … ] }
 curl -XPOST localhost:7500/v1/op/scrape.results -d '{"jobId":"<id>"}' ...
 ```
-Сущности ключуются и дедуплицируются; результаты сохраняются как `EngineScrapeResult` и доступны через RAG (`acq://…`) и фасад.
+Сущности ключуются и дедуплицируются; результаты сохраняются как `EngineScrapeResult` (каждый со своим `target`) и доступны через RAG (`acq://…`) и фасад.
+
+**Контент группы → intelligence (messages, participants, members).** Для мессенджеров (Telegram и т.д.) нормализатор превращает сырой вывод группы в канонические сущности:
+
+| targetType | entity | data | натуральный ключ |
+|---|---|---|---|
+| `messages` | `message` | `{ group, id, author, text, ts, replyToId }` | `platform:message:group:id` |
+| `participants` | `participant` | `{ group, handle, role }` | `platform:participant:group:handle` |
+| `members` | `member` | `{ group, handle, role }` | `platform:member:group:handle` |
+
+То есть один скрап даёт **контент** (у каждого сообщения `text` — вопросы/комменты) **и кто его написал** (`author`); **множество юзеров, кто комментил** — это уникальные `author` по сообщениям, а `participants`/`members` дают полный ростер пользователей. Всё сохраняется идемпотентно (повторный скрап той же группы не дублирует — дедуп по натуральному ключу) и читается по группе через `scrape.results {platform, type}` на любом контуре, затем скармливается модели / пакету `intelligence`.
+
+```bash
+curl -XPOST localhost:7500/v1/op/scrape.run \
+  -d '{"platform":"telegram","targetType":"messages","target":"<group>"}' ...
+curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type":"message"}' ...
+# → сообщения с { author, text, group } ; уникальные author = юзеры, которые комментили
+```
+*Проверено вживую* (`scripts/scrape-telegram-live.mjs`, реальный Mongo + Docker REST): сообщения группы (контент + автор) и участники нормализуются, сохраняются, читаются через `scrape.results`, дают уникальных комментаторов, повторный скрап — exactly-once.
+
+**Извлечение из Telegram — шов verify-by-fact.** Конвейер normalize → dedup → persist → retrieve выше полностью реальный; ему нужно только Telegram-специфичное *сырое извлечение*, которое подаёт `rawItems`: **реестр селекторов web.telegram.org** (браузерный тир), on-device **UI-dump** селекторы Telegram (device-тир) или адаптер **Telegram API (MTProto / Bot API)** (`api`-тир). Дефолтный реестр селекторов пустой → ненастроенная платформа fail-safe’ит кодированным швом (`SCRAPE_TARGET_UNSUPPORTED`/`SCRAPE_TIER_UNAVAILABLE`), пока не дашь. Этот экстрактор — место, куда подключается твой доступ к Telegram; intelligence-часть ниже по потоку готова.
 
 ## 12. Закупка, генерация, верификация, персоны, скоринг
 
