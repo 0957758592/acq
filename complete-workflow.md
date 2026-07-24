@@ -403,9 +403,13 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
   curl -XPOST localhost:7500/v1/op/scrape.run \
     -d '{"platform":"telegram","targetType":"messages","target":"<group>","params":{"via":"bot-api"}}' ...
   ```
-- **MTProto / device UI-dump — seams.** A full MTProto client (whole history + full member lists) or on-device Telegram UI-dump remain verify-by-fact seams you plug in the same way.
+- **Telegram MTProto (mtproto tier) — OPT-IN, built.** Pass `params.via:'mtproto'` against a worker wired with a GramJS/telethon-class **client** (`api_id`/`api_hash` + a user session). Goes **beyond the Bot API**: `getMessages → the FULL message history`, `getParticipants → the FULL member roster` (not just admins). The map→normalize→persist path is real; the MTProto session is the verify-by-fact input (absent → `MTPROTO_CLIENT_UNAVAILABLE`/`SCRAPE_TIER_UNAVAILABLE`). Verified live end-to-end (`scripts/scrape-telegram-mtproto-live.mjs`).
+  ```bash
+  scrape.run {platform:'telegram', targetType:'messages', target:'<group>', params:{via:'mtproto', limit:1000}}
+  ```
+- **On-device UI-dump — seam.** Reading the Telegram app on a real device remains a verify-by-fact seam you plug in the same way.
 
-The default stays the web scraper; the Bot API is a parameter-selected tier; the intelligence side downstream is done in all cases.
+The default stays the web scraper; Bot API and MTProto are parameter-selected tiers (`params.via`); the intelligence side downstream is done in all cases.
 
 ## 12. Procurement, generation, verification, personas, scoring
 
@@ -889,9 +893,13 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
   curl -XPOST localhost:7500/v1/op/scrape.run \
     -d '{"platform":"telegram","targetType":"messages","target":"<group>","params":{"via":"bot-api"}}' ...
   ```
-- **MTProto / device UI-dump — швы.** Полноценный MTProto-клиент (вся история + полные списки участников) или on-device UI-dump Telegram остаются verify-by-fact швами, подключаются так же.
+- **Telegram MTProto (mtproto-тир) — ОПЦИЯ, реализовано.** Передаёшь `params.via:'mtproto'` против воркера с подключённым **клиентом** класса GramJS/telethon (`api_id`/`api_hash` + пользовательская сессия). Идёт **сверх Bot API**: `getMessages → ВСЯ история сообщений`, `getParticipants → ВЕСЬ ростер участников` (не только админы). Путь map→normalize→persist реальный; MTProto-сессия — verify-by-fact вход (нет → `MTPROTO_CLIENT_UNAVAILABLE`/`SCRAPE_TIER_UNAVAILABLE`). Проверено вживую end-to-end (`scripts/scrape-telegram-mtproto-live.mjs`).
+  ```bash
+  scrape.run {platform:'telegram', targetType:'messages', target:'<group>', params:{via:'mtproto', limit:1000}}
+  ```
+- **On-device UI-dump — шов.** Чтение приложения Telegram на реальном устройстве остаётся verify-by-fact швом, подключается так же.
 
-Дефолт остаётся веб-скрапером; Bot API — тир, выбираемый параметром; intelligence-часть ниже по потоку готова во всех случаях.
+Дефолт остаётся веб-скрапером; Bot API и MTProto — тиры, выбираемые параметром (`params.via`); intelligence-часть ниже по потоку готова во всех случаях.
 
 ## 12. Закупка, генерация, верификация, персоны, скоринг
 
