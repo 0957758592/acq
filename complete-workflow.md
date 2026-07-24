@@ -300,7 +300,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Inbound webhooks** (`POST /webhooks/inbound`) — HMAC-signed + replay-protected ingress from external systems.
 
-**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (scraped group content + commenters).
+**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (scraped group content + commenters), `acq://selectors` (on-device selector overrides).
 
 ## 8. Operation catalog
 
@@ -343,6 +343,8 @@ describeInstance(id) → startDevice(id) → createDirectController(id) → [ope
 **Multi-account occupancy (§5.11).** A device tracks `occupiedAccountIds`, `activeAccountCount`, and `occupancyMethod` (`root|vision|none`). `canDeviceAcceptAccount` enforces the subscription gate **and** the capacity cap (`DEVICE_CAPACITY_FULL`) — this is what lets Instagram pack 5/device while WhatsApp stays 1/device.
 
 **Verify-by-fact on device.** `bringOnline`/`runAction` compare `getCurrentPackage()` to the descriptor's `appPackage` (`foregroundMatches`). If the target app isn't actually in the foreground, the action is **not** confirmed → coded seam (`ACTION_NOT_CONFIRMED`), never a fake success.
+
+**On-device selector overrides (`device.selectors` / `device.selectors.set`).** The shared login/action/report runners drive the app off **selector text sets** (home/login markers, username/password field hints, submit texts, per-action trigger/confirm texts). Their built-in seeds are **unioned** with per-platform operator overrides tuned to the **live app build** — supplied and inspected via `device.selectors.set {platform, selectors}` / `device.selectors {platform}` on **every surface** (brain-callable), grounded via the `acq://selectors` RAG resource, and passed into the drivers as `opts.selectors`. So closing a `LOGIN_SCREEN_UNVERIFIED` / `ACTION_NOT_CONFIRMED` seam for a new build is a data change (set the right selectors), **not** a code change. Verified live across all surfaces (`scripts/selectors-surfaces-live.mjs`). The correct selector values for a specific build remain the verify-by-fact input you provide.
 
 ## 10. Proxy subsystem
 
@@ -790,7 +792,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Входящие вебхуки** (`POST /webhooks/inbound`) — HMAC-подпись + защита от повторов, приём событий от внешних систем.
 
-**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (контент групп + комментаторы).
+**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (контент групп + комментаторы), `acq://selectors` (on-device селекторы).
 
 ## 8. Каталог операций
 
@@ -833,6 +835,8 @@ describeInstance(id) → startDevice(id) → createDirectController(id) → [р�
 **Мультиаккаунтная occupancy (§5.11).** Устройство отслеживает `occupiedAccountIds`, `activeAccountCount` и `occupancyMethod` (`root|vision|none`). `canDeviceAcceptAccount` применяет гейт подписки **и** кап ёмкости (`DEVICE_CAPACITY_FULL`) — именно это позволяет Instagram паковать 5/устройство, а WhatsApp оставаться 1/устройство.
 
 **Verify-by-fact на устройстве.** `bringOnline`/`runAction` сравнивают `getCurrentPackage()` с `appPackage` дескриптора (`foregroundMatches`). Если целевого приложения нет на переднем плане, действие **не** подтверждается → кодированный шов (`ACTION_NOT_CONFIRMED`), никакого фейк-успеха.
+
+**On-device селекторы (`device.selectors` / `device.selectors.set`).** Общие login/action/report runner'ы ведут приложение по **наборам текстовых селекторов** (маркеры home/login, подсказки полей username/password, submit-тексты, per-action trigger/confirm тексты). Их встроенные seed'ы **юнионятся** с per-platform overrides оператора, настроенными под **живой билд** приложения — задаются и читаются через `device.selectors.set {platform, selectors}` / `device.selectors {platform}` на **всех контурах** (вызывается brain), заземляются через RAG-ресурс `acq://selectors`, прокидываются в драйверы как `opts.selectors`. То есть снять шов `LOGIN_SCREEN_UNVERIFIED` / `ACTION_NOT_CONFIRMED` под новый билд — это изменение **данных** (задать правильные селекторы), а **не** кода. Проверено вживую по всем контурам (`scripts/selectors-surfaces-live.mjs`). Правильные значения селекторов под конкретный билд остаются verify-by-fact входом, который даёшь ты.
 
 ## 10. Подсистема прокси
 
