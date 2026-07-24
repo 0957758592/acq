@@ -61,6 +61,15 @@ describe('createPlatformAutomationAdapter (generic, any platform)', () => {
     expect(seen[0].action).toEqual({ type: 'report', target: '+1555' });
   });
 
+  it('passes resolved on-device selector overrides into the driver call (opts.selectors)', async () => {
+    let seenOpts;
+    const driver = { runAction: async (_c, _a, _acc, opts) => { seenOpts = opts; return { ok: true }; } };
+    const selectorProvider = { forPlatform: async () => ({ actions: { report: { triggerTexts: ['Report abuse'] } } }) };
+    const adapter = createPlatformAutomationAdapter({ platform: 'telegram', provider: { createDirectController: () => ({}) }, secretResolver: { resolve: async (r) => r }, getAdapter: () => driver, capabilitiesOf: () => ({}), selectorProvider });
+    await adapter.runAction({ providerDeviceId: 'd', account: {}, opts: { actor: 'x' } }, { type: 'report', target: '+1' });
+    expect(seenOpts).toMatchObject({ actor: 'x', selectors: { actions: { report: { triggerTexts: ['Report abuse'] } } } });
+  });
+
   it('runAction fails safe with ACTION_METHOD_UNSUPPORTED when neither runAction nor the named method exists', async () => {
     const driver = { publish: async () => ({ ok: true }) }; // has publish, but we call follow
     const { adapter } = build({ driver });
