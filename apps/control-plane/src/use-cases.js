@@ -241,6 +241,11 @@ export function buildUseCases(ctx) {
 
     // ---- Observability (domain metrics read-model, TZ §15) ----------------
     'metrics.domain': async (args = {}) => ({ platforms: await domainSnapshot(ctx, { platform: args.platform }) }),
+    // Span-level traces (job → device-op → vendor-call), readable from any surface.
+    'trace.recent': async (args = {}) => {
+      if (!ctx.tracer?.recentSpans) throw seam('TRACER_UNAVAILABLE', 'tracer not wired');
+      return { spans: ctx.tracer.recentSpans({ traceId: args.traceId ?? null, limit: args.limit ?? 50 }) };
+    },
 
     // ---- Compliance (GDPR export / erasure, TZ §14.7) ----------------------
     'compliance.export': async (args = {}) => {

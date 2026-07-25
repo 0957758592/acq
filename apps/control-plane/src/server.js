@@ -4,6 +4,7 @@
 // on direct execution or when a test calls it with injected env.
 import { createFacade, createFacadeMetrics } from '@acq/control';
 import { createMetricsRegistry } from '@acq/core/observability/metrics';
+import { createTracer } from '@acq/core/observability/tracer';
 import { createMongoAuditLog } from '@acq/engine-infra';
 
 import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
@@ -42,7 +43,10 @@ export async function main({ env } = {}) {
   const metricsRegistry = createMetricsRegistry();
   // RAG acq://metrics reads the same domain read-model as the metrics.domain op.
   ctx.domainSnapshot = () => domainSnapshot(ctx, {});
-  const facade = createFacade({ useCases, validators: buildValidators(), audit, metrics: createFacadeMetrics(metricsRegistry) });
+  // Span-level tracing (TZ §15): spans stream to the structured logger and are
+  // kept in a bounded buffer readable via the trace.recent op on every surface.
+  ctx.tracer = createTracer({ sink: (span) => logger.info?.('span', span) });
+  const facade = createFacade({ useCases, validators: buildValidators(), audit, metrics: createFacadeMetrics(metricsRegistry), tracer: ctx.tracer });
 
   // SSE event source (Redis pub/sub) — one-way stream of domain events (§11.5).
   const eventSource = env.redisUrl

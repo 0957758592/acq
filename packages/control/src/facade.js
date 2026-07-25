@@ -18,13 +18,18 @@ function toError(err) {
   return { code: 'INTERNAL', message: 'internal error' };
 }
 
-export function createFacade({ useCases = {}, validators = {}, audit = null, metrics = null } = {}) {
-  // Observability (TZ §15): every execute() is timed and its outcome (ok or the
-  // coded error) recorded into the injected metrics sink — one place, so every
-  // surface is instrumented uniformly. No-op when no metrics are wired.
+export function createFacade({ useCases = {}, validators = {}, audit = null, metrics = null, tracer = null } = {}) {
+  // Observability (TZ §15): every execute() is timed, counted (ok or the coded
+  // error) AND opened as the ROOT SPAN of a trace whose id is the correlationId
+  // — one place, so every surface is instrumented uniformly and downstream
+  // job → device-op → vendor-call spans join the same trace. Both sinks are
+  // optional: with none wired the hot path is untouched.
   async function execute(operationName, ctx = {}) {
     const started = Date.now();
-    const result = await run(operationName, ctx);
+    const traceOpts = { traceId: ctx.correlationId, attributes: { operation: operationName, role: ctx.role ?? 'readonly' } };
+    const result = tracer?.withSpan
+      ? await tracer.withSpan(`op.${operationName}`, traceOpts, () => run(operationName, ctx))
+      : await run(operationName, ctx);
     metrics?.recordOp?.({ operation: operationName, role: ctx.role ?? 'readonly', outcome: result.error ? result.error.code : 'ok', ms: Date.now() - started });
     return result;
   }

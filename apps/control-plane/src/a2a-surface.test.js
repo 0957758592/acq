@@ -11,7 +11,7 @@ function facade() {
 describe('A2A surface', () => {
   it('agent card advertises every operation as a skill', () => {
     const card = buildAgentCard({ baseUrl: 'http://x' });
-    expect(card.skills.length).toBe(42);
+    expect(card.skills.length).toBe(43);
     expect(card.url).toBe('http://x/a2a');
     expect(card.skills.map((s) => s.id)).toContain('campaign.create');
   });

@@ -34,7 +34,7 @@ async function applyAuth({ auth, headers, url, secretResolver }) {
   throw domainError('SHOP_AUTH_KIND_UNSUPPORTED', `unsupported auth kind ${kind}`);
 }
 
-export function createShopHttpClient({ fetchImpl = globalThis.fetch, secretResolver, headers: baseHeaders = {}, breakerFactory = null } = {}) {
+export function createShopHttpClient({ fetchImpl = globalThis.fetch, secretResolver, headers: baseHeaders = {}, breakerFactory = null, tracer = null } = {}) {
   if (!fetchImpl) throw new Error('createShopHttpClient requires a fetch implementation');
   if (!secretResolver) throw new Error('createShopHttpClient requires a secretResolver');
 
@@ -53,7 +53,11 @@ export function createShopHttpClient({ fetchImpl = globalThis.fetch, secretResol
   return {
     async request(input) {
       const breaker = breakerFor(input?.url);
-      return breaker ? breaker.execute(() => send(input)) : send(input);
+      const call = () => (breaker ? breaker.execute(() => send(input)) : send(input));
+      // vendor-call span (TZ §15) — the leaf of job → device-op → vendor-call.
+      if (!tracer?.withSpan) return call();
+      let host; try { host = new URL(input?.url).host; } catch { host = 'unknown'; }
+      return tracer.withSpan('vendor.shopRequest', { traceId: input?.correlationId, attributes: { host, method: input?.method ?? 'GET' } }, call);
     }
   };
 

@@ -29,6 +29,7 @@ export function createPlatformAutomationAdapter({
   provider,
   secretResolver,
   selectorProvider = null,
+  tracer = null,
   getAdapter = getPlatformAdapter,
   capabilitiesOf = getPlatformCapabilities
 } = {}) {
@@ -64,6 +65,28 @@ export function createPlatformAutomationAdapter({
     if (!expectedPkg || typeof controller.getCurrentPackage !== 'function') return true;
     const foreground = await controller.getCurrentPackage().catch(() => '');
     return !foreground || foreground === expectedPkg;
+  }
+
+  // Generic dispatch: a driver exposes EITHER a uniform runAction(action) OR a
+  // named method per action type (report / publish / follow / like / …). Map
+  // action.type -> the driver method so EVERY platform's actions are reachable
+  // through the generic engine.action consumer (no TypeError, no whatsapp-only
+  // path). An unsupported action is an honest coded seam.
+  async function runActionImpl(ctx, action) {
+    const controller = controllerFor(ctx);
+    const method = typeof driver.runAction === 'function' ? 'runAction' : action?.type;
+    if (typeof driver[method] !== 'function') {
+      throw Object.assign(new Error(`ACTION_METHOD_UNSUPPORTED: ${platform} has no '${action?.type}' action`), { code: 'ACTION_METHOD_UNSUPPORTED' });
+    }
+    const result = await driver[method](controller, action, ctx.account ?? {}, await optsWithSelectors(ctx));
+    const normalized = { ...result, ok: Boolean(result?.ok), banned: result?.banned, checkpointed: result?.checkpointed };
+    // Verify-by-fact (§9.5): an action counts as done ONLY if the platform's own
+    // app was actually foreground — otherwise the driver acted on/read the wrong
+    // screen (or the app isn't installed) and the "success" is not real.
+    if (normalized.ok && !normalized.banned && !normalized.checkpointed && !(await foregroundMatches(controller))) {
+      return { ...normalized, ok: false, confirmed: false, reason: 'ACTION_NOT_CONFIRMED' };
+    }
+    return normalized;
   }
 
   // Verify-by-fact probe: run the driver health check, then confirm the app is
@@ -102,25 +125,16 @@ export function createPlatformAutomationAdapter({
     },
 
     async runAction(ctx, action) {
-      const controller = controllerFor(ctx);
-      // Generic dispatch: a driver exposes EITHER a uniform runAction(action) OR
-      // a named method per action type (report / publish / follow / like / …).
-      // Map action.type -> the driver method so EVERY platform's actions are
-      // reachable through the generic engine.action consumer (no TypeError, no
-      // whatsapp-only path). An unsupported action is an honest coded seam.
-      const method = typeof driver.runAction === 'function' ? 'runAction' : action?.type;
-      if (typeof driver[method] !== 'function') {
-        throw Object.assign(new Error(`ACTION_METHOD_UNSUPPORTED: ${platform} has no '${action?.type}' action`), { code: 'ACTION_METHOD_UNSUPPORTED' });
+      // device-op span (TZ §15): joins the operation's trace via correlationId,
+      // so job → device-op → vendor-call reads as one connected trace.
+      if (tracer?.withSpan) {
+        return tracer.withSpan(
+          'device.runAction',
+          { traceId: ctx.correlationId, attributes: { platform, action: action?.type, deviceId: ctx.providerDeviceId } },
+          () => runActionImpl(ctx, action)
+        );
       }
-      const result = await driver[method](controller, action, ctx.account ?? {}, await optsWithSelectors(ctx));
-      const normalized = { ...result, ok: Boolean(result?.ok), banned: result?.banned, checkpointed: result?.checkpointed };
-      // Verify-by-fact (§9.5): an action counts as done ONLY if the platform's own
-      // app was actually foreground — otherwise the driver acted on/read the wrong
-      // screen (or the app isn't installed) and the "success" is not real.
-      if (normalized.ok && !normalized.banned && !normalized.checkpointed && !(await foregroundMatches(controller))) {
-        return { ...normalized, ok: false, confirmed: false, reason: 'ACTION_NOT_CONFIRMED' };
-      }
-      return normalized;
+      return runActionImpl(ctx, action);
     },
 
     async warmup(ctx) {

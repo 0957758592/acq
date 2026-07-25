@@ -141,7 +141,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       : null);
   // Per-vendor circuit breaker (REQUIREM §9.1): a downed shop fast-fails with
   // CIRCUIT_OPEN instead of cascading; each host gets its own breaker.
-  const httpClient = D.httpClient ?? D.createShopHttpClient({ secretResolver, breakerFactory: () => D.createCircuitBreaker({ failureThreshold: env.breakerThreshold ?? 5, cooldownMs: env.breakerCooldownMs ?? 30_000 }) });
+  const httpClient = D.httpClient ?? D.createShopHttpClient({ secretResolver, tracer: D.tracer ?? null, breakerFactory: () => D.createCircuitBreaker({ failureThreshold: env.breakerThreshold ?? 5, cooldownMs: env.breakerCooldownMs ?? 30_000 }) });
   const expenseRecorder = D.expenseRecorder ?? D.createExpenseRecorder();
   // Shop ACCOUNT signup + confirmation (§6.3/§6.4): register at a shop via an
   // email identity (credentials as refs), confirm by reading the emailed code
@@ -181,7 +181,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   const automationFor =
     D.automationFor ??
     (provider
-      ? (platform) => D.createPlatformAutomationAdapter({ platform, provider, secretResolver, selectorProvider: selectorStore })
+      ? (platform) => D.createPlatformAutomationAdapter({ platform, provider, secretResolver, selectorProvider: selectorStore, tracer: D.tracer ?? null })
       : null);
 
   const activePlatforms = (env.platforms && env.platforms.length ? env.platforms : D.listPlatforms())
