@@ -49,6 +49,7 @@ export const OPERATIONS = [
   { name: 'scrape.run', mutating: true, roles: R.ops },
   { name: 'scrape.results', mutating: false, roles: R.all },
   { name: 'reconcile.now', mutating: true, roles: R.ops },
+  { name: 'metrics.domain', mutating: false, roles: R.all },
   { name: 'compliance.export', mutating: false, roles: R.admin },
   { name: 'compliance.erase', mutating: true, roles: R.admin }
 ];

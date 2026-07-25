@@ -40,6 +40,7 @@ export const SCHEMAS = {
   'device.status': schema({ status: str, provider: str }),
   'device.selectors': schema({ platform: str.required() }),
   'device.selectors.set': schema({ platform: str.required(), selectors: obj.required(), updatedBy: str.nullable() }),
+  'metrics.domain': schema({ platform: str }),
   'compliance.export': schema({ accountId: str.required() }),
   'compliance.erase': schema({ accountId: str.required(), identifier: str.nullable() }),
   // Devices

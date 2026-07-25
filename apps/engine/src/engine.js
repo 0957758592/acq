@@ -13,6 +13,7 @@ import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
 import { getRedis, disconnectRedis } from '@acq/core/db/redis';
 import { connectRabbitmq, disconnectRabbitmq } from '@acq/core/queue/rabbitmq';
 import { createMetricsRegistry } from '@acq/core/observability/metrics';
+import { createDomainMetrics } from '@acq/core/observability/domain-metrics';
 
 import { buildEngineContext } from './composition.js';
 import { planForPlatform } from './snapshot.js';
@@ -84,6 +85,9 @@ export async function main({ env } = {}) {
     reconcileTicks: registry.counter('acq_engine_reconcile_ticks_total', 'Reconcile ticks per platform'),
     intentsDispatched: registry.counter('acq_engine_intents_dispatched_total', 'Intents dispatched per platform')
   };
+  // Domain signals (TZ §15): pool depth, device occupancy/saturation, queue
+  // depth, ban share, purchase spend, captchas — same registry, one /metrics.
+  ctx.domainMetrics = createDomainMetrics(registry);
 
   // Register job consumers (DLQ-wrapped) so dispatched work is processed.
   registerConsumers(ctx);

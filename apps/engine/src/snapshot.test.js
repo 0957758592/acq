@@ -78,3 +78,23 @@ describe('projectSnapshot (real projection)', () => {
     expect(intents[0]).toEqual({ type: 'seen', devices: 1, campaigns: 1 });
   });
 });
+
+describe('planForPlatform — domain metrics hook (TZ §15)', () => {
+  it('records the projected snapshot into domain metrics on every plan (cron AND reconcile.now)', async () => {
+    const recorded = [];
+    const ctx = {
+      accountRepo: { find: async () => [], countAvailable: async () => 4 },
+      deviceModel: { find: () => ({ lean: async () => [] }) },
+      deviceQueueRepo: { find: async () => null },
+      campaignRepo: { listActiveCampaigns: async () => [] },
+      actionTaskRepo: { doneKeys: async () => [] },
+      capabilitiesOf: () => ({}),
+      config: {},
+      reconcile: () => [],
+      domainMetrics: { recordSnapshot: (s) => recorded.push(s) }
+    };
+    await planForPlatform(ctx, { platform: 'telegram' });
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({ platform: 'telegram', pool: { available: 4 } });
+  });
+});

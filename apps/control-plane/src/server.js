@@ -14,6 +14,7 @@ import { createStructuredLogger } from '@acq/logger';
 
 import { buildEngineContext } from '../../engine/src/composition.js';
 import { buildUseCases } from './use-cases.js';
+import { domainSnapshot } from '../../engine/src/services/domain-snapshot.js';
 import { createRestServer } from './rest-server.js';
 import { createRedisEventSource } from './redis-event-source.js';
 import { createWebhookProcessor } from './webhooks.js';
@@ -39,6 +40,8 @@ export async function main({ env } = {}) {
   // Per-operation yup validators (REQUIREM §2.2) run in the facade before every
   // handler — strict shape + reject-unknown, coded INVALID_ARGS on failure.
   const metricsRegistry = createMetricsRegistry();
+  // RAG acq://metrics reads the same domain read-model as the metrics.domain op.
+  ctx.domainSnapshot = () => domainSnapshot(ctx, {});
   const facade = createFacade({ useCases, validators: buildValidators(), audit, metrics: createFacadeMetrics(metricsRegistry) });
 
   // SSE event source (Redis pub/sub) — one-way stream of domain events (§11.5).

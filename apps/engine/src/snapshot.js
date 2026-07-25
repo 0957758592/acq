@@ -115,5 +115,9 @@ export async function projectSnapshot(ctx, { platform, source = 'purchase' } = {
 // Convenience: project + reconcile in one call.
 export async function planForPlatform(ctx, opts) {
   const snapshot = await projectSnapshot(ctx, opts);
+  // Domain observability (TZ §15): every plan — the cron reconciler AND an
+  // operator/brain `reconcile.now` — refreshes pool/occupancy/queue/ban metrics
+  // from the SAME read-model the planner uses, so metrics cannot drift.
+  ctx.domainMetrics?.recordSnapshot?.(snapshot);
   return ctx.reconcile(snapshot);
 }

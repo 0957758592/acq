@@ -6,6 +6,7 @@ import { probeAccount, runAccountAction } from '../../engine/src/services/accoun
 import { assertSupportedAction } from '../../engine/src/services/action-support.js';
 import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/src/services/proxy-ops.js';
 import { scanShop } from '../../engine/src/services/scan-shop.js';
+import { domainSnapshot } from '../../engine/src/services/domain-snapshot.js';
 import { scoreAccount, scoreTarget } from '@acq/intelligence';
 import { generatePersona } from '@acq/account-gen';
 
@@ -237,6 +238,9 @@ export function buildUseCases(ctx) {
       const intents = await planForPlatform(ctx, { platform: args.platform, source: args.source });
       return { platform: args.platform, intents };
     },
+
+    // ---- Observability (domain metrics read-model, TZ §15) ----------------
+    'metrics.domain': async (args = {}) => ({ platforms: await domainSnapshot(ctx, { platform: args.platform }) }),
 
     // ---- Compliance (GDPR export / erasure, TZ §14.7) ----------------------
     'compliance.export': async (args = {}) => {

@@ -45,6 +45,8 @@ export async function acquireHandler(ctx, { platform, source = 'purchase', quant
   const delivered = await adapter.fetchDelivered({ orderId });
   await ctx.accountRepo.insertAcquired(delivered, { orderId });
   await ctx.expenseRecorder?.record?.({ provider: shop.shopId, externalReference: orderId, amountUsdCents, platform });
+  // Cost signal (TZ §15): cumulative spend + accounts bought, per shop.
+  ctx.domainMetrics?.recordPurchase?.({ platform, shopId: shop.shopId, amountUsdCents, count: delivered.length });
   await ctx.eventBus?.publish?.(makeEvent('purchase.completed', { platform, shopId: shop.shopId, orderId, count: delivered.length }, { clock }));
   return { acquired: delivered.length, orderId, source: 'purchase' };
 }
