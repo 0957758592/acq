@@ -17,7 +17,7 @@ function mapFields(fieldMap = {}, values = {}) {
   return body;
 }
 
-export function createShopSignup({ shopRegistry, httpClient, secretResolver, emailCodeFetcherFactory, cookieSessionStore, clock = { now: () => new Date() } } = {}) {
+export function createShopSignup({ shopRegistry, httpClient, secretResolver, emailCodeFetcherFactory, cookieSessionStore, identityStore = null, clock = { now: () => new Date() } } = {}) {
   if (!shopRegistry?.get) throw new Error('createShopSignup requires a shopRegistry');
   if (!httpClient?.request) throw new Error('createShopSignup requires an httpClient');
   if (!secretResolver?.resolve) throw new Error('createShopSignup requires a secretResolver');
@@ -31,10 +31,33 @@ export function createShopSignup({ shopRegistry, httpClient, secretResolver, ema
   }
   const resolve = (ref) => (ref == null ? undefined : secretResolver.resolve(ref));
 
+  // `address` is the operator-friendly form: look the mailbox up in the identity
+  // store (ANY provider — gmail / outlook / custom IMAP) and use its stored refs
+  // + IMAP coordinates. Explicit refs still work unchanged, so existing callers
+  // and specs keep working (no duplication of the credential path).
+  async function identityFor({ address, emailRef, passwordRef, imapPasswordRef }) {
+    if (!address) return { emailRef, passwordRef, imapPasswordRef, imapHost: null, imapPort: null };
+    if (!identityStore?.credentialsFor) {
+      throw domainError('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'no email identity store wired');
+    }
+    const identity = await identityStore.credentialsFor(address);
+    return {
+      emailRef: identity.address,
+      passwordRef: passwordRef ?? identity.passwordRef,
+      imapPasswordRef: imapPasswordRef ?? identity.passwordRef,
+      imapHost: identity.imapHost || null,
+      imapPort: identity.imapPort ?? null
+    };
+  }
+
   return {
-    // Step 1 — create the account at the shop. Credentials come as refs.
-    async signup(shopId, { emailRef, passwordRef, usernameRef, extraFields = {} } = {}) {
+    // Step 1 — create the account at the shop. Credentials come as refs, or from
+    // a registered email identity via `address`.
+    async signup(shopId, { address = null, emailRef, passwordRef, usernameRef, extraFields = {} } = {}) {
       const { signup, baseUrl } = await loadSignupSpec(shopId);
+      const ident = await identityFor({ address, emailRef, passwordRef });
+      emailRef = ident.emailRef;
+      passwordRef = ident.passwordRef;
       const [email, password, username] = await Promise.all([resolve(emailRef), resolve(passwordRef), resolve(usernameRef)]);
       const ep = signup.register;
       const body = { ...mapFields(ep.fieldMap, { email, password, username }), ...extraFields };
@@ -43,12 +66,16 @@ export function createShopSignup({ shopRegistry, httpClient, secretResolver, ema
     },
 
     // Step 2 — read the emailed code (IMAP) and confirm; persist the session.
-    async confirm(shopId, { emailRef, imapPasswordRef, extraFields = {} } = {}) {
+    async confirm(shopId, { address = null, emailRef, imapPasswordRef, extraFields = {} } = {}) {
       const { signup, baseUrl } = await loadSignupSpec(shopId);
       if (!signup.confirm) throw domainError('SHOP_SIGNUP_UNCONFIGURED', `shop ${shopId} has no confirm step`);
       if (typeof emailCodeFetcherFactory !== 'function') throw domainError('SHOP_SIGNUP_PROVIDER_UNAVAILABLE', 'no email code fetcher wired');
+      const ident = await identityFor({ address, emailRef, imapPasswordRef });
+      emailRef = ident.emailRef;
+      imapPasswordRef = ident.imapPasswordRef;
       const [email, imapPassword] = await Promise.all([resolve(emailRef), resolve(imapPasswordRef)]);
-      const fetcher = emailCodeFetcherFactory({ email, password: imapPassword });
+      // Per-identity IMAP coordinates when the provider isn't auto-inferable.
+      const fetcher = emailCodeFetcherFactory({ email, password: imapPassword, host: ident.imapHost, port: ident.imapPort });
       const code = await fetcher.fetchLatestCode();
       if (!code) throw domainError('SHOP_SIGNUP_CODE_PENDING', `confirmation code for ${shopId} not arrived yet`);
 

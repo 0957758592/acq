@@ -26,9 +26,11 @@ import { EngineShopSpec } from '@acq/core/models/engine-shop-spec';
 import { EngineScrapeResult } from '@acq/core/models/engine-scrape-result';
 import { EngineProxy } from '@acq/core/models/engine-proxy';
 import { EngineSelectorOverride } from '@acq/core/models/engine-selector-override';
+import { EngineEmailIdentity } from '@acq/core/models/engine-email-identity';
 import { canDeviceAcceptAccount } from '@acq/core/utils/device-account-eligibility';
 import { claimRunningDeviceLease, releaseDeviceLease } from '@acq/core/services/device-lease';
 import { createSelectorStore } from './services/selector-store.js';
+import { createEmailIdentityStore } from './services/email-identity-store.js';
 import { getRedis } from '@acq/core/db/redis';
 import { createCircuitBreaker } from '@acq/core/reliability/circuit-breaker';
 import { createUnitOfWork } from '@acq/core/db/unit-of-work';
@@ -93,6 +95,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     EngineScrapeResult,
     EngineProxy,
     EngineSelectorOverride,
+    EngineEmailIdentity,
     canDeviceAcceptAccount,
     claimRunningDeviceLease,
     releaseDeviceLease,
@@ -163,6 +166,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   // email identity (credentials as refs), confirm by reading the emailed code
   // over IMAP (any Gmail login/app-password), persist the resulting session. The
   // per-shop signup endpoints live in the spec; absent -> honest coded seam.
+  // Operator-owned mailboxes used for shop signup/confirmation (ANY provider).
+  const emailIdentityStore = D.emailIdentityStore ?? createEmailIdentityStore({ model: D.EngineEmailIdentity });
   const cookieSessionStore =
     D.cookieSessionStore ?? (env.cookieSessionKey ? D.createEncryptedCookieSessionStore({ key: env.cookieSessionKey }) : null);
   const shopSignup =
@@ -171,7 +176,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       shopRegistry,
       httpClient,
       secretResolver,
-      emailCodeFetcherFactory: ({ email, password }) => new D.EmailCodeFetcher({ email, password }),
+      emailCodeFetcherFactory: ({ email, password, host, port }) => new D.EmailCodeFetcher({ email, password, host: host || undefined, port: port || undefined }),
+      identityStore: emailIdentityStore,
       cookieSessionStore
     });
   // Verification resource provider (SMS/email). Wired from an env-configured SMS
@@ -235,6 +241,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     shopRegistry,
     shopSignup,
     selectorStore,
+    emailIdentityStore,
     gdpr,
     llmFor,
     llmProviders,

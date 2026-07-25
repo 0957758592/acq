@@ -167,6 +167,27 @@ export function buildUseCases(ctx) {
       scanner: (args.provider || args.model) && ctx.scannerFor ? ctx.scannerFor({ provider: args.provider, model: args.model }) : null
     }),
 
+    // ---- Email identities (operator-owned mailboxes, ANY provider) ---------
+    'email.identity.register': async (args = {}) => {
+      if (!ctx.emailIdentityStore) throw seam('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'email identity store not wired');
+      return ctx.emailIdentityStore.register({
+        address: require$(args, 'address', 'ADDRESS_REQUIRED'),
+        provider: args.provider ?? 'custom',
+        imapHost: args.imapHost ?? '',
+        imapPort: args.imapPort ?? 993,
+        passwordRef: require$(args, 'passwordRef', 'PASSWORD_REF_REQUIRED'),
+        notes: args.notes ?? ''
+      });
+    },
+    'email.identity.list': async () => {
+      if (!ctx.emailIdentityStore) throw seam('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'email identity store not wired');
+      return { identities: await ctx.emailIdentityStore.list() };
+    },
+    'email.identity.disable': async (args = {}) => {
+      if (!ctx.emailIdentityStore) throw seam('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'email identity store not wired');
+      return ctx.emailIdentityStore.disable(require$(args, 'address', 'ADDRESS_REQUIRED'));
+    },
+
     // ---- AI backends (pluggable LLM providers + model picker) --------------
     'llm.providers': async () => {
       if (!ctx.llmProviders) throw seam('LLM_UNAVAILABLE', 'no LLM registry wired');
@@ -189,18 +210,23 @@ export function buildUseCases(ctx) {
     // never plaintext). Absent wiring is an honest coded seam.
     'shop.signup': async (args = {}) => {
       if (!ctx.shopSignup) throw seam('SHOP_SIGNUP_PROVIDER_UNAVAILABLE', 'shop signup is not wired');
+      // Either a registered identity  (any provider) OR explicit refs.
+      if (!args.address) { require$(args, 'emailRef', 'EMAIL_REF_REQUIRED'); require$(args, 'passwordRef', 'PASSWORD_REF_REQUIRED'); }
       return ctx.shopSignup.signup(require$(args, 'shopId', 'SHOP_ID_REQUIRED'), {
-        emailRef: require$(args, 'emailRef', 'EMAIL_REF_REQUIRED'),
-        passwordRef: require$(args, 'passwordRef', 'PASSWORD_REF_REQUIRED'),
+        address: args.address ?? null,
+        emailRef: args.emailRef,
+        passwordRef: args.passwordRef,
         usernameRef: args.usernameRef,
         extraFields: args.extraFields ?? {}
       });
     },
     'shop.signup.confirm': async (args = {}) => {
       if (!ctx.shopSignup) throw seam('SHOP_SIGNUP_PROVIDER_UNAVAILABLE', 'shop signup is not wired');
+      if (!args.address) { require$(args, 'emailRef', 'EMAIL_REF_REQUIRED'); require$(args, 'imapPasswordRef', 'IMAP_PASSWORD_REF_REQUIRED'); }
       return ctx.shopSignup.confirm(require$(args, 'shopId', 'SHOP_ID_REQUIRED'), {
-        emailRef: require$(args, 'emailRef', 'EMAIL_REF_REQUIRED'),
-        imapPasswordRef: require$(args, 'imapPasswordRef', 'IMAP_PASSWORD_REF_REQUIRED'),
+        address: args.address ?? null,
+        emailRef: args.emailRef,
+        imapPasswordRef: args.imapPasswordRef,
         extraFields: args.extraFields ?? {}
       });
     },
