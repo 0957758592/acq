@@ -42,6 +42,7 @@ export const SCHEMAS = {
   'device.selectors.set': schema({ platform: str.required(), selectors: obj.required(), updatedBy: str.nullable() }),
   'metrics.domain': schema({ platform: str }),
   'trace.recent': schema({ traceId: str, limit: num.integer().positive() }),
+  'alerts.status': schema({ platform: str }),
   'compliance.export': schema({ accountId: str.required() }),
   'compliance.erase': schema({ accountId: str.required(), identifier: str.nullable() }),
   // Devices

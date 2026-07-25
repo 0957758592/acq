@@ -46,7 +46,9 @@ export async function main({ env } = {}) {
   // Span-level tracing (TZ §15): spans stream to the structured logger and are
   // kept in a bounded buffer readable via the trace.recent op on every surface.
   ctx.tracer = createTracer({ sink: (span) => logger.info?.('span', span) });
-  const facade = createFacade({ useCases, validators: buildValidators(), audit, metrics: createFacadeMetrics(metricsRegistry), tracer: ctx.tracer });
+  const facadeMetrics = createFacadeMetrics(metricsRegistry);
+  ctx.facadeStats = facadeMetrics.stats; // error-budget input for alerts.status
+  const facade = createFacade({ useCases, validators: buildValidators(), audit, metrics: facadeMetrics, tracer: ctx.tracer });
 
   // SSE event source (Redis pub/sub) — one-way stream of domain events (§11.5).
   const eventSource = env.redisUrl

@@ -5,11 +5,21 @@ export function createFacadeMetrics(registry) {
   const ops = registry.counter('acq_facade_ops_total', 'facade operations by outcome');
   const errs = registry.counter('acq_facade_errors_total', 'facade operation errors');
   const latency = registry.counter('acq_facade_op_ms_total', 'cumulative facade op latency (ms)');
+  // In-process totals so the SLO evaluator can compute the error budget without
+  // scraping and re-parsing the Prometheus text exposition.
+  let total = 0;
+  let errors = 0;
+
   return {
     recordOp({ operation, role, outcome, ms }) {
       ops.inc({ operation, role, outcome });
-      if (outcome !== 'ok') errs.inc({ operation, outcome });
+      total += 1;
+      if (outcome !== 'ok') {
+        errs.inc({ operation, outcome });
+        errors += 1;
+      }
       latency.inc({ operation }, ms || 0);
-    }
+    },
+    stats: () => ({ total, errors })
   };
 }

@@ -7,6 +7,7 @@ import { assertSupportedAction } from '../../engine/src/services/action-support.
 import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/src/services/proxy-ops.js';
 import { scanShop } from '../../engine/src/services/scan-shop.js';
 import { domainSnapshot } from '../../engine/src/services/domain-snapshot.js';
+import { evaluateSlos } from '@acq/core/observability/slo';
 import { scoreAccount, scoreTarget } from '@acq/intelligence';
 import { generatePersona } from '@acq/account-gen';
 
@@ -241,6 +242,16 @@ export function buildUseCases(ctx) {
 
     // ---- Observability (domain metrics read-model, TZ §15) ----------------
     'metrics.domain': async (args = {}) => ({ platforms: await domainSnapshot(ctx, { platform: args.platform }) }),
+    // SLO alerts + error budget (TZ §15) — evaluated from the live domain
+    // snapshot + facade op stats; objectives come from config, never hardcoded.
+    'alerts.status': async (args = {}) => evaluateSlos({
+      platforms: await domainSnapshot(ctx, { platform: args.platform }),
+      dlq: ctx.dlqDepths ?? {},
+      spendUsdCents: ctx.spendUsdCents ?? 0,
+      ops: ctx.facadeStats?.() ?? { total: 0, errors: 0 },
+      circuits: ctx.circuitStates ?? {}
+    }, ctx.config?.slo ?? {}),
+
     // Span-level traces (job → device-op → vendor-call), readable from any surface.
     'trace.recent': async (args = {}) => {
       if (!ctx.tracer?.recentSpans) throw seam('TRACER_UNAVAILABLE', 'tracer not wired');

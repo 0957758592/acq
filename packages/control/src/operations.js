@@ -51,6 +51,7 @@ export const OPERATIONS = [
   { name: 'reconcile.now', mutating: true, roles: R.ops },
   { name: 'metrics.domain', mutating: false, roles: R.all },
   { name: 'trace.recent', mutating: false, roles: R.all },
+  { name: 'alerts.status', mutating: false, roles: R.all },
   { name: 'compliance.export', mutating: false, roles: R.admin },
   { name: 'compliance.erase', mutating: true, roles: R.admin }
 ];
