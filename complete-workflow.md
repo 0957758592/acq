@@ -116,6 +116,15 @@ curl -s -XPOST localhost:7500/v1/op/pool.status \
 # → {"data":{"platform":"instagram","total":..,"online":..}, "error":null, "meta":{...}}
 ```
 
+Ops endpoints on the control plane (unauthenticated, for tooling):
+
+```bash
+curl localhost:7500/health        # liveness
+curl localhost:7500/openapi.json  # contract-first OpenAPI 3.1 (generated from the 44-op catalog + validators)
+curl localhost:7500/metrics       # Prometheus: facade ops/errors/latency + domain signals
+curl localhost:7401/health        # engine (lists active platforms) — /metrics too
+```
+
 ## 4. Core model
 
 **Account lifecycle (8 states).** Every account is a state machine; transitions are the *only* way state changes:
