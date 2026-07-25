@@ -304,11 +304,11 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 ## 8. Operation catalog
 
-34 operations, RBAC per op (`readonly` < `operator` < `admin`).
+41 operations, RBAC per op (`readonly` < `operator` < `admin`).
 
 - **Pool:** `pool.status`, `pool.acquire`
-- **Procurement:** `shop.register`, `shop.scan`, `shop.approve`
-- **Devices:** `device.enroll`, `device.queue.get`
+- **Procurement:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
+- **Devices:** `device.enroll`, `device.queue.get`, `device.status`, `device.selectors`, `device.selectors.set`
 - **Campaigns:** `campaign.create`, `campaign.status`, `campaign.pause`, `campaign.resume`, `campaign.stop`
 - **Accounts:** `account.status`, `account.action`, `account.retire`, `account.cooldown`, `account.resume`, `account.reassign`, `account.refreshSession`, `account.probe`, `account.tag`, `account.bulk`
 - **Actions:** `action.retry`
@@ -318,6 +318,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Browser:** `browser.session.open`, `browser.session.liveView`
 - **Scraping:** `scrape.run`, `scrape.results`
 - **Control:** `reconcile.now`
+- **Compliance:** `compliance.export`, `compliance.erase`
 
 Every surface validates args with a **per-operation yup schema** (`.noUnknown(true)` → unknown fields rejected with coded `INVALID_ARGS`) before the facade runs.
 
@@ -798,11 +799,11 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 ## 8. Каталог операций
 
-34 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
+41 операция, RBAC на каждую (`readonly` < `operator` < `admin`).
 
 - **Пул:** `pool.status`, `pool.acquire`
-- **Закупка:** `shop.register`, `shop.scan`, `shop.approve`
-- **Устройства:** `device.enroll`, `device.queue.get`
+- **Закупка:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
+- **Устройства:** `device.enroll`, `device.queue.get`, `device.status`, `device.selectors`, `device.selectors.set`
 - **Кампании:** `campaign.create`, `campaign.status`, `campaign.pause`, `campaign.resume`, `campaign.stop`
 - **Аккаунты:** `account.status`, `account.action`, `account.retire`, `account.cooldown`, `account.resume`, `account.reassign`, `account.refreshSession`, `account.probe`, `account.tag`, `account.bulk`
 - **Действия:** `action.retry`
@@ -812,6 +813,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Браузер:** `browser.session.open`, `browser.session.liveView`
 - **Скрапинг:** `scrape.run`, `scrape.results`
 - **Управление:** `reconcile.now`
+- **Compliance:** `compliance.export`, `compliance.erase`
 
 Каждый контур валидирует аргументы **per-operation yup-схемой** (`.noUnknown(true)` → неизвестные поля отклоняются кодом `INVALID_ARGS`) до запуска фасада.
 
