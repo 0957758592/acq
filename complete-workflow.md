@@ -37,7 +37,7 @@ Supported platforms / Поддерживаемые платформы: **WhatsAp
 
 **Design guarantees.**
 - **Generic, not per-platform.** Every platform is a *descriptor* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Adding a platform = adding a descriptor + a thin driver, never forking the engine.
-- **One brain, many mouths.** A single **command facade** (44 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
+- **One brain, many mouths.** A single **command facade** (49 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
 - **Verify-by-fact.** The system never *pretends* an action worked. It reads the device/network to confirm (e.g. app in foreground, proxy actually routes). If it can't confirm, it returns a **coded seam** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) and reverts state — no fabricated success.
 - **Exactly-once & self-healing.** Idempotent jobs (unique keys + `$setOnInsert`), optimistic locking (version), a pure `reconcile(snapshot) → intents` planner, and automatic ban→replace.
 
@@ -269,7 +269,7 @@ curl -XPOST localhost:7500/v1/op/scoring.score \
   -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
 ```
 
-**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 44 operations; resources = RAG read-models:
+**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 49 operations; resources = RAG read-models:
 ```js
 const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
 await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
@@ -289,7 +289,7 @@ query($op:String!,$a:JSON){ op(operation:$op, args:$a){ data error } }
 # variables: { "op":"persona.generate", "a":{ "niche":"art","locale":"en" } }
 ```
 
-**A2A** (agent-to-agent) — `GET /.well-known/agent-card.json` (44 skills) + `POST /a2a` tasks:
+**A2A** (agent-to-agent) — `GET /.well-known/agent-card.json` (49 skills) + `POST /a2a` tasks:
 ```bash
 curl localhost:7500/.well-known/agent-card.json           # discover skills
 curl -XPOST localhost:7500/a2a -d '{"id":"a1","skill":"account.status","args":{"platform":"instagram"}}' ...
@@ -309,11 +309,11 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Inbound webhooks** (`POST /webhooks/inbound`) — HMAC-signed + replay-protected ingress from external systems.
 
-**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (scraped group content + commenters), `acq://selectors` (on-device selector overrides), `acq://metrics` (live domain metrics).
+**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (scraped group content + commenters), `acq://selectors` (on-device selector overrides), `acq://metrics` (live domain metrics), `acq://email-identities` (operator mailboxes, secrets stripped).
 
 ## 8. Operation catalog
 
-44 operations, RBAC per op (`readonly` < `operator` < `admin`).
+49 operations, RBAC per op (`readonly` < `operator` < `admin`).
 
 - **Pool:** `pool.status`, `pool.acquire`
 - **Procurement:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
@@ -327,6 +327,8 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Browser:** `browser.session.open`, `browser.session.liveView`
 - **Scraping:** `scrape.run`, `scrape.results`
 - **Control:** `reconcile.now`
+- **AI backends:** `llm.providers`, `llm.complete`
+- **Email identities:** `email.identity.register`, `email.identity.list`, `email.identity.disable`
 - **Observability:** `metrics.domain`, `trace.recent`, `alerts.status`
 - **Compliance:** `compliance.export`, `compliance.erase`
 
@@ -466,6 +468,34 @@ The default stays the web scraper; Bot API and MTProto are parameter-selected ti
   2. `shop.signup.confirm {shopId, emailRef, imapPasswordRef}` — reads the shop's verification code **straight from the mailbox over IMAP** (`EmailCodeFetcher` — works with any Gmail login/app-password), submits it to the shop's `signup.confirm` endpoint, and persists the resulting logged-in **cookie session** (`cookie:<shopId>`). Point the shop's `cookie-session` auth at that ref and `pool.acquire` works.
 
   The register/confirm endpoints + field maps live in the spec's `signup` section (per-shop, **verify-by-fact** — injected); the HTTP + IMAP mechanism is real. Absent config is an honest coded seam (`SHOP_SIGNUP_UNCONFIGURED` / `SHOP_SIGNUP_CODE_PENDING`), never a faked account. **Managed via every surface** (MCP · REST · gRPC · WS · GraphQL · A2A · CLI, brain-callable) — verified live end-to-end (`scripts/shop-signup-live.mjs`). Other confirmation methods (SMS, hosted temp-mail) plug into the same `VerificationResourceProvider` seam.
+- **Email identities — register the mailbox once, sign up by address.** Mailboxes you own are a first-class entity (**any provider**: gmail, outlook, yahoo, or a custom IMAP host — not Gmail-only):
+
+  | op | purpose |
+  |---|---|
+  | `email.identity.register {address, provider?, imapHost?, imapPort?, passwordRef, notes?}` | store a mailbox + its **secret ref** (a plaintext password is refused: `EMAIL_PASSWORD_REF_REQUIRED`) |
+  | `email.identity.list` | list identities — **secrets stripped** (`hasPasswordRef` only) |
+  | `email.identity.disable {address}` | retire an identity; further use fails `EMAIL_IDENTITY_DISABLED` |
+
+  With an identity registered, the shop flow needs **no inline credentials** — pass the address and the store supplies the refs + IMAP coordinates:
+  ```bash
+  curl -XPOST localhost:7500/v1/op/email.identity.register \
+    -d '{"address":"ops@yourdomain.tld","provider":"custom","imapHost":"imap.yourdomain.tld","passwordRef":"vault:ops-mail"}' ...
+  curl -XPOST localhost:7500/v1/op/shop.signup         -d '{"shopId":"myshop","address":"ops@yourdomain.tld"}' ...
+  curl -XPOST localhost:7500/v1/op/shop.signup.confirm -d '{"shopId":"myshop","address":"ops@yourdomain.tld"}' ...
+  curl -XPOST localhost:7500/v1/op/pool.acquire        -d '{"platform":"telegram","quantity":5,"shopId":"myshop"}' ...
+  ```
+  Explicit refs still work unchanged. Grounded for the brain via **`acq://email-identities`**; verified live across every surface (`scripts/ai-email-surfaces-live.mjs`). **The mailboxes themselves are ones you create and own** — the platform stores and uses them, it does not register mail accounts for you.
+- **Pluggable AI backends (`llm.providers` / `llm.complete`).** Every AI-using path (shop scan, and anything the brain drives) runs over a **provider registry** — one `complete()` contract, many vendors:
+
+  | provider | default model | notes |
+  |---|---|---|
+  | `openai` *(default)* | `gpt-5-codex` | GPT / Codex family |
+  | `anthropic` | `claude-opus-5` | Fable / Opus / Sonnet / Haiku |
+  | `google` | `gemini-2.5-pro` | Gemini family |
+  | `openrouter` | `openai/gpt-4o-mini` | multi-vendor gateway |
+  | `custom` | — | **any OpenAI-compatible endpoint** (self-hosted vLLM/Ollama/new vendor) via `baseUrl` |
+
+  Keys come from env per vendor (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `LLM_API_KEY`); `LLM_PROVIDER`/`LLM_MODEL` pick the default. **Any call may override provider *and* model**, e.g. `shop.scan {shopUrl, provider:'anthropic', model:'claude-fable-5'}` or `llm.complete {provider:'google', messages:[…]}`. An unconfigured vendor is an honest `LLM_PROVIDER_UNCONFIGURED`; a vendor failure is `LLM_REQUEST_FAILED` — never a fabricated completion. Adding a vendor is one registry entry (Open/Closed) — no branching elsewhere.
 - **Generation (create).** The GENERATE path is on-device native signup driven by the platform driver (`signupVia`: phone/native/google), fed by verification resources. Absent an injected generator, it is an honest seam — never a fake account.
 - **Verification.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` rent numbers / poll SMS codes over any declarative vendor (sms-activate/5sim/…). A pending code returns `null` (caller polls); an exhausted rental is `VERIFICATION_CODE_TIMEOUT` — never a fabricated code.
 - **Personas.** `persona.generate` produces coherent identities (name/handle/bio/niche/locale) to fill profiles.
@@ -542,7 +572,7 @@ Each seam is the system **refusing to fake success** — supply the input and th
 
 **Гарантии дизайна.**
 - **Генерично, не под одну платформу.** Каждая платформа — это *дескриптор* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Добавить платформу = добавить дескриптор + тонкий драйвер, не форкая движок.
-- **Один мозг, много ртов.** Единый **командный фасад** (44 операция) отдаётся через **10 контуров** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, входящие вебхуки, RAG). Везде один RBAC, одна валидация, один аудит.
+- **Один мозг, много ртов.** Единый **командный фасад** (49 операция) отдаётся через **10 контуров** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, входящие вебхуки, RAG). Везде один RBAC, одна валидация, один аудит.
 - **Verify-by-fact.** Система никогда не *делает вид*, что действие сработало. Она читает устройство/сеть для подтверждения (приложение на переднем плане, прокси реально маршрутизирует). Не может подтвердить — возвращает **кодированный шов** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) и откатывает состояние. Никакого выдуманного успеха.
 - **Exactly-once и самовосстановление.** Идемпотентные джобы (уникальные ключи + `$setOnInsert`), оптимистичные блокировки (version), чистый планировщик `reconcile(snapshot) → intents`, автоматический бан→замена.
 
@@ -625,7 +655,7 @@ Ops-эндпоинты control plane (без авторизации, для ту
 
 ```bash
 curl localhost:7500/health        # liveness
-curl localhost:7500/openapi.json  # contract-first OpenAPI 3.1 (генерируется из каталога 44 операций + валидаторов)
+curl localhost:7500/openapi.json  # contract-first OpenAPI 3.1 (генерируется из каталога 49 операций + валидаторов)
 curl localhost:7500/metrics       # Prometheus: ops/errors/latency фасада + доменные сигналы
 curl localhost:7401/health        # engine (список активных платформ) — там же /metrics
 ```
@@ -774,7 +804,7 @@ curl -XPOST localhost:7500/v1/op/scoring.score \
   -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
 ```
 
-**MCP** (для LLM-агентов / «мозга») — StreamableHTTP на `/mcp`, с сессиями. Tools = 44 операция; resources = RAG-read-модели:
+**MCP** (для LLM-агентов / «мозга») — StreamableHTTP на `/mcp`, с сессиями. Tools = 49 операция; resources = RAG-read-модели:
 ```js
 const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
 await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
@@ -814,11 +844,11 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Входящие вебхуки** (`POST /webhooks/inbound`) — HMAC-подпись + защита от повторов, приём событий от внешних систем.
 
-**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (контент групп + комментаторы), `acq://selectors` (on-device селекторы), `acq://metrics` (живые доменные метрики).
+**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (контент групп + комментаторы), `acq://selectors` (on-device селекторы), `acq://metrics` (живые доменные метрики), `acq://email-identities` (почтовые ящики оператора, секреты вырезаны).
 
 ## 8. Каталог операций
 
-44 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
+49 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
 
 - **Пул:** `pool.status`, `pool.acquire`
 - **Закупка:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
@@ -832,6 +862,8 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Браузер:** `browser.session.open`, `browser.session.liveView`
 - **Скрапинг:** `scrape.run`, `scrape.results`
 - **Управление:** `reconcile.now`
+- **AI backends:** `llm.providers`, `llm.complete`
+- **Email identities:** `email.identity.register`, `email.identity.list`, `email.identity.disable`
 - **Observability:** `metrics.domain`, `trace.recent`, `alerts.status`
 - **Compliance:** `compliance.export`, `compliance.erase`
 
@@ -971,6 +1003,34 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
   2. `shop.signup.confirm {shopId, emailRef, imapPasswordRef}` — читает код подтверждения магазина **прямо из почты по IMAP** (`EmailCodeFetcher` — работает с любым Gmail login/app-password), отправляет его на `signup.confirm` магазина и сохраняет полученную залогиненную **cookie-сессию** (`cookie:<shopId>`). Направляешь `cookie-session` auth магазина на эту ссылку — и `pool.acquire` работает.
 
   Эндпоинты register/confirm + маппинг полей живут в секции `signup` спеки (per-shop, **verify-by-fact** — инъектируются); HTTP + IMAP механизм реальный. Отсутствие конфига — честный шов (`SHOP_SIGNUP_UNCONFIGURED` / `SHOP_SIGNUP_CODE_PENDING`), никогда не фейк-аккаунт. **Управляется через все контуры** (MCP · REST · gRPC · WS · GraphQL · A2A · CLI, вызывается brain) — проверено вживую end-to-end (`scripts/shop-signup-live.mjs`). Другие методы подтверждения (SMS, hosted temp-mail) подключаются в тот же шов `VerificationResourceProvider`.
+- **Email-идентичности — зарегистрируй ящик один раз, дальше регистрация по адресу.** Твои почтовые ящики — first-class сущность (**любой провайдер**: gmail, outlook, yahoo или свой IMAP-хост — не только Gmail):
+
+  | операция | назначение |
+  |---|---|
+  | `email.identity.register {address, provider?, imapHost?, imapPort?, passwordRef, notes?}` | сохранить ящик + **ссылку на секрет** (открытый пароль отклоняется: `EMAIL_PASSWORD_REF_REQUIRED`) |
+  | `email.identity.list` | список идентичностей — **секреты вырезаны** (только `hasPasswordRef`) |
+  | `email.identity.disable {address}` | вывести идентичность из оборота; дальнейшее использование → `EMAIL_IDENTITY_DISABLED` |
+
+  С зарегистрированной идентичностью магазинному флоу **не нужны inline-креды** — передаёшь адрес, а хранилище само подставит refs и IMAP-координаты:
+  ```bash
+  curl -XPOST localhost:7500/v1/op/email.identity.register \
+    -d '{"address":"ops@yourdomain.tld","provider":"custom","imapHost":"imap.yourdomain.tld","passwordRef":"vault:ops-mail"}' ...
+  curl -XPOST localhost:7500/v1/op/shop.signup         -d '{"shopId":"myshop","address":"ops@yourdomain.tld"}' ...
+  curl -XPOST localhost:7500/v1/op/shop.signup.confirm -d '{"shopId":"myshop","address":"ops@yourdomain.tld"}' ...
+  curl -XPOST localhost:7500/v1/op/pool.acquire        -d '{"platform":"telegram","quantity":5,"shopId":"myshop"}' ...
+  ```
+  Явные refs продолжают работать без изменений. Для brain заземляется через **`acq://email-identities`**; проверено вживую по всем контурам (`scripts/ai-email-surfaces-live.mjs`). **Сами ящики — те, что создаёшь и которыми владеешь ты**: платформа их хранит и использует, но не регистрирует почтовые аккаунты за тебя.
+- **Подключаемые AI-бэкенды (`llm.providers` / `llm.complete`).** Любой путь с ИИ (скан магазина и всё, что ведёт brain) идёт через **реестр провайдеров** — один контракт `complete()`, много вендоров:
+
+  | провайдер | модель по умолчанию | примечание |
+  |---|---|---|
+  | `openai` *(дефолт)* | `gpt-5-codex` | семейство GPT / Codex |
+  | `anthropic` | `claude-opus-5` | Fable / Opus / Sonnet / Haiku |
+  | `google` | `gemini-2.5-pro` | семейство Gemini |
+  | `openrouter` | `openai/gpt-4o-mini` | мульти-вендорный шлюз |
+  | `custom` | — | **любой OpenAI-совместимый эндпоинт** (self-hosted vLLM/Ollama/новый вендор) через `baseUrl` |
+
+  Ключи — из env по вендорам (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `LLM_API_KEY`); `LLM_PROVIDER`/`LLM_MODEL` задают дефолт. **Любой вызов может переопределить и провайдера, и модель**, напр. `shop.scan {shopUrl, provider:'anthropic', model:'claude-fable-5'}` или `llm.complete {provider:'google', messages:[…]}`. Ненастроенный вендор — честный `LLM_PROVIDER_UNCONFIGURED`; сбой вендора — `LLM_REQUEST_FAILED`, никогда не выдуманный ответ. Добавить вендора = одна запись в реестре (Open/Closed), без ветвлений в остальном коде.
 - **Генерация (create).** Путь GENERATE — нативная регистрация на устройстве драйвером платформы (`signupVia`: phone/native/google), питается ресурсами верификации. Без инъектированного генератора — честный шов, никогда не фейк-аккаунт.
 - **Верификация.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` арендуют номера / поллят SMS-коды через любой декларативный вендор (sms-activate/5sim/…). Ожидающий код возвращает `null` (вызывающий поллит); исчерпанная аренда — `VERIFICATION_CODE_TIMEOUT`, никогда не выдуманный код.
 - **Персоны.** `persona.generate` производит связные личности (имя/хендл/био/ниша/локаль) для заполнения профилей.
@@ -980,7 +1040,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 
 Выбирай контур под своего вызывающего; все говорят с одним фасадом.
 
-- **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (44 операция), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
+- **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (49 операция), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
 - **Из бэкенда / микросервиса:** **gRPC** (`:7550`, `Control.Execute`) для throughput, или **REST** (`/v1/op/:operation`) для простоты. Bearer-токен → роль.
 - **Из другой агентной платформы:** **A2A** — забрать agent card, POST-ить таски. Стандартизованный agent-to-agent.
 - **Из браузера / UI операторов:** встроенная **операторская панель** (`:7600`) — тонкая WCAG/CSP SPA над фасадом с фичами accounts · pool · devices · campaigns · scrape · on-device селекторы (каждая — юнит-тестируемая чистая view-model); плюс **WebSocket** (`/v1/ws`) и **SSE** (`/v1/events`).
@@ -1017,4 +1077,4 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 
 ---
 
-*Generated for the `@acq` platform. Single facade · 44 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*
+*Generated for the `@acq` platform. Single facade · 49 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*
