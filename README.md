@@ -2,7 +2,7 @@
 
 Self-contained platform that **buys (or generates) accounts across many shops, provisions them onto cloud-phone devices from many providers, keeps a healthy pool, and runs mass actions and scraping at scale** — centralized, modular, horizontally scalable, controlled by an AI brain over MCP, or via CLI / HTTP-API / npm.
 
-**Status:** the **generic engine is live** — one platform-agnostic reconciler + queue consumers **self-drive every account type** off real Mongo state (acquire → enroll → assign → bring-online → campaigns → probe → replace), exposed through a **single command facade** (41 operations) over **10 control surfaces** (REST · MCP-over-HTTP · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · inbound webhooks · RAG) plus a WCAG/CSP **operator dashboard** SPA. **WhatsApp** (mass report) remains the most complete reference vertical. **1058 tests green** (200 suites) plus live suites against real Mongo/RabbitMQ/Redis, a **real headless-Chromium** browser-scrape run, and a full live verification of every surface + all 8 account types + the full account workflow on a **real cloud phone**. Unknown external facts (per-shop delivery/auth, on-device selectors, session-import, some platform logins) stay **verify-by-fact seams** — fail-safe coded errors, never guesses. The full design is the foundational spec **`docs/TZ.md`** (local design doc, kept out of git by design).
+**Status:** the **generic engine is live** — one platform-agnostic reconciler + queue consumers **self-drive every account type** off real Mongo state (acquire → enroll → assign → bring-online → campaigns → probe → replace), exposed through a **single command facade** (44 operations) over **10 control surfaces** (REST · MCP-over-HTTP · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · inbound webhooks · RAG) plus a WCAG/CSP **operator dashboard** SPA. **WhatsApp** (mass report) remains the most complete reference vertical. **1086 tests green** (205 suites) plus live suites against real Mongo/RabbitMQ/Redis, a **real headless-Chromium** browser-scrape run, and a full live verification of every surface + all 8 account types + the full account workflow on a **real cloud phone**. Unknown external facts (per-shop delivery/auth, on-device selectors, session-import, some platform logins) stay **verify-by-fact seams** — fail-safe coded errors, never guesses. The full design is the foundational spec **`docs/TZ.md`** (local design doc, kept out of git by design).
 
 > `docs/` (the TZ, runbook, plans, REQUIREM) is intentionally **not tracked in git** — it is the working design corpus. This README is the tracked entry point.
 >
@@ -74,7 +74,7 @@ All packages above exist today. The generic engine + control facade + hybrid scr
 ### Quickstart
 ```bash
 yarn install
-yarn test           # full unit suite (1058 tests, 200 suites) — proves self-containment
+yarn test           # full unit suite (1086 tests, 205 suites) — proves self-containment
 cp .env.example .env && $EDITOR .env
 
 # Run the whole platform in Docker (infra + engine + control-plane + scrape + dashboard):
@@ -99,7 +99,7 @@ Every operation is one application use-case exposed to all surfaces (no duplicat
 
 Maximal set of management gateways (all over one facade):
 - **AI / agent**: **MCP** (brain/Obsidian, stdio+http), **A2A** agent-to-agent, **LLM function/tool-calling**, **RAG** over read-models, autonomous reconciler-loop.
-- **Sync APIs**: **REST/HTTP** (contract-first OpenAPI, `{data,error,meta}`, versioned, idempotent), **gRPC**, **GraphQL**.
+- **Sync APIs**: **REST/HTTP** (contract-first OpenAPI — generated + served at `/openapi.json`, `{data,error,meta}`, versioned, idempotent), **gRPC**, **GraphQL**.
 - **Realtime/streaming**: **WebSocket**, **SSE**, **Webhooks** (in+out), **event-stream** (Kafka/AMQP/Redis Streams).
 - **Local/embed**: **CLI** (multi-server), **npm/SDK**.
 - **UI**: operator **dashboard** (feature-based SPA, WCAG/CSP) — REQUIREM §7.
@@ -139,7 +139,7 @@ Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, 
 
 Максимальный набор шлюзов управления (всё поверх одного фасада):
 - **ИИ / агенты**: **MCP** (мозг/Obsidian, stdio+http), **A2A** (agent-to-agent), **LLM function/tool-calling**, **RAG** поверх read-моделей, автономный reconciler-loop.
-- **Синхронные API**: **REST/HTTP** (contract-first OpenAPI, envelope `{data,error,meta}`, версионирование, идемпотентность), **gRPC**, **GraphQL**.
+- **Синхронные API**: **REST/HTTP** (contract-first OpenAPI — генерируется и отдаётся на `/openapi.json`, envelope `{data,error,meta}`, версионирование, идемпотентность), **gRPC**, **GraphQL**.
 - **Реалтайм/стриминг**: **WebSocket**, **SSE**, **Webhooks** (in+out), **event-stream** (Kafka/AMQP/Redis Streams).
 - **Локальные/встраиваемые**: **CLI** (multi-server), **npm/SDK**.
 - **UI**: панель оператора — **dashboard** (feature-based SPA, WCAG/CSP) — REQUIREM §7.

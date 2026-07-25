@@ -37,7 +37,7 @@ Supported platforms / Поддерживаемые платформы: **WhatsAp
 
 **Design guarantees.**
 - **Generic, not per-platform.** Every platform is a *descriptor* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Adding a platform = adding a descriptor + a thin driver, never forking the engine.
-- **One brain, many mouths.** A single **command facade** (41 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
+- **One brain, many mouths.** A single **command facade** (44 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
 - **Verify-by-fact.** The system never *pretends* an action worked. It reads the device/network to confirm (e.g. app in foreground, proxy actually routes). If it can't confirm, it returns a **coded seam** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) and reverts state — no fabricated success.
 - **Exactly-once & self-healing.** Idempotent jobs (unique keys + `$setOnInsert`), optimistic locking (version), a pure `reconcile(snapshot) → intents` planner, and automatic ban→replace.
 
@@ -260,7 +260,7 @@ curl -XPOST localhost:7500/v1/op/scoring.score \
   -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
 ```
 
-**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 41 operations; resources = RAG read-models:
+**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 44 operations; resources = RAG read-models:
 ```js
 const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
 await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
@@ -280,7 +280,7 @@ query($op:String!,$a:JSON){ op(operation:$op, args:$a){ data error } }
 # variables: { "op":"persona.generate", "a":{ "niche":"art","locale":"en" } }
 ```
 
-**A2A** (agent-to-agent) — `GET /.well-known/agent-card.json` (41 skills) + `POST /a2a` tasks:
+**A2A** (agent-to-agent) — `GET /.well-known/agent-card.json` (44 skills) + `POST /a2a` tasks:
 ```bash
 curl localhost:7500/.well-known/agent-card.json           # discover skills
 curl -XPOST localhost:7500/a2a -d '{"id":"a1","skill":"account.status","args":{"platform":"instagram"}}' ...
@@ -300,11 +300,11 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Inbound webhooks** (`POST /webhooks/inbound`) — HMAC-signed + replay-protected ingress from external systems.
 
-**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (scraped group content + commenters), `acq://selectors` (on-device selector overrides).
+**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (scraped group content + commenters), `acq://selectors` (on-device selector overrides), `acq://metrics` (live domain metrics).
 
 ## 8. Operation catalog
 
-41 operations, RBAC per op (`readonly` < `operator` < `admin`).
+44 operations, RBAC per op (`readonly` < `operator` < `admin`).
 
 - **Pool:** `pool.status`, `pool.acquire`
 - **Procurement:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
@@ -318,6 +318,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Browser:** `browser.session.open`, `browser.session.liveView`
 - **Scraping:** `scrape.run`, `scrape.results`
 - **Control:** `reconcile.now`
+- **Observability:** `metrics.domain`, `trace.recent`, `alerts.status`
 - **Compliance:** `compliance.export`, `compliance.erase`
 
 Every surface validates args with a **per-operation yup schema** (`.noUnknown(true)` → unknown fields rejected with coded `INVALID_ARGS`) before the facade runs.
@@ -482,7 +483,7 @@ Auth everywhere: a **bearer token** carrying a role (`readonly`/`operator`/`admi
 - **Audit:** every facade call is recorded (with secret redaction) and correlation-id traced end-to-end.
 - **Transport:** helmet + rate-limiting on HTTP; HMAC + replay protection on inbound webhooks; bearer auth on WS/gRPC/MCP.
 - **Multi-tenancy:** `tenantId` on every `Engine*` document; all queries tenant-scoped.
-- **Observability:** every facade op is timed and counted (outcome-labeled) into a Prometheus registry exposed at `/metrics` on the control-plane — one instrumentation point for all surfaces.
+- **Observability (TZ §15):** every facade op is timed, counted (outcome-labeled) and opened as the **root span** of a trace whose id is the correlationId — one instrumentation point for all surfaces. `/metrics` (Prometheus) carries facade counters **plus domain signals**: pool depth, device occupancy + **saturation**, queue depth, online/banned counts, **ban share**, purchase spend, scrape captchas, DLQ depth — fed from the reconciler's own snapshot so they cannot drift. Child spans cover **device.runAction** and **vendor.shopRequest** (job → device-op → vendor-call). Readable from every surface: `metrics.domain`, `trace.recent`, `alerts.status` + the `acq://metrics` RAG resource. **SLO alerting/error budget**: DLQ growth, online-share drop, ban share, device saturation, spend cap, vendor circuit open, error-budget burn.
 - **Compliance (GDPR):** `compliance.export` (subject data, secrets stripped) and `compliance.erase` (cascade-delete account + derived records, audited) — admin-gated facade ops on every surface.
 
 ## 15. Verify-by-fact seams
@@ -532,7 +533,7 @@ Each seam is the system **refusing to fake success** — supply the input and th
 
 **Гарантии дизайна.**
 - **Генерично, не под одну платформу.** Каждая платформа — это *дескриптор* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Добавить платформу = добавить дескриптор + тонкий драйвер, не форкая движок.
-- **Один мозг, много ртов.** Единый **командный фасад** (41 операция) отдаётся через **10 контуров** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, входящие вебхуки, RAG). Везде один RBAC, одна валидация, один аудит.
+- **Один мозг, много ртов.** Единый **командный фасад** (44 операция) отдаётся через **10 контуров** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, входящие вебхуки, RAG). Везде один RBAC, одна валидация, один аудит.
 - **Verify-by-fact.** Система никогда не *делает вид*, что действие сработало. Она читает устройство/сеть для подтверждения (приложение на переднем плане, прокси реально маршрутизирует). Не может подтвердить — возвращает **кодированный шов** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) и откатывает состояние. Никакого выдуманного успеха.
 - **Exactly-once и самовосстановление.** Идемпотентные джобы (уникальные ключи + `$setOnInsert`), оптимистичные блокировки (version), чистый планировщик `reconcile(snapshot) → intents`, автоматический бан→замена.
 
@@ -755,7 +756,7 @@ curl -XPOST localhost:7500/v1/op/scoring.score \
   -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
 ```
 
-**MCP** (для LLM-агентов / «мозга») — StreamableHTTP на `/mcp`, с сессиями. Tools = 41 операция; resources = RAG-read-модели:
+**MCP** (для LLM-агентов / «мозга») — StreamableHTTP на `/mcp`, с сессиями. Tools = 44 операция; resources = RAG-read-модели:
 ```js
 const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
 await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
@@ -795,11 +796,11 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Входящие вебхуки** (`POST /webhooks/inbound`) — HMAC-подпись + защита от повторов, приём событий от внешних систем.
 
-**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (контент групп + комментаторы), `acq://selectors` (on-device селекторы).
+**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (контент групп + комментаторы), `acq://selectors` (on-device селекторы), `acq://metrics` (живые доменные метрики).
 
 ## 8. Каталог операций
 
-41 операция, RBAC на каждую (`readonly` < `operator` < `admin`).
+44 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
 
 - **Пул:** `pool.status`, `pool.acquire`
 - **Закупка:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
@@ -813,6 +814,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Браузер:** `browser.session.open`, `browser.session.liveView`
 - **Скрапинг:** `scrape.run`, `scrape.results`
 - **Управление:** `reconcile.now`
+- **Observability:** `metrics.domain`, `trace.recent`, `alerts.status`
 - **Compliance:** `compliance.export`, `compliance.erase`
 
 Каждый контур валидирует аргументы **per-operation yup-схемой** (`.noUnknown(true)` → неизвестные поля отклоняются кодом `INVALID_ARGS`) до запуска фасада.
@@ -960,7 +962,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 
 Выбирай контур под своего вызывающего; все говорят с одним фасадом.
 
-- **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (41 операция), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
+- **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (44 операция), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
 - **Из бэкенда / микросервиса:** **gRPC** (`:7550`, `Control.Execute`) для throughput, или **REST** (`/v1/op/:operation`) для простоты. Bearer-токен → роль.
 - **Из другой агентной платформы:** **A2A** — забрать agent card, POST-ить таски. Стандартизованный agent-to-agent.
 - **Из браузера / UI операторов:** встроенная **операторская панель** (`:7600`) — тонкая WCAG/CSP SPA над фасадом с фичами accounts · pool · devices · campaigns · scrape · on-device селекторы (каждая — юнит-тестируемая чистая view-model); плюс **WebSocket** (`/v1/ws`) и **SSE** (`/v1/events`).
@@ -977,7 +979,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 - **Аудит:** каждый вызов фасада записывается (с редактированием секретов) и трассируется по correlation-id сквозняком.
 - **Транспорт:** helmet + rate-limiting на HTTP; HMAC + защита от повторов на входящих вебхуках; bearer-аутентификация на WS/gRPC/MCP.
 - **Мультитенантность:** `tenantId` на каждом документе `Engine*`; все запросы ограничены тенантом.
-- **Observability:** каждая операция фасада таймится и считается (с меткой outcome) в Prometheus-реестр, отдаётся на `/metrics` control-plane — одна точка инструментирования для всех контуров.
+- **Observability (TZ §15):** каждая операция фасада таймится, считается (метка outcome) и открывает **корневой span** трейса с id = correlationId — одна точка инструментирования для всех контуров. На `/metrics` (Prometheus) — счётчики фасада **плюс доменные сигналы**: глубина пула, occupancy + **saturation** устройств, глубина очередей, online/banned, **доля банов**, спенд закупок, капчи скрапа, глубина DLQ — питаются из снапшота реконсайлера, поэтому не расходятся. Дочерние span'ы: **device.runAction** и **vendor.shopRequest** (job → device-op → vendor-call). Читается со всех контуров: `metrics.domain`, `trace.recent`, `alerts.status` + RAG-ресурс `acq://metrics`. **SLO-алертинг/error-budget**: рост DLQ, падение online-доли, доля банов, saturation устройств, спенд-кап, circuit open вендора, прожиг бюджета ошибок.
 - **Compliance (GDPR):** `compliance.export` (данные субъекта, секреты вырезаны) и `compliance.erase` (каскадное удаление аккаунта + производных, с аудитом) — admin-операции фасада на всех контурах.
 
 ## 15. Швы verify-by-fact
@@ -997,4 +999,4 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 
 ---
 
-*Generated for the `@acq` platform. Single facade · 41 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*
+*Generated for the `@acq` platform. Single facade · 44 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*
