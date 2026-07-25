@@ -37,7 +37,13 @@ export function createBrowserProvider({
     }
     if (!browserPromise) {
       const args = debugPort ? [`--remote-debugging-port=${debugPort}`] : [];
-      browserPromise = engine.launch({ headless, args, ...launchOptions });
+      // A Chromium LAUNCH failure (binary missing / sandbox / env) is a
+      // verify-by-fact seam, not a leaked INTERNAL: surface a coded error and
+      // reset so a later call can retry once the engine is available.
+      browserPromise = Promise.resolve(engine.launch({ headless, args, ...launchOptions })).catch((err) => {
+        browserPromise = null;
+        throw domainError('BROWSER_ENGINE_UNAVAILABLE', `chromium failed to launch: ${err.message}`);
+      });
     }
     return browserPromise;
   }

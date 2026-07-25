@@ -35,6 +35,12 @@ function fakeEngine() {
 }
 
 describe('createBrowserProvider (real session-based, Puppeteer + CDP)', () => {
+  it('maps a Chromium LAUNCH failure to a coded seam (BROWSER_ENGINE_UNAVAILABLE), not a leaked INTERNAL', async () => {
+    const puppeteer = { launch: async () => { throw new Error("Executable doesn't exist"); } };
+    const provider = createBrowserProvider({ puppeteer, maxConcurrent: 1 });
+    await expect(provider.createSession({})).rejects.toMatchObject({ code: 'BROWSER_ENGINE_UNAVAILABLE' });
+  });
+
   it('createSession opens an anti-detect context (proxy + UA) and returns a session id, pool-gated', async () => {
     const { puppeteer, log } = fakeEngine();
     const provider = createBrowserProvider({ puppeteer, maxConcurrent: 1 });
