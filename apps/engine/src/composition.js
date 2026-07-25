@@ -31,6 +31,7 @@ import { claimRunningDeviceLease, releaseDeviceLease } from '@acq/core/services/
 import { createSelectorStore } from './services/selector-store.js';
 import { getRedis } from '@acq/core/db/redis';
 import { createCircuitBreaker } from '@acq/core/reliability/circuit-breaker';
+import { createUnitOfWork } from '@acq/core/db/unit-of-work';
 import { createStructuredLogger } from '@acq/logger';
 
 // Minimal env-backed secret resolver: `env:NAME` refs read process.env; any
@@ -177,7 +178,9 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   // selectors for a live app build via device.selectors.*; the adapter resolves
   // them per platform and passes them into driver calls (opts.selectors).
   const selectorStore = D.selectorStore ?? createSelectorStore({ model: D.EngineSelectorOverride });
-  const gdpr = D.gdpr ?? D.createGdprService({ accountModel: D.EngineAccount, actionTaskModel: D.EngineActionTask, scrapeResultModel: D.EngineScrapeResult });
+  // Explicit transaction boundary for the GDPR cascade (REQUIREM §2.5).
+  const unitOfWork = D.unitOfWork ?? (D.EngineAccount?.db?.startSession ? createUnitOfWork({ connection: D.EngineAccount.db, logger }) : null);
+  const gdpr = D.gdpr ?? D.createGdprService({ accountModel: D.EngineAccount, actionTaskModel: D.EngineActionTask, scrapeResultModel: D.EngineScrapeResult, unitOfWork });
   const automationFor =
     D.automationFor ??
     (provider

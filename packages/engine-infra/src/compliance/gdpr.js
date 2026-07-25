@@ -6,12 +6,24 @@ export function createGdprService({
   actionTaskModel,
   proxyAssignmentModel = null,
   scrapeResultModel = null,
-  audit = null
+  audit = null,
+  unitOfWork = null
 } = {}) {
   if (!accountModel) throw new Error('createGdprService requires an account model');
 
   return {
     async deleteAccount(accountId, { tenantId = 'default', identifier = null, actor = null } = {}) {
+      // Explicit transaction boundary (REQUIREM §2.5): the erasure cascade is one
+      // unit of work — all collections or none (degrades honestly on standalone).
+      if (unitOfWork?.withTransaction) {
+        const { result, transactional } = await unitOfWork.withTransaction(() => eraseCascade(accountId, { tenantId, identifier, actor }));
+        return { ...result, transactional };
+      }
+      return eraseCascade(accountId, { tenantId, identifier, actor });
+    }
+  };
+
+  async function eraseCascade(accountId, { tenantId = 'default', identifier = null, actor = null } = {}) {
       const scope = { _id: accountId, tenantId };
       const account = await accountModel.deleteOne(scope);
       const actionTasks = actionTaskModel
@@ -36,6 +48,5 @@ export function createGdprService({
         await audit.record({ operation: 'gdpr.deleteAccount', subjectId: accountId, tenantId, actor, deleted });
       }
       return { deleted };
-    }
-  };
+  }
 }
