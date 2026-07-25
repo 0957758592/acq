@@ -49,6 +49,8 @@ export const OPERATIONS = [
   { name: 'scrape.run', mutating: true, roles: R.ops },
   { name: 'scrape.results', mutating: false, roles: R.all },
   { name: 'reconcile.now', mutating: true, roles: R.ops },
+  { name: 'llm.providers', mutating: false, roles: R.all },
+  { name: 'llm.complete', mutating: false, roles: R.ops },
   { name: 'metrics.domain', mutating: false, roles: R.all },
   { name: 'trace.recent', mutating: false, roles: R.all },
   { name: 'alerts.status', mutating: false, roles: R.all },

@@ -159,7 +159,32 @@ export function buildUseCases(ctx) {
       if (!doc) throw Object.assign(new Error('SHOP_NOT_FOUND: shop not found'), { code: 'SHOP_NOT_FOUND' });
       return { shopId: doc.shopId, verified: doc.verified };
     },
-    'shop.scan': async (args = {}) => scanShop(ctx, { shopUrl: require$(args, 'shopUrl', 'SHOP_URL_REQUIRED'), dryRun: Boolean(args.dryRun) }),
+    // The AI backend is selectable per call: pass provider/model to scan with a
+    // different vendor (openai | anthropic | google | openrouter | custom).
+    'shop.scan': async (args = {}) => scanShop(ctx, {
+      shopUrl: require$(args, 'shopUrl', 'SHOP_URL_REQUIRED'),
+      dryRun: Boolean(args.dryRun),
+      scanner: (args.provider || args.model) && ctx.scannerFor ? ctx.scannerFor({ provider: args.provider, model: args.model }) : null
+    }),
+
+    // ---- AI backends (pluggable LLM providers + model picker) --------------
+    'llm.providers': async () => {
+      if (!ctx.llmProviders) throw seam('LLM_UNAVAILABLE', 'no LLM registry wired');
+      return { providers: ctx.llmProviders(), default: ctx.defaultLlmProvider ?? null };
+    },
+    // Run a completion through ANY configured vendor/model — the platform's own
+    // AI entry point, usable by the brain and every surface alike.
+    'llm.complete': async (args = {}) => {
+      if (!ctx.llmFor) throw seam('LLM_UNAVAILABLE', 'no LLM registry wired');
+      const client = ctx.llmFor({ provider: args.provider, model: args.model });
+      const out = await client.complete({
+        messages: require$(args, 'messages', 'MESSAGES_REQUIRED'),
+        temperature: args.temperature ?? 0.7,
+        maxTokens: args.maxTokens ?? null,
+        responseFormat: args.responseFormat ?? null
+      });
+      return { provider: out.provider, model: out.model, content: out.content };
+    },
     // Register AN ACCOUNT at a shop via an email identity (credentials are REFS,
     // never plaintext). Absent wiring is an honest coded seam.
     'shop.signup': async (args = {}) => {

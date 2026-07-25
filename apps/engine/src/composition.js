@@ -13,7 +13,7 @@ import {
 import { reconcile } from '@acq/engine-domain';
 import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner, createShopSignup, createEncryptedCookieSessionStore } from '@acq/procurement';
 import { createBrowserProvider } from '@acq/browser';
-import { createOpenRouterClient, EmailCodeFetcher } from '@acq/integrations';
+import { createOpenRouterClient, createLlmClient, listLlmProviders, EmailCodeFetcher } from '@acq/integrations';
 import { createVerificationResourceProvider, createHttpSmsVendor } from '@acq/account-gen';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
 import { createDeviceProvider } from '@acq/device-control';
@@ -75,6 +75,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createEncryptedCookieSessionStore,
     EmailCodeFetcher,
     createOpenRouterClient,
+    createLlmClient,
+    listLlmProviders,
     createVerificationResourceProvider,
     createHttpSmsVendor,
     createBrowserProvider,
@@ -125,20 +127,33 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   // AI shop scanner (TZ §6.3 SCAN): reads shop pages via the browser + an LLM to
   // PROPOSE a spec. Wired only when an LLM key is present; absent -> shop.scan is
   // an honest seam (SHOP_SCANNER_UNAVAILABLE). AI proposes; validation is by-fact.
+  // Pluggable AI backends: per-provider keys (openai default, anthropic, google,
+  // openrouter, custom). `llmFor({provider, model})` mints a client for ANY of
+  // them, so every AI-using subsystem — and any surface passing provider/model —
+  // can pick the vendor and model at call time. No provider is hardcoded.
+  const llmKeys = D.llmKeys ?? env.llmKeys ?? (env.llmApiKey ? { [env.llmProvider ?? 'openai']: env.llmApiKey } : {});
+  const defaultLlmProvider = env.llmProvider ?? (Object.keys(llmKeys)[0] ?? 'openai');
+  const llmFor = D.llmFor ?? (({ provider = defaultLlmProvider, model = env.llmModel ?? null, baseUrl = env.llmBaseUrl ?? null } = {}) => {
+    const apiKey = llmKeys[provider];
+    if (!apiKey) throw Object.assign(new Error(`LLM_PROVIDER_UNCONFIGURED: no API key for '${provider}'`), { code: 'LLM_PROVIDER_UNCONFIGURED' });
+    return D.createLlmClient({ provider, apiKey, model, baseUrl });
+  });
+  const llmProviders = () => D.listLlmProviders({ configured: llmKeys });
+  const fetchShopText = async ({ shopUrl }) => {
+    const { sessionId } = await browserProvider.createSession({});
+    try {
+      return await browserProvider.extract(sessionId, { url: shopUrl, pageFunction: () => document.body.innerText });
+    } finally {
+      await browserProvider.close(sessionId);
+    }
+  };
+  // Build a scanner bound to a specific vendor/model for a single call.
+  const scannerFor = D.scannerFor ?? (({ provider, model } = {}) => D.createLlmShopScanner({ llmClient: llmFor({ provider, model }), fetchShopText }));
+
   const shopScanner =
     D.shopScanner ??
-    (env.llmApiKey
-      ? D.createLlmShopScanner({
-          llmClient: D.createOpenRouterClient({ apiKey: env.llmApiKey, model: env.llmModel }),
-          fetchShopText: async ({ shopUrl }) => {
-            const { sessionId } = await browserProvider.createSession({});
-            try {
-              return await browserProvider.extract(sessionId, { url: shopUrl, pageFunction: () => document.body.innerText });
-            } finally {
-              await browserProvider.close(sessionId);
-            }
-          }
-        })
+    (Object.keys(llmKeys).length
+      ? D.createLlmShopScanner({ llmClient: llmFor({}), fetchShopText })
       : null);
   // Per-vendor circuit breaker (REQUIREM §9.1): a downed shop fast-fails with
   // CIRCUIT_OPEN instead of cascading; each host gets its own breaker.
@@ -221,6 +236,10 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     shopSignup,
     selectorStore,
     gdpr,
+    llmFor,
+    llmProviders,
+    scannerFor,
+    defaultLlmProvider,
     httpClient,
     compileShopAdapter: D.compileShopAdapter,
     expenseRecorder,

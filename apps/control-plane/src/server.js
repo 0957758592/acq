@@ -34,7 +34,7 @@ export async function main({ env } = {}) {
   // Optional RabbitMQ: enables scrape.run to enqueue real engine.scrape jobs.
   const rabbit = env.rabbitUrl ? await connectRabbitmq(env.rabbitUrl).then(() => true).catch(() => false) : false;
   const dispatchScrape = rabbit ? async (job) => { await publishJson('engine.scrape', job); return null; } : null;
-  const ctx = buildEngineContext({ env: { platforms: env.platforms }, deps: { dispatchScrape } });
+  const ctx = buildEngineContext({ env: { platforms: env.platforms, llmKeys: env.llmKeys, llmProvider: env.llmProvider, llmModel: env.llmModel, llmBaseUrl: env.llmBaseUrl }, deps: { dispatchScrape } });
   const useCases = buildUseCases(ctx);
   // Immutable audit trail for every mutating command (TZ §14.7).
   const audit = env.audit ?? createMongoAuditLog({ model: EngineAuditLog });
@@ -116,6 +116,20 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
       redisUrl: process.env.REDIS_URL,
       rabbitUrl: process.env.RABBITMQ_URL,
       webhookSecret: process.env.WEBHOOK_SECRET,
+      // Pluggable AI backends (one key per vendor). LLM_PROVIDER picks the
+      // default; any surface may still choose provider/model per request.
+      llmKeys: Object.fromEntries(
+        Object.entries({
+          openai: process.env.OPENAI_API_KEY,
+          anthropic: process.env.ANTHROPIC_API_KEY,
+          google: process.env.GOOGLE_API_KEY,
+          openrouter: process.env.OPENROUTER_API_KEY,
+          custom: process.env.LLM_API_KEY
+        }).filter(([, value]) => Boolean(value))
+      ),
+      llmProvider: process.env.LLM_PROVIDER || undefined,
+      llmModel: process.env.LLM_MODEL || undefined,
+      llmBaseUrl: process.env.LLM_BASE_URL || undefined,
       port: Number(process.env.CONTROL_PORT || 7500),
       grpcPort: Number(process.env.GRPC_PORT || 7550),
       tokens

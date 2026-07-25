@@ -6,11 +6,12 @@ import { domainError } from '@acq/engine-domain';
 // APPROVE (flip verified) stays a separate human/admin step (shop.approve). The
 // scanner is injected; without it this is an honest coded seam. Junk specs are
 // rejected by validateShopSpec and never registered.
-export async function scanShop(ctx, { shopUrl, dryRun = false } = {}) {
-  if (!ctx.shopScanner) throw domainError('SHOP_SCANNER_UNAVAILABLE', 'no shop scanner wired (LLM required)');
+export async function scanShop(ctx, { shopUrl, dryRun = false, scanner = null } = {}) {
+  const shopScanner = scanner ?? ctx.shopScanner;
+  if (!shopScanner) throw domainError('SHOP_SCANNER_UNAVAILABLE', 'no shop scanner wired (LLM required)');
   if (!shopUrl) throw domainError('SHOP_URL_REQUIRED', 'shopUrl is required');
 
-  const draft = await ctx.shopScanner.propose({ shopUrl });
+  const draft = await shopScanner.propose({ shopUrl });
   const validated = validateShopSpec(draft); // throws SHOP_SPEC_INVALID on bad shape
 
   let dryRunResult = null;
