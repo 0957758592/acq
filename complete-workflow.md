@@ -621,6 +621,15 @@ curl -s -XPOST localhost:7500/v1/op/pool.status \
 # → {"data":{"platform":"instagram","total":..,"online":..}, "error":null, "meta":{...}}
 ```
 
+Ops-эндпоинты control plane (без авторизации, для тулинга):
+
+```bash
+curl localhost:7500/health        # liveness
+curl localhost:7500/openapi.json  # contract-first OpenAPI 3.1 (генерируется из каталога 44 операций + валидаторов)
+curl localhost:7500/metrics       # Prometheus: ops/errors/latency фасада + доменные сигналы
+curl localhost:7401/health        # engine (список активных платформ) — там же /metrics
+```
+
 ## 4. Базовая модель
 
 **Жизненный цикл аккаунта (8 состояний).** Каждый аккаунт — машина состояний; переходы — *единственный* способ поменять состояние:
