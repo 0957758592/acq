@@ -34,12 +34,30 @@ async function applyAuth({ auth, headers, url, secretResolver }) {
   throw domainError('SHOP_AUTH_KIND_UNSUPPORTED', `unsupported auth kind ${kind}`);
 }
 
-export function createShopHttpClient({ fetchImpl = globalThis.fetch, secretResolver, headers: baseHeaders = {} } = {}) {
+export function createShopHttpClient({ fetchImpl = globalThis.fetch, secretResolver, headers: baseHeaders = {}, breakerFactory = null } = {}) {
   if (!fetchImpl) throw new Error('createShopHttpClient requires a fetch implementation');
   if (!secretResolver) throw new Error('createShopHttpClient requires a secretResolver');
 
+  // Circuit breaker per VENDOR HOST (REQUIREM §9.1): a downed shop fast-fails
+  // with CIRCUIT_OPEN instead of cascading, and never trips a different shop.
+  // The breaker is injected (port) so this package stays infrastructure-free.
+  const breakers = new Map();
+  function breakerFor(url) {
+    if (!breakerFactory) return null;
+    let host;
+    try { host = new URL(url).host; } catch { host = String(url); }
+    if (!breakers.has(host)) breakers.set(host, breakerFactory(host));
+    return breakers.get(host);
+  }
+
   return {
-    async request({ method = 'GET', url, auth, body = null }) {
+    async request(input) {
+      const breaker = breakerFor(input?.url);
+      return breaker ? breaker.execute(() => send(input)) : send(input);
+    }
+  };
+
+  async function send({ method = 'GET', url, auth, body = null }) {
       const applied = await applyAuth({
         auth,
         headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...baseHeaders },
@@ -67,6 +85,5 @@ export function createShopHttpClient({ fetchImpl = globalThis.fetch, secretResol
         });
       }
       return data;
-    }
-  };
+  }
 }

@@ -6,6 +6,7 @@ import { attachEventStream } from './sse.js';
 import { correlationMiddleware } from './correlation.js';
 import { createRateLimiter } from './rate-limit.js';
 import { runGraphql } from './graphql-surface.js';
+import { buildOpenApiSpec } from './openapi.js';
 
 // REST surface over the single command facade (TZ §11.4). Thin presentation:
 // auth + envelope + status mapping only, zero business logic. Every operation
@@ -21,6 +22,7 @@ export function createRestServer({
   graphqlSchema = null,
   a2a = null,
   metricsRegistry = null,
+  baseUrl = '',
   rateLimit = { max: 300, windowMs: 60_000 }
 } = {}) {
   const app = express();
@@ -31,6 +33,9 @@ export function createRestServer({
 
   // Health is unauthenticated (liveness).
   app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'control-plane' }));
+  // Contract-first OpenAPI document (REQUIREM §2.1) — generated from the
+  // OPERATIONS catalog + validators, so it can never drift from the facade.
+  app.get('/openapi.json', (_req, res) => res.json(buildOpenApiSpec({ baseUrl: baseUrl ?? '' })));
   // Observability: Prometheus metrics (TZ §15) — unauthenticated scrape target,
   // facade op counters/errors/latency populated via createFacadeMetrics.
   if (metricsRegistry) {

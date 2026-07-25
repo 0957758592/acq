@@ -30,6 +30,7 @@ import { canDeviceAcceptAccount } from '@acq/core/utils/device-account-eligibili
 import { claimRunningDeviceLease, releaseDeviceLease } from '@acq/core/services/device-lease';
 import { createSelectorStore } from './services/selector-store.js';
 import { getRedis } from '@acq/core/db/redis';
+import { createCircuitBreaker } from '@acq/core/reliability/circuit-breaker';
 import { createStructuredLogger } from '@acq/logger';
 
 // Minimal env-backed secret resolver: `env:NAME` refs read process.env; any
@@ -64,6 +65,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createPlatformAutomationAdapter,
     createExpenseRecorder,
     createGdprService,
+    createCircuitBreaker,
     createShopRegistry,
     createShopHttpClient,
     compileShopAdapter,
@@ -137,7 +139,9 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
           }
         })
       : null);
-  const httpClient = D.httpClient ?? D.createShopHttpClient({ secretResolver });
+  // Per-vendor circuit breaker (REQUIREM §9.1): a downed shop fast-fails with
+  // CIRCUIT_OPEN instead of cascading; each host gets its own breaker.
+  const httpClient = D.httpClient ?? D.createShopHttpClient({ secretResolver, breakerFactory: () => D.createCircuitBreaker({ failureThreshold: env.breakerThreshold ?? 5, cooldownMs: env.breakerCooldownMs ?? 30_000 }) });
   const expenseRecorder = D.expenseRecorder ?? D.createExpenseRecorder();
   // Shop ACCOUNT signup + confirmation (§6.3/§6.4): register at a shop via an
   // email identity (credentials as refs), confirm by reading the emailed code

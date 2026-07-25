@@ -27,7 +27,7 @@ function compile(s) {
   };
 }
 
-const SCHEMAS = {
+export const SCHEMAS = {
   // Pool / acquisition
   'pool.status': schema({ platform: str, source: str }),
   'pool.acquire': schema({ platform: str.required(), source: str, quantity: num.integer().positive(), shopId: str, deviceId: str, niche: str, locale: str }),
