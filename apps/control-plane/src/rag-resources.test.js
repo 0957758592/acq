@@ -36,4 +36,13 @@ describe('buildRagResources', () => {
   it('an unknown resource is a coded error', async () => {
     await expect(buildRagResources(fakeCtx()).read('acq://nope')).rejects.toMatchObject({ code: 'RESOURCE_NOT_FOUND' });
   });
+
+  it('exposes acq://browser-providers listing pluggable login/scrape backends', async () => {
+    const ctx = fakeCtx({ browserProviders: () => [{ provider: 'own', configured: true }, { provider: 'browserbase', configured: false }], defaultBrowserProvider: 'own' });
+    const uris = buildRagResources(ctx).list().map((d) => d.uri);
+    expect(uris).toContain('acq://browser-providers');
+    const out = await buildRagResources(ctx).read('acq://browser-providers');
+    expect(out.providers.map((p) => p.provider)).toEqual(expect.arrayContaining(['own', 'browserbase']));
+    expect(out.default).toBe('own');
+  });
 });

@@ -15,3 +15,6 @@ export {
   activeCount
 } from './session-pool.js';
 export { createBrowserProvider } from './browser-provider.js';
+export { BROWSER_PROVIDERS, listBrowserProviders } from './browser-providers.js';
+export { createBrowserbaseProvider } from './browserbase-provider.js';
+export { createAiActor } from './ai-actor.js';

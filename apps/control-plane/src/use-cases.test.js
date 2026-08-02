@@ -1,4 +1,5 @@
 import { createFacade } from '@acq/control';
+import { listBrowserProviders } from '@acq/browser';
 import { buildUseCases } from './use-cases.js';
 
 // Drives the wired lifecycle operations THROUGH the single facade (RBAC + audit
@@ -57,6 +58,8 @@ function fakeCtx() {
       probeState: async () => 'online',
       runAction: async (_c, act) => ({ ok: false, reason: 'ACTION_NOT_CONFIRMED', echo: `${platform}:${act.type}` })
     }),
+    browserProviders: () => listBrowserProviders({ configured: {} }),
+    defaultBrowserProvider: 'own',
     provider: null
   };
 }
@@ -72,6 +75,18 @@ describe('control-plane use-cases through the facade', () => {
     const { facade } = build();
     const forbidden = await facade.execute('pool.acquire', { role: 'readonly', args: { platform: 'telegram' } });
     expect(forbidden.error.code).toBe('FORBIDDEN');
+  });
+
+  it('browser.providers lists pluggable backends (own + browserbase) through the facade, readable by all', async () => {
+    const { facade } = build();
+    const res = await facade.execute('browser.providers', { role: 'readonly', args: {} });
+    expect(res.error).toBeNull();
+    const ids = res.data.providers.map((p) => p.provider);
+    expect(ids).toEqual(expect.arrayContaining(['own', 'browserbase']));
+    expect(res.data.default).toBe('own');
+    // the self-hosted backend is always usable; the cloud one needs a key
+    expect(res.data.providers.find((p) => p.provider === 'own').configured).toBe(true);
+    expect(res.data.providers.find((p) => p.provider === 'browserbase').configured).toBe(false);
   });
 
   it('device.enroll registers an operator-managed device', async () => {

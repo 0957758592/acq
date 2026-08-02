@@ -36,10 +36,10 @@ async function connectedClient() {
 }
 
 describe('acq MCP server (real protocol round-trip over in-memory transport)', () => {
-  it('lists all 50 operations as MCP tools', async () => {
+  it('lists all 51 operations as MCP tools', async () => {
     const { client } = await connectedClient();
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(50);
+    expect(tools.length).toBe(51);
     expect(tools.map((t) => t.name)).toContain('campaign.create');
     await client.close();
   });

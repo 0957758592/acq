@@ -19,7 +19,8 @@ export function buildRagResources(ctx) {
     { uri: 'acq://scrape', name: 'Scrape results', description: 'normalized scraped read-models (group messages + authors, participants, members, profiles…) for grounding' },
     { uri: 'acq://metrics', name: 'Domain metrics', description: 'live pool depth, device occupancy/saturation, queue depth, ban share, active campaigns per platform' },
     { uri: 'acq://email-identities', name: 'Email identities', description: 'operator-owned mailboxes used for shop signup (secrets stripped)' },
-    { uri: 'acq://selectors', name: 'On-device selectors', description: 'per-platform on-device selector overrides (login/action/report) tuned for the live app build' }
+    { uri: 'acq://selectors', name: 'On-device selectors', description: 'per-platform on-device selector overrides (login/action/report) tuned for the live app build' },
+    { uri: 'acq://browser-providers', name: 'Browser backends', description: 'pluggable login/scrape browser backends (own self-hosted pool + Browserbase cloud) with capabilities and configured state' }
   ];
 
   async function read(uri) {
@@ -44,6 +45,8 @@ export function buildRagResources(ctx) {
         return { identities: ctx.emailIdentityStore ? await ctx.emailIdentityStore.list() : [] };
       case 'acq://selectors':
         return { selectors: ctx.selectorStore ? await ctx.selectorStore.list() : [] };
+      case 'acq://browser-providers':
+        return { providers: ctx.browserProviders ? ctx.browserProviders() : [], default: ctx.defaultBrowserProvider ?? 'own' };
       default:
         throw Object.assign(new Error(`RESOURCE_NOT_FOUND: ${uri}`), { code: 'RESOURCE_NOT_FOUND' });
     }

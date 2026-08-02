@@ -12,7 +12,7 @@ import {
 } from '@acq/engine-infra';
 import { reconcile } from '@acq/engine-domain';
 import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner, createShopSignup, createEncryptedCookieSessionStore } from '@acq/procurement';
-import { createBrowserProvider } from '@acq/browser';
+import { createBrowserProvider, listBrowserProviders, createBrowserbaseProvider, createAiActor } from '@acq/browser';
 import { createOpenRouterClient, createLlmClient, listLlmProviders, EmailCodeFetcher } from '@acq/integrations';
 import { createVerificationResourceProvider, createHttpSmsVendor } from '@acq/account-gen';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
@@ -82,6 +82,9 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createVerificationResourceProvider,
     createHttpSmsVendor,
     createBrowserProvider,
+    listBrowserProviders,
+    createBrowserbaseProvider,
+    createAiActor,
     createDeviceProvider,
     reconcile,
     getPlatformCapabilities,
@@ -127,6 +130,27 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     maxConcurrent: env.browserConcurrency ?? 4,
     debugPort: env.browserDebugPort ?? 0
   });
+  // Pluggable browser BACKENDS behind the one port (own pool default, Browserbase
+  // cloud when keyed). `browserBackendFor({provider})` returns the self-hosted
+  // pool or a Browserbase adapter; keyless cloud selection fails safe (coded
+  // BROWSERBASE_UNCONFIGURED). `browserProviders()` powers the browser.providers
+  // op on every surface. No backend is hardcoded into any subsystem.
+  const browserKeys = D.browserKeys ?? env.browserKeys ?? (env.browserbaseApiKey ? { browserbase: env.browserbaseApiKey } : {});
+  const defaultBrowserProvider = env.browserProvider ?? 'own';
+  const browserProviders = () => D.listBrowserProviders({ configured: browserKeys });
+  const browserBackendFor = D.browserBackendFor ?? (({ provider = defaultBrowserProvider } = {}) => {
+    if (provider === 'own') return browserProvider;
+    if (provider === 'browserbase') {
+      const apiKey = browserKeys.browserbase;
+      if (!apiKey) throw Object.assign(new Error("BROWSERBASE_UNCONFIGURED: no API key for 'browserbase'"), { code: 'BROWSERBASE_UNCONFIGURED' });
+      return D.createBrowserbaseProvider({ apiKey, projectId: env.browserbaseProjectId ?? null });
+    }
+    throw Object.assign(new Error(`BROWSER_PROVIDER_UNSUPPORTED: unknown browser provider '${provider}'`), { code: 'BROWSER_PROVIDER_UNSUPPORTED' });
+  });
+  // Stagehand-style observe→act for logins, bound to a chosen browser backend +
+  // LLM vendor at call time (survives DOM drift). Absent LLM key -> coded seam.
+  const aiActorFor = D.aiActorFor ?? (({ provider, model, browserProvider: bp } = {}) =>
+    D.createAiActor({ llm: llmFor({ provider, model }), browser: bp ?? browserProvider }));
   // AI shop scanner (TZ §6.3 SCAN): reads shop pages via the browser + an LLM to
   // PROPOSE a spec. Wired only when an LLM key is present; absent -> shop.scan is
   // an honest seam (SHOP_SCANNER_UNAVAILABLE). AI proposes; validation is by-fact.
@@ -247,6 +271,10 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     llmProviders,
     scannerFor,
     defaultLlmProvider,
+    browserProviders,
+    defaultBrowserProvider,
+    browserBackendFor,
+    aiActorFor,
     httpClient,
     compileShopAdapter: D.compileShopAdapter,
     expenseRecorder,

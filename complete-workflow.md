@@ -37,7 +37,7 @@ Supported platforms / Поддерживаемые платформы: **WhatsAp
 
 **Design guarantees.**
 - **Generic, not per-platform.** Every platform is a *descriptor* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Adding a platform = adding a descriptor + a thin driver, never forking the engine.
-- **One brain, many mouths.** A single **command facade** (50 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
+- **One brain, many mouths.** A single **command facade** (51 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
 - **Verify-by-fact.** The system never *pretends* an action worked. It reads the device/network to confirm (e.g. app in foreground, proxy actually routes). If it can't confirm, it returns a **coded seam** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) and reverts state — no fabricated success.
 - **Exactly-once & self-healing.** Idempotent jobs (unique keys + `$setOnInsert`), optimistic locking (version), a pure `reconcile(snapshot) → intents` planner, and automatic ban→replace.
 
@@ -269,7 +269,7 @@ curl -XPOST localhost:7500/v1/op/scoring.score \
   -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
 ```
 
-**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 50 operations; resources = RAG read-models:
+**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 51 operations; resources = RAG read-models:
 ```js
 const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
 await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
@@ -309,11 +309,11 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Inbound webhooks** (`POST /webhooks/inbound`) — HMAC-signed + replay-protected ingress from external systems.
 
-**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (scraped group content + commenters), `acq://selectors` (on-device selector overrides), `acq://metrics` (live domain metrics), `acq://email-identities` (operator mailboxes, secrets stripped).
+**RAG** (`acq://…` resources via MCP) — read-only projections for retrieval: `acq://pool/summary`, `acq://accounts` (secrets stripped), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (scraped group content + commenters), `acq://selectors` (on-device selector overrides), `acq://metrics` (live domain metrics), `acq://email-identities` (operator mailboxes, secrets stripped), `acq://browser-providers` (pluggable login/scrape backends + capabilities).
 
 ## 8. Operation catalog
 
-50 operations, RBAC per op (`readonly` < `operator` < `admin`).
+51 operations, RBAC per op (`readonly` < `operator` < `admin`).
 
 - **Pool:** `pool.status`, `pool.acquire`
 - **Procurement:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
@@ -324,7 +324,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Proxy:** `proxy.status`, `proxy.assign`, `proxy.rotate`
 - **Intelligence:** `scoring.score`, `persona.generate`
 - **Verification:** `verification.rent`
-- **Browser:** `browser.session.open`, `browser.session.liveView`
+- **Browser:** `browser.providers`, `browser.session.open`, `browser.session.liveView`
 - **Scraping:** `scrape.run`, `scrape.results`
 - **Control:** `reconcile.now`
 - **AI backends:** `llm.providers`, `llm.complete`
@@ -498,6 +498,14 @@ The default stays the web scraper; Bot API and MTProto are parameter-selected ti
   | `custom` | — | **any OpenAI-compatible endpoint** (self-hosted vLLM/Ollama/new vendor) via `baseUrl` |
 
   Keys come from env per vendor (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `LLM_API_KEY`); `LLM_PROVIDER`/`LLM_MODEL` pick the default. **Any call may override provider *and* model**, e.g. `shop.scan {shopUrl, provider:'anthropic', model:'claude-fable-5'}` or `llm.complete {provider:'google', messages:[…]}`. An unconfigured vendor is an honest `LLM_PROVIDER_UNCONFIGURED`; a vendor failure is `LLM_REQUEST_FAILED` — never a fabricated completion. Adding a vendor is one registry entry (Open/Closed) — no branching elsewhere.
+- **Pluggable browser backends (`browser.providers`).** Logins and scraping run over a **BrowserProvider port** with interchangeable backends — listed on every surface (and via the `acq://browser-providers` RAG resource) with capabilities + configured state:
+
+  | backend | kind | notes |
+  |---|---|---|
+  | `own` *(default)* | self-hosted | our Puppeteer/CDP pool — zero per-session cost, data stays in-house; scale/stealth/proxies are operator-run; CAPTCHA is a hard-stop |
+  | `browserbase` | cloud | managed fleet — thousands of concurrent stealth CDP sessions, managed residential proxies + CAPTCHA solving + live-view/takeover; per-session cost, data transits the vendor |
+
+  The self-hosted backend is always usable; the cloud backend is `configured:true` only when `BROWSERBASE_API_KEY` (+ `BROWSERBASE_PROJECT_ID`) is set — selecting it keyless is an honest `BROWSERBASE_UNCONFIGURED`, a vendor failure is `BROWSERBASE_REQUEST_FAILED` (never a leaked INTERNAL). Both speak CDP, so `browserBackendFor({provider})` swaps them **behind the same port with no core change**. On top of either, a **Stagehand-style AI actor** (`createAiActor`, `observe→act` over `llm.complete`) drives logins from a live page snapshot so they survive DOM drift — and stays honest (`BROWSER_ACT_UNSUPPORTED`) rather than faking a click. Full rationale: [`research/login-architecture.md`](research/login-architecture.md).
 - **Generation (create).** The GENERATE path is on-device native signup driven by the platform driver (`signupVia`: phone/native/google), fed by verification resources. Absent an injected generator, it is an honest seam — never a fake account.
 - **Verification.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` rent numbers / poll SMS codes over any declarative vendor (sms-activate/5sim/…). A pending code returns `null` (caller polls); an exhausted rental is `VERIFICATION_CODE_TIMEOUT` — never a fabricated code.
 - **Personas.** `persona.generate` produces coherent identities (name/handle/bio/niche/locale) to fill profiles.
@@ -574,7 +582,7 @@ Each seam is the system **refusing to fake success** — supply the input and th
 
 **Гарантии дизайна.**
 - **Генерично, не под одну платформу.** Каждая платформа — это *дескриптор* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Добавить платформу = добавить дескриптор + тонкий драйвер, не форкая движок.
-- **Один мозг, много ртов.** Единый **командный фасад** (50 операция) отдаётся через **10 контуров** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, входящие вебхуки, RAG). Везде один RBAC, одна валидация, один аудит.
+- **Один мозг, много ртов.** Единый **командный фасад** (51 операция) отдаётся через **10 контуров** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, входящие вебхуки, RAG). Везде один RBAC, одна валидация, один аудит.
 - **Verify-by-fact.** Система никогда не *делает вид*, что действие сработало. Она читает устройство/сеть для подтверждения (приложение на переднем плане, прокси реально маршрутизирует). Не может подтвердить — возвращает **кодированный шов** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) и откатывает состояние. Никакого выдуманного успеха.
 - **Exactly-once и самовосстановление.** Идемпотентные джобы (уникальные ключи + `$setOnInsert`), оптимистичные блокировки (version), чистый планировщик `reconcile(snapshot) → intents`, автоматический бан→замена.
 
@@ -657,7 +665,7 @@ Ops-эндпоинты control plane (без авторизации, для ту
 
 ```bash
 curl localhost:7500/health        # liveness
-curl localhost:7500/openapi.json  # contract-first OpenAPI 3.1 (генерируется из каталога 50 операций + валидаторов)
+curl localhost:7500/openapi.json  # contract-first OpenAPI 3.1 (генерируется из каталога 51 операций + валидаторов)
 curl localhost:7500/metrics       # Prometheus: ops/errors/latency фасада + доменные сигналы
 curl localhost:7401/health        # engine (список активных платформ) — там же /metrics
 ```
@@ -806,7 +814,7 @@ curl -XPOST localhost:7500/v1/op/scoring.score \
   -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
 ```
 
-**MCP** (для LLM-агентов / «мозга») — StreamableHTTP на `/mcp`, с сессиями. Tools = 50 операция; resources = RAG-read-модели:
+**MCP** (для LLM-агентов / «мозга») — StreamableHTTP на `/mcp`, с сессиями. Tools = 51 операция; resources = RAG-read-модели:
 ```js
 const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
 await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
@@ -846,11 +854,11 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 **Входящие вебхуки** (`POST /webhooks/inbound`) — HMAC-подпись + защита от повторов, приём событий от внешних систем.
 
-**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (контент групп + комментаторы), `acq://selectors` (on-device селекторы), `acq://metrics` (живые доменные метрики), `acq://email-identities` (почтовые ящики оператора, секреты вырезаны).
+**RAG** (ресурсы `acq://…` через MCP) — read-only проекции для retrieval: `acq://pool/summary`, `acq://accounts` (секреты вырезаны), `acq://campaigns`, `acq://proxies`, `acq://devices`, `acq://scrape` (контент групп + комментаторы), `acq://selectors` (on-device селекторы), `acq://metrics` (живые доменные метрики), `acq://email-identities` (почтовые ящики оператора, секреты вырезаны), `acq://browser-providers` (подключаемые backend'ы для логина/скрейпа + возможности).
 
 ## 8. Каталог операций
 
-50 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
+51 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
 
 - **Пул:** `pool.status`, `pool.acquire`
 - **Закупка:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
@@ -861,7 +869,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Прокси:** `proxy.status`, `proxy.assign`, `proxy.rotate`
 - **Интеллект:** `scoring.score`, `persona.generate`
 - **Верификация:** `verification.rent`
-- **Браузер:** `browser.session.open`, `browser.session.liveView`
+- **Браузер:** `browser.providers`, `browser.session.open`, `browser.session.liveView`
 - **Скрапинг:** `scrape.run`, `scrape.results`
 - **Управление:** `reconcile.now`
 - **AI backends:** `llm.providers`, `llm.complete`
@@ -1035,6 +1043,14 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
   | `custom` | — | **любой OpenAI-совместимый эндпоинт** (self-hosted vLLM/Ollama/новый вендор) через `baseUrl` |
 
   Ключи — из env по вендорам (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`, `LLM_API_KEY`); `LLM_PROVIDER`/`LLM_MODEL` задают дефолт. **Любой вызов может переопределить и провайдера, и модель**, напр. `shop.scan {shopUrl, provider:'anthropic', model:'claude-fable-5'}` или `llm.complete {provider:'google', messages:[…]}`. Ненастроенный вендор — честный `LLM_PROVIDER_UNCONFIGURED`; сбой вендора — `LLM_REQUEST_FAILED`, никогда не выдуманный ответ. Добавить вендора = одна запись в реестре (Open/Closed), без ветвлений в остальном коде.
+- **Подключаемые браузерные backend'ы (`browser.providers`).** Логины и скрейп идут через **порт BrowserProvider** со взаимозаменяемыми backend'ами — перечислены на всех контурах (и через RAG-ресурс `acq://browser-providers`) с возможностями + состоянием настройки:
+
+  | backend | тип | заметки |
+  |---|---|---|
+  | `own` *(дефолт)* | self-hosted | наш пул Puppeteer/CDP — ноль платы за сессию, данные дома; масштаб/стелс/прокси на операторе; CAPTCHA — стоп-кран |
+  | `browserbase` | cloud | управляемый флот — тысячи конкуррентных стелс-CDP-сессий, управляемые residential-прокси + решение CAPTCHA + live-view/перехват; плата за сессию, данные идут через вендора |
+
+  Self-hosted backend доступен всегда; облачный — `configured:true` только при заданном `BROWSERBASE_API_KEY` (+ `BROWSERBASE_PROJECT_ID`) — выбрать его без ключа = честный `BROWSERBASE_UNCONFIGURED`, сбой вендора = `BROWSERBASE_REQUEST_FAILED` (никогда не утёкший INTERNAL). Оба говорят по CDP, поэтому `browserBackendFor({provider})` меняет их **за тем же портом без правок ядра**. Поверх любого — **AI-актор в стиле Stagehand** (`createAiActor`, `observe→act` через `llm.complete`) ведёт логин по живому снимку страницы, переживая дрейф DOM — и остаётся честным (`BROWSER_ACT_UNSUPPORTED`), а не имитирует клик. Полное обоснование: [`research/login-architecture.md`](research/login-architecture.md).
 - **Генерация (create).** Путь GENERATE — нативная регистрация на устройстве драйвером платформы (`signupVia`: phone/native/google), питается ресурсами верификации. Без инъектированного генератора — честный шов, никогда не фейк-аккаунт.
 - **Верификация.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` арендуют номера / поллят SMS-коды через любой декларативный вендор (sms-activate/5sim/…). Ожидающий код возвращает `null` (вызывающий поллит); исчерпанная аренда — `VERIFICATION_CODE_TIMEOUT`, никогда не выдуманный код.
 - **Персоны.** `persona.generate` производит связные личности (имя/хендл/био/ниша/локаль) для заполнения профилей.
@@ -1044,7 +1060,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 
 Выбирай контур под своего вызывающего; все говорят с одним фасадом.
 
-- **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (50 операция), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
+- **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (51 операция), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
 - **Из бэкенда / микросервиса:** **gRPC** (`:7550`, `Control.Execute`) для throughput, или **REST** (`/v1/op/:operation`) для простоты. Bearer-токен → роль.
 - **Из другой агентной платформы:** **A2A** — забрать agent card, POST-ить таски. Стандартизованный agent-to-agent.
 - **Из браузера / UI операторов:** встроенная **операторская панель** (`:7600`) — тонкая WCAG/CSP SPA над фасадом с фичами accounts · pool · devices · campaigns · scrape · on-device селекторы (каждая — юнит-тестируемая чистая view-model); плюс **WebSocket** (`/v1/ws`) и **SSE** (`/v1/events`).
@@ -1081,4 +1097,4 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 
 ---
 
-*Generated for the `@acq` platform. Single facade · 50 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*
+*Generated for the `@acq` platform. Single facade · 51 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*

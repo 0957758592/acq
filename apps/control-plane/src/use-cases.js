@@ -196,6 +196,13 @@ export function buildUseCases(ctx) {
       if (!ctx.llmProviders) throw seam('LLM_UNAVAILABLE', 'no LLM registry wired');
       return { providers: ctx.llmProviders(), default: ctx.defaultLlmProvider ?? null };
     },
+    // Pluggable browser backends (own self-hosted pool + Browserbase cloud) for
+    // logins/scraping — listed on every surface so the operator/brain can pick a
+    // backend per job. Mirrors llm.providers/email.providers (one facade op).
+    'browser.providers': async () => {
+      if (!ctx.browserProviders) throw seam('BROWSER_REGISTRY_UNAVAILABLE', 'no browser backend registry wired');
+      return { providers: ctx.browserProviders(), default: ctx.defaultBrowserProvider ?? 'own' };
+    },
     // Run a completion through ANY configured vendor/model — the platform's own
     // AI entry point, usable by the brain and every surface alike.
     'llm.complete': async (args = {}) => {

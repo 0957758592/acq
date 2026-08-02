@@ -44,6 +44,7 @@ export const OPERATIONS = [
   { name: 'scoring.score', mutating: false, roles: R.all },
   { name: 'persona.generate', mutating: true, roles: R.ops },
   { name: 'verification.rent', mutating: true, roles: R.ops },
+  { name: 'browser.providers', mutating: false, roles: R.all },
   { name: 'browser.session.open', mutating: true, roles: R.ops },
   { name: 'browser.session.liveView', mutating: false, roles: R.ops },
   { name: 'scrape.run', mutating: true, roles: R.ops },

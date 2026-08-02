@@ -81,6 +81,7 @@ export const SCHEMAS = {
   'persona.generate': schema({ niche: str, locale: str, seed: num.integer() }),
   'verification.rent': schema({ country: str.required(), service: str.required() }),
   // Browser sessions
+  'browser.providers': schema({}),
   'browser.session.open': schema({ proxy: str, userAgent: str, contextId: str, geo: str }),
   'browser.session.liveView': schema({ sessionId: str.required() }),
   // Scrape
