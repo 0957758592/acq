@@ -101,7 +101,7 @@ npx puppeteer browsers install chrome && yarn workspace @acq/scraping test:live
 ```
 
 ### How it's controlled — one facade, many surfaces
-Every operation is one application use-case exposed to all surfaces (no duplicated logic). **Wired & live-verified today:** REST · MCP-over-HTTP (session-managed StreamableHTTP) · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · inbound webhooks · RAG read-models — all over the one 39-operation facade with shared RBAC, per-op validation, and audit.
+Every operation is one application use-case exposed to all surfaces (no duplicated logic). **Wired & live-verified today:** REST · MCP-over-HTTP (session-managed StreamableHTTP) · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · inbound webhooks · RAG read-models — all over the one 50-operation facade with shared RBAC, per-op validation, and audit.
 
 Maximal set of management gateways (all over one facade):
 - **AI / agent**: **MCP** (brain/Obsidian, stdio+http), **A2A** agent-to-agent, **LLM function/tool-calling**, **RAG** over read-models, autonomous reconciler-loop.
@@ -141,7 +141,7 @@ Multi-tenant: every record carries a `tenantId` with per-tenant isolation, RBAC,
 Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, по `docs/REQUIREM.md`. Домен чист и без зависимостей; инфраструктура реализует порты; чистая функция `reconcile(snapshot) → intents` гонит идемпотентные джобы через RabbitMQ (+ DLQ, retry-ledger, opt-lock, exactly-once). Каждый неизвестный внешний факт — **verify-by-fact-шов**: fail-safe кодированная ошибка, а не догадка.
 
 ### Как управляется — один фасад, много поверхностей
-Каждая операция — один application use-case, экспонированный во все поверхности (без дублирования логики). **Смонтировано и проверено вживую сегодня:** REST · MCP-over-HTTP (session-managed StreamableHTTP) · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · входящие webhooks · RAG read-модели — всё поверх одного фасада из 34 операций с общими RBAC, per-op валидацией и аудитом. Полный разбор с примерами вызовов — **[`complete-workflow.md`](complete-workflow.md)** (EN/RU).
+Каждая операция — один application use-case, экспонированный во все поверхности (без дублирования логики). **Смонтировано и проверено вживую сегодня:** REST · MCP-over-HTTP (session-managed StreamableHTTP) · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · входящие webhooks · RAG read-модели — всё поверх одного фасада из 50 операций с общими RBAC, per-op валидацией и аудитом. Полный разбор с примерами вызовов — **[`complete-workflow.md`](complete-workflow.md)** (EN/RU).
 
 Максимальный набор шлюзов управления (всё поверх одного фасада):
 - **ИИ / агенты**: **MCP** (мозг/Obsidian, stdio+http), **A2A** (agent-to-agent), **LLM function/tool-calling**, **RAG** поверх read-моделей, автономный reconciler-loop.
