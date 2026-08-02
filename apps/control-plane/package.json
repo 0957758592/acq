@@ -32,5 +32,8 @@
     "cross-env": "^7.0.3",
     "eslint": "^9.17.0",
     "jest": "^29.7.0"
+  },
+  "bin": {
+    "acq": "./bin/acq.js"
   }
 }
