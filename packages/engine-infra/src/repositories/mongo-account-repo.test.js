@@ -80,6 +80,22 @@ describe('generic MongoAccountRepo.countAvailable', () => {
     expect(model.calls[0].find).toMatchObject({ tenantId: 'tenant-A' });
     expect(model.calls[1].count).toMatchObject({ tenantId: 'tenant-A' });
   });
+
+  it('treats a malformed id (CastError) as no match instead of leaking', async () => {
+    // Mongoose throws a CastError while casting a non-ObjectId `_id`. A find must
+    // resolve to "no rows" (so callers surface a coded NOT_FOUND) — never leak.
+    const model = {
+      find: () => ({
+        lean: () => {
+          const err = new Error('Cast to ObjectId failed for value "nope"');
+          err.name = 'CastError';
+          throw err;
+        }
+      })
+    };
+    const repo = createMongoAccountRepo({ model });
+    await expect(repo.find({ _id: 'nope' })).resolves.toEqual([]);
+  });
 });
 
 describe('generic MongoAccountRepo.insertAcquired', () => {

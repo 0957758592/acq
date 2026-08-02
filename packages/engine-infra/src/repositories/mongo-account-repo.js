@@ -32,7 +32,14 @@ export function createMongoAccountRepo({ model, tenantId = 'default' } = {}) {
   if (!model) throw new Error('createMongoAccountRepo requires a mongoose model');
   return {
     async find(filter = {}) {
-      return model.find({ tenantId, ...filter }).lean();
+      try {
+        return await model.find({ tenantId, ...filter }).lean();
+      } catch (err) {
+        // A malformed id/value can't match any row — resolve to "no rows" so
+        // callers surface a coded NOT_FOUND rather than leaking a CastError.
+        if (err?.name === 'CastError') return [];
+        throw err;
+      }
     },
     async countAvailable(filter = {}) {
       return model.countDocuments({ tenantId, status: 'acquired', assignedDeviceId: null, ...filter });
