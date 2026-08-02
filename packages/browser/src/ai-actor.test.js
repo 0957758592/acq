@@ -69,4 +69,11 @@ describe('Stagehand-style AI actor (observe → act)', () => {
     const actor = createAiActor({ llm: fakeLlm(['sorry, I cannot do that']), browser: fakeBrowser() });
     await expect(actor.observe('s1', { goal: 'log in' })).rejects.toMatchObject({ code: 'AI_ACTOR_RESPONSE_INVALID' });
   });
+
+  it('is HONEST when the backend cannot snapshot the page (no extract primitive)', async () => {
+    // A backend without extract() (e.g. a raw CDP cloud session) can't produce a
+    // snapshot — surface a coded seam, never a TypeError.
+    const actor = createAiActor({ llm: fakeLlm(['{"candidates":[]}']), browser: { createSession: async () => ({}) } });
+    await expect(actor.observe('s1', { goal: 'log in' })).rejects.toMatchObject({ code: 'AI_ACTOR_SNAPSHOT_UNSUPPORTED' });
+  });
 });

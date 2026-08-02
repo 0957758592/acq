@@ -30,6 +30,18 @@ function seam(code, message) {
 // nothing here branches on a specific messenger. Operations without a handler
 // fall through to NOT_IMPLEMENTED as their subsystems land.
 export function buildUseCases(ctx) {
+  // Resolve the SELECTED browser backend (own pool / Browserbase cloud) behind the
+  // one port. A keyless cloud pick fails safe with its own coded seam.
+  const browserBackend = (provider) => {
+    if (ctx.browserBackendFor) return ctx.browserBackendFor({ provider });
+    if (!ctx.browserProvider) throw seam('BROWSER_PROVIDER_UNAVAILABLE', 'no browser provider wired');
+    return ctx.browserProvider;
+  };
+  // Stagehand-style actor bound to a chosen browser backend + LLM vendor.
+  const aiActor = (args = {}) => {
+    if (!ctx.aiActorFor) throw seam('AI_ACTOR_UNAVAILABLE', 'no ai actor wired');
+    return ctx.aiActorFor({ provider: args.provider, model: args.model, browserProvider: browserBackend(args.browserProvider) });
+  };
   return {
     // ---- Pool / acquisition ------------------------------------------------
     'pool.status': async (args = {}) => {
@@ -286,13 +298,30 @@ export function buildUseCases(ctx) {
 
     // ---- Browser sessions (Browserbase-class fleet) ------------------------
     'browser.session.open': async (args = {}) => {
-      if (!ctx.browserProvider) throw seam('BROWSER_PROVIDER_UNAVAILABLE', 'no browser provider wired');
-      const s = await ctx.browserProvider.createSession({ proxy: args.proxy, userAgent: args.userAgent, contextId: args.contextId, geo: args.geo });
-      return { sessionId: s.sessionId, cdpUrl: s.cdpUrl };
+      const backend = browserBackend(args.provider);
+      const s = await backend.createSession({ proxy: args.proxy, userAgent: args.userAgent, contextId: args.contextId, geo: args.geo });
+      return { sessionId: s.sessionId, cdpUrl: s.cdpUrl, provider: backend.provider ?? args.provider ?? 'own' };
     },
     'browser.session.liveView': async (args = {}) => {
-      if (!ctx.browserProvider) throw seam('BROWSER_PROVIDER_UNAVAILABLE', 'no browser provider wired');
-      return ctx.browserProvider.liveView(require$(args, 'sessionId', 'SESSION_ID_REQUIRED'));
+      const backend = browserBackend(args.provider);
+      return backend.liveView(require$(args, 'sessionId', 'SESSION_ID_REQUIRED'));
+    },
+    // Stagehand-style observe→act over the SELECTED browser backend + LLM vendor —
+    // the AI login/automation path, callable from every surface. `provider`/`model`
+    // pick the LLM; `browserProvider` picks the browser backend.
+    'browser.observe': async (args = {}) => {
+      const actor = aiActor(args);
+      return actor.observe(require$(args, 'sessionId', 'SESSION_ID_REQUIRED'), {
+        goal: require$(args, 'goal', 'GOAL_REQUIRED'),
+        url: args.url
+      });
+    },
+    'browser.act': async (args = {}) => {
+      const actor = aiActor(args);
+      return actor.act(require$(args, 'sessionId', 'SESSION_ID_REQUIRED'), {
+        goal: require$(args, 'goal', 'GOAL_REQUIRED'),
+        url: args.url
+      });
     },
 
     // ---- Reconciliation ----------------------------------------------------

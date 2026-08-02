@@ -8,7 +8,7 @@
 
 Self-contained platform that **buys (or generates) accounts across many shops, provisions them onto cloud-phone devices from many providers, keeps a healthy pool, and runs mass actions and scraping at scale** — centralized, modular, horizontally scalable, controlled by an AI brain over MCP, or via CLI / HTTP-API / npm.
 
-**Status:** the **generic engine is live** — one platform-agnostic reconciler + queue consumers **self-drive every account type** off real Mongo state (acquire → enroll → assign → bring-online → campaigns → probe → replace), exposed through a **single command facade** (51 operations) over **10 control surfaces** (REST · MCP-over-HTTP · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · inbound webhooks · RAG) plus a WCAG/CSP **operator dashboard** SPA. **WhatsApp** (mass report) remains the most complete reference vertical. **1124 tests green** (211 suites) plus live suites against real Mongo/RabbitMQ/Redis, a **real headless-Chromium** browser-scrape run, and a full live verification of every surface + all 8 account types + the full account workflow on a **real cloud phone**. Phase 9 hardening is in: contract-first **OpenAPI** served at `/openapi.json`, **Prometheus `/metrics`** with facade + domain signals, **span-level tracing**, **SLO alerts/error budget**, **GDPR export/erase**, per-vendor **circuit breaker** and explicit **transaction boundaries**. Unknown external facts (per-shop delivery/auth, on-device selectors, session-import, some platform logins) stay **verify-by-fact seams** — fail-safe coded errors, never guesses. The full design is the foundational spec **`docs/TZ.md`** (local design doc, kept out of git by design).
+**Status:** the **generic engine is live** — one platform-agnostic reconciler + queue consumers **self-drive every account type** off real Mongo state (acquire → enroll → assign → bring-online → campaigns → probe → replace), exposed through a **single command facade** (53 operations) over **10 control surfaces** (REST · MCP-over-HTTP · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · inbound webhooks · RAG) plus a WCAG/CSP **operator dashboard** SPA. **WhatsApp** (mass report) remains the most complete reference vertical. **1134 tests green** (213 suites) plus live suites against real Mongo/RabbitMQ/Redis, a **real headless-Chromium** browser-scrape run, and a full live verification of every surface + all 8 account types + the full account workflow on a **real cloud phone**. Phase 9 hardening is in: contract-first **OpenAPI** served at `/openapi.json`, **Prometheus `/metrics`** with facade + domain signals, **span-level tracing**, **SLO alerts/error budget**, **GDPR export/erase**, per-vendor **circuit breaker** and explicit **transaction boundaries**. Unknown external facts (per-shop delivery/auth, on-device selectors, session-import, some platform logins) stay **verify-by-fact seams** — fail-safe coded errors, never guesses. The full design is the foundational spec **`docs/TZ.md`** (local design doc, kept out of git by design).
 
 > `docs/` (the TZ, runbook, plans, REQUIREM) is intentionally **not tracked in git** — it is the working design corpus. This README is the tracked entry point.
 >
@@ -80,7 +80,7 @@ All packages above exist today. The generic engine + control facade + hybrid scr
 ### Quickstart
 ```bash
 yarn install
-yarn test           # full unit suite (1124 tests, 211 suites) — proves self-containment
+yarn test           # full unit suite (1134 tests, 213 suites) — proves self-containment
 cp .env.example .env && $EDITOR .env
 
 # Run the whole platform in Docker (infra + engine + control-plane + scrape + dashboard):
@@ -141,7 +141,7 @@ Multi-tenant: every record carries a `tenantId` with per-tenant isolation, RBAC,
 Clean Architecture + Hexagonal (Ports & Adapters) + тактический DDD, по `docs/REQUIREM.md`. Домен чист и без зависимостей; инфраструктура реализует порты; чистая функция `reconcile(snapshot) → intents` гонит идемпотентные джобы через RabbitMQ (+ DLQ, retry-ledger, opt-lock, exactly-once). Каждый неизвестный внешний факт — **verify-by-fact-шов**: fail-safe кодированная ошибка, а не догадка.
 
 ### Как управляется — один фасад, много поверхностей
-Каждая операция — один application use-case, экспонированный во все поверхности (без дублирования логики). **Смонтировано и проверено вживую сегодня:** REST · MCP-over-HTTP (session-managed StreamableHTTP) · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · входящие webhooks · RAG read-модели — всё поверх одного фасада из 51 операций с общими RBAC, per-op валидацией и аудитом. Полный разбор с примерами вызовов — **[`complete-workflow.md`](complete-workflow.md)** (EN/RU).
+Каждая операция — один application use-case, экспонированный во все поверхности (без дублирования логики). **Смонтировано и проверено вживую сегодня:** REST · MCP-over-HTTP (session-managed StreamableHTTP) · WebSocket · GraphQL · A2A · gRPC · CLI · SSE · входящие webhooks · RAG read-модели — всё поверх одного фасада из 53 операций с общими RBAC, per-op валидацией и аудитом. Полный разбор с примерами вызовов — **[`complete-workflow.md`](complete-workflow.md)** (EN/RU).
 
 Максимальный набор шлюзов управления (всё поверх одного фасада):
 - **ИИ / агенты**: **MCP** (мозг/Obsidian, stdio+http), **A2A** (agent-to-agent), **LLM function/tool-calling**, **RAG** поверх read-моделей, автономный reconciler-loop.

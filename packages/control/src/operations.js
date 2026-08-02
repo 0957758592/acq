@@ -47,6 +47,8 @@ export const OPERATIONS = [
   { name: 'browser.providers', mutating: false, roles: R.all },
   { name: 'browser.session.open', mutating: true, roles: R.ops },
   { name: 'browser.session.liveView', mutating: false, roles: R.ops },
+  { name: 'browser.observe', mutating: false, roles: R.ops },
+  { name: 'browser.act', mutating: true, roles: R.ops },
   { name: 'scrape.run', mutating: true, roles: R.ops },
   { name: 'scrape.results', mutating: false, roles: R.all },
   { name: 'reconcile.now', mutating: true, roles: R.ops },

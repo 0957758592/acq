@@ -7,7 +7,7 @@
 //   TEST_MAIL_IMAP_HOST, TEST_MAIL_IMAP_PORT — override (proton bridge, firstmail…)
 //   DARKSHOP_API_KEY, DARKSHOP_BASE_URL      — real dark.shopping balance probe
 //   DJEKXA_API_KEY,  DJEKXA_BASE_URL         — real djekxa balance probe
-import { resolveMailbox, listMailProviders, EmailCodeFetcher, createDarkShoppingClient, DjekxaClient } from '@acq/integrations';
+import { resolveMailbox, listMailProviders, EmailCodeFetcher, createEmailCodeReader, createDarkShoppingClient, DjekxaClient } from '@acq/integrations';
 import { createShopSignup } from '@acq/procurement';
 
 const ok = (s, x = '') => console.log(`  ✅ ${s}${x ? ' — ' + x : ''}`);
@@ -22,6 +22,21 @@ async function main() {
   const box = resolveMailbox(address, { imapHost: process.env.TEST_MAIL_IMAP_HOST, imapPort: process.env.TEST_MAIL_IMAP_PORT ? Number(process.env.TEST_MAIL_IMAP_PORT) : null });
   ok(`resolved ${address}`, `provider=${box.provider}, imap=${box.imapHost ?? '(none)'}:${box.imapPort}${box.requiresBridge ? ' [needs bridge]' : ''}${box.apiOnly ? ' [api-only]' : ''}`);
   console.log(`    supported providers: ${listMailProviders().filter((p) => p.imapReady).map((p) => p.provider).join(', ')} (imap-ready)`);
+
+  // ── 1b) reader-by-provider across OTHER email types (IMAP vs API-only) ──
+  console.log('\n[1b] reader-by-provider — every email type picks the right code reader');
+  const readerCases = [
+    ['ops@gmail.com', 'IMAP'], ['a@outlook.com', 'IMAP'], ['b@yahoo.com', 'IMAP'],
+    ['c@rambler.ru', 'IMAP'], ['d@mail.ru', 'IMAP'], ['e@gmx.com', 'IMAP'],
+    ['f@onet.pl', 'IMAP'], ['g@seznam.cz', 'IMAP'], ['h@aol.com', 'IMAP'],
+    ['i@mail.tm', 'API'] // API-only — no IMAP; must use the HTTP reader
+  ];
+  for (const [addr, kind] of readerCases) {
+    const reader = createEmailCodeReader({ email: addr, password: 'x' });
+    const isImap = reader instanceof EmailCodeFetcher;
+    const got = isImap ? 'IMAP' : 'API';
+    (got === kind) ? ok(`${addr.padEnd(16)} → ${got} reader`) : bad(`${addr} reader mismatch`, `want ${kind}, got ${got}`);
+  }
 
   // ── 2) REAL IMAP login + inbox read (proves the account is LIVE) ──
   console.log('\n[2] mailbox liveness — real IMAP login + recent-message read');

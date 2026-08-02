@@ -60,6 +60,19 @@ function fakeCtx() {
     }),
     browserProviders: () => listBrowserProviders({ configured: {} }),
     defaultBrowserProvider: 'own',
+    browserBackendFor: ({ provider = 'own' } = {}) => {
+      if (provider !== 'own') throw Object.assign(new Error(`BROWSERBASE_UNCONFIGURED: no key for '${provider}'`), { code: 'BROWSERBASE_UNCONFIGURED' });
+      return {
+        provider: 'own',
+        createSession: async (o) => ({ sessionId: 'sess-1', cdpUrl: o.proxy ? 'http://127.0.0.1:9222' : '' }),
+        liveView: async (id) => ({ sessionId: id, devtoolsUrl: '/devtools/inspector.html?id=' + id, wsUrl: 'ws://x/' + id }),
+        extract: async () => '<login form> Email [ ] Password [ ]'
+      };
+    },
+    aiActorFor: ({ browserProvider: _bp } = {}) => ({
+      observe: async (id, { goal }) => ({ goal, candidates: [{ action: 'type', selector: '#email' }] }),
+      act: async (id, { goal }) => ({ action: { action: 'click', selector: 'button', reason: goal }, executed: true, result: { ok: true } })
+    }),
     provider: null
   };
 }
@@ -261,5 +274,28 @@ describe('control-plane use-cases through the facade', () => {
     expect(open.data).toMatchObject({ sessionId: 'sess-1', cdpUrl: 'http://127.0.0.1:9222' });
     const view = await facade.execute('browser.session.liveView', { role: 'operator', args: { sessionId: 'sess-1' } });
     expect(view.data.devtoolsUrl).toContain('sess-1');
+  });
+
+  it('browser.session.open can SELECT a backend; a keyless cloud backend fails safe (coded)', async () => {
+    const { facade } = build();
+    const own = await facade.execute('browser.session.open', { role: 'operator', args: { provider: 'own' } });
+    expect(own.data.provider).toBe('own');
+    const cloud = await facade.execute('browser.session.open', { role: 'operator', args: { provider: 'browserbase' } });
+    expect(cloud.error.code).toBe('BROWSERBASE_UNCONFIGURED');
+  });
+
+  it('browser.observe + browser.act drive the Stagehand actor through the one facade', async () => {
+    const { facade } = build();
+    const obs = await facade.execute('browser.observe', { role: 'operator', args: { sessionId: 'sess-1', goal: 'log in' } });
+    expect(obs.data.candidates[0]).toMatchObject({ action: 'type', selector: '#email' });
+    const act = await facade.execute('browser.act', { role: 'operator', args: { sessionId: 'sess-1', goal: 'submit login' } });
+    expect(act.data).toMatchObject({ executed: true });
+    expect(act.data.action).toMatchObject({ action: 'click' });
+  });
+
+  it('browser.observe requires a goal (coded)', async () => {
+    const { facade } = build();
+    const res = await facade.execute('browser.observe', { role: 'operator', args: { sessionId: 'sess-1' } });
+    expect(res.error.code).toBeDefined();
   });
 });

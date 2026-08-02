@@ -82,8 +82,10 @@ export const SCHEMAS = {
   'verification.rent': schema({ country: str.required(), service: str.required() }),
   // Browser sessions
   'browser.providers': schema({}),
-  'browser.session.open': schema({ proxy: str, userAgent: str, contextId: str, geo: str }),
-  'browser.session.liveView': schema({ sessionId: str.required() }),
+  'browser.session.open': schema({ provider: str, proxy: str, userAgent: str, contextId: str, geo: str }),
+  'browser.session.liveView': schema({ sessionId: str.required(), provider: str }),
+  'browser.observe': schema({ sessionId: str.required(), goal: str.required(), url: str, browserProvider: str, provider: str, model: str }),
+  'browser.act': schema({ sessionId: str.required(), goal: str.required(), url: str, browserProvider: str, provider: str, model: str }),
   // Scrape
   'scrape.run': schema({ platform: str.required(), targetType: str.required(), target: str.required(), params: obj }),
   'scrape.results': schema({ platform: str, type: str, cursor: str.nullable(), limit: num.integer().positive() }),

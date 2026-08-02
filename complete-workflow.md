@@ -37,7 +37,7 @@ Supported platforms / Поддерживаемые платформы: **WhatsAp
 
 **Design guarantees.**
 - **Generic, not per-platform.** Every platform is a *descriptor* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Adding a platform = adding a descriptor + a thin driver, never forking the engine.
-- **One brain, many mouths.** A single **command facade** (51 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
+- **One brain, many mouths.** A single **command facade** (53 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
 - **Verify-by-fact.** The system never *pretends* an action worked. It reads the device/network to confirm (e.g. app in foreground, proxy actually routes). If it can't confirm, it returns a **coded seam** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) and reverts state — no fabricated success.
 - **Exactly-once & self-healing.** Idempotent jobs (unique keys + `$setOnInsert`), optimistic locking (version), a pure `reconcile(snapshot) → intents` planner, and automatic ban→replace.
 
@@ -269,7 +269,7 @@ curl -XPOST localhost:7500/v1/op/scoring.score \
   -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
 ```
 
-**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 51 operations; resources = RAG read-models:
+**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 53 operations; resources = RAG read-models:
 ```js
 const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
 await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
@@ -313,7 +313,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 ## 8. Operation catalog
 
-51 operations, RBAC per op (`readonly` < `operator` < `admin`).
+53 operations, RBAC per op (`readonly` < `operator` < `admin`).
 
 - **Pool:** `pool.status`, `pool.acquire`
 - **Procurement:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
@@ -324,7 +324,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Proxy:** `proxy.status`, `proxy.assign`, `proxy.rotate`
 - **Intelligence:** `scoring.score`, `persona.generate`
 - **Verification:** `verification.rent`
-- **Browser:** `browser.providers`, `browser.session.open`, `browser.session.liveView`
+- **Browser:** `browser.providers`, `browser.session.open`, `browser.session.liveView`, `browser.observe`, `browser.act`
 - **Scraping:** `scrape.run`, `scrape.results`
 - **Control:** `reconcile.now`
 - **AI backends:** `llm.providers`, `llm.complete`
@@ -486,7 +486,7 @@ The default stays the web scraper; Bot API and MTProto are parameter-selected ti
   ```
   Explicit refs still work unchanged. Grounded for the brain via **`acq://email-identities`**; verified live across every surface (`scripts/ai-email-surfaces-live.mjs`). **The mailboxes themselves are ones you create and own** — the platform stores and uses them, it does not register mail accounts for you.
 
-  **Provider catalog (`email.providers`).** A single source of truth for reaching a mailbox — the requested set is covered: **Gmail, Outlook/Hotmail, Yahoo, AOL, GMX, Mail.com, Rambler, Mail.ru, Onet.pl, Seznam.cz** (IMAP-ready out of the box), plus **Proton** (needs the local Proton Mail **Bridge** — no public IMAP), **Mail.tm** (API-only, no IMAP), **Firstmail** (host varies per batch — set `imapHost` on the identity) and **custom** IMAP. A no-IMAP provider is honestly flagged (`imapReady:false`, `requiresBridge`/`apiOnly`) — the platform never invents a hostname. `EmailCodeFetcher` resolves through this catalog (one host table, no duplication). *Priority-1 harness* `scripts/mail-shops-live.mjs` tests a mailbox against **dark.shopping + djekxa** end-to-end: catalog resolution + real IMAP login/read (with creds) + both shops' balance probe + the full `signup → confirm → buy` chain.
+  **Provider catalog (`email.providers`).** A single source of truth for reaching a mailbox — the requested set is covered: **Gmail, Outlook/Hotmail, Yahoo, AOL, GMX, Mail.com, Rambler, Mail.ru, Onet.pl, Seznam.cz** (IMAP-ready out of the box), plus **Proton** (needs the local Proton Mail **Bridge** — no public IMAP), **Mail.tm** (API-only, no IMAP), **Firstmail** (host varies per batch — set `imapHost` on the identity) and **custom** IMAP. A no-IMAP provider is honestly flagged (`imapReady:false`, `requiresBridge`/`apiOnly`) — the platform never invents a hostname. **Reader-by-provider:** `createEmailCodeReader` picks the right code reader per email type — the IMAP `EmailCodeFetcher` for normal mailboxes, and an **HTTP API reader (`createMailTmCodeReader`) for API-only types like Mail.tm** (which have no IMAP) — one `fetchLatestCode` contract either way, so the shop-confirm flow works for **every** email type without branching. Proton (bridge) and Firstmail (per-batch) supply their host explicitly and take the IMAP path. *Priority-1 harness* `scripts/mail-shops-live.mjs` tests a mailbox against **dark.shopping + djekxa** end-to-end: catalog resolution + real IMAP login/read (with creds) + both shops' balance probe + the full `signup → confirm → buy` chain.
 - **Pluggable AI backends (`llm.providers` / `llm.complete`).** Every AI-using path (shop scan, and anything the brain drives) runs over a **provider registry** — one `complete()` contract, many vendors:
 
   | provider | default model | notes |
@@ -505,7 +505,7 @@ The default stays the web scraper; Bot API and MTProto are parameter-selected ti
   | `own` *(default)* | self-hosted | our Puppeteer/CDP pool — zero per-session cost, data stays in-house; scale/stealth/proxies are operator-run; CAPTCHA is a hard-stop |
   | `browserbase` | cloud | managed fleet — thousands of concurrent stealth CDP sessions, managed residential proxies + CAPTCHA solving + live-view/takeover; per-session cost, data transits the vendor |
 
-  The self-hosted backend is always usable; the cloud backend is `configured:true` only when `BROWSERBASE_API_KEY` (+ `BROWSERBASE_PROJECT_ID`) is set — selecting it keyless is an honest `BROWSERBASE_UNCONFIGURED`, a vendor failure is `BROWSERBASE_REQUEST_FAILED` (never a leaked INTERNAL). Both speak CDP, so `browserBackendFor({provider})` swaps them **behind the same port with no core change**. On top of either, a **Stagehand-style AI actor** (`createAiActor`, `observe→act` over `llm.complete`) drives logins from a live page snapshot so they survive DOM drift — and stays honest (`BROWSER_ACT_UNSUPPORTED`) rather than faking a click. Full rationale: [`research/login-architecture.md`](research/login-architecture.md).
+  The self-hosted backend is always usable; the cloud backend is `configured:true` only when `BROWSERBASE_API_KEY` (+ `BROWSERBASE_PROJECT_ID`) is set — selecting it keyless is an honest `BROWSERBASE_UNCONFIGURED`, a vendor failure is `BROWSERBASE_REQUEST_FAILED` (never a leaked INTERNAL). Both speak CDP, so `browserBackendFor({provider})` swaps them **behind the same port with no core change**. **Selection is actionable, not cosmetic:** `browser.session.open {provider:'browserbase', …}` opens the session on the chosen backend (keyless cloud → coded seam), and `browser.session.liveView {provider}` inspects it. On top of either, a **Stagehand-style AI actor** — exposed as first-class ops **`browser.observe {sessionId, goal, browserProvider?, provider?, model?}`** and **`browser.act {…}`** on every surface — drives logins from a live page snapshot via `llm.complete` so they survive DOM drift, and stays honest (`BROWSER_ACT_UNSUPPORTED` when a backend has no action primitive, `AI_ACTOR_SNAPSHOT_UNSUPPORTED` when it can't snapshot) rather than faking a click. Full rationale: [`research/login-architecture.md`](research/login-architecture.md).
 - **Generation (create).** The GENERATE path is on-device native signup driven by the platform driver (`signupVia`: phone/native/google), fed by verification resources. Absent an injected generator, it is an honest seam — never a fake account.
 - **Verification.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` rent numbers / poll SMS codes over any declarative vendor (sms-activate/5sim/…). A pending code returns `null` (caller polls); an exhausted rental is `VERIFICATION_CODE_TIMEOUT` — never a fabricated code.
 - **Personas.** `persona.generate` produces coherent identities (name/handle/bio/niche/locale) to fill profiles.
@@ -582,7 +582,7 @@ Each seam is the system **refusing to fake success** — supply the input and th
 
 **Гарантии дизайна.**
 - **Генерично, не под одну платформу.** Каждая платформа — это *дескриптор* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Добавить платформу = добавить дескриптор + тонкий драйвер, не форкая движок.
-- **Один мозг, много ртов.** Единый **командный фасад** (51 операция) отдаётся через **10 контуров** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, входящие вебхуки, RAG). Везде один RBAC, одна валидация, один аудит.
+- **Один мозг, много ртов.** Единый **командный фасад** (53 операция) отдаётся через **10 контуров** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, входящие вебхуки, RAG). Везде один RBAC, одна валидация, один аудит.
 - **Verify-by-fact.** Система никогда не *делает вид*, что действие сработало. Она читает устройство/сеть для подтверждения (приложение на переднем плане, прокси реально маршрутизирует). Не может подтвердить — возвращает **кодированный шов** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) и откатывает состояние. Никакого выдуманного успеха.
 - **Exactly-once и самовосстановление.** Идемпотентные джобы (уникальные ключи + `$setOnInsert`), оптимистичные блокировки (version), чистый планировщик `reconcile(snapshot) → intents`, автоматический бан→замена.
 
@@ -665,7 +665,7 @@ Ops-эндпоинты control plane (без авторизации, для ту
 
 ```bash
 curl localhost:7500/health        # liveness
-curl localhost:7500/openapi.json  # contract-first OpenAPI 3.1 (генерируется из каталога 51 операций + валидаторов)
+curl localhost:7500/openapi.json  # contract-first OpenAPI 3.1 (генерируется из каталога 53 операций + валидаторов)
 curl localhost:7500/metrics       # Prometheus: ops/errors/latency фасада + доменные сигналы
 curl localhost:7401/health        # engine (список активных платформ) — там же /metrics
 ```
@@ -814,7 +814,7 @@ curl -XPOST localhost:7500/v1/op/scoring.score \
   -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
 ```
 
-**MCP** (для LLM-агентов / «мозга») — StreamableHTTP на `/mcp`, с сессиями. Tools = 51 операция; resources = RAG-read-модели:
+**MCP** (для LLM-агентов / «мозга») — StreamableHTTP на `/mcp`, с сессиями. Tools = 53 операция; resources = RAG-read-модели:
 ```js
 const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
 await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
@@ -858,7 +858,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 ## 8. Каталог операций
 
-51 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
+53 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
 
 - **Пул:** `pool.status`, `pool.acquire`
 - **Закупка:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
@@ -869,7 +869,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Прокси:** `proxy.status`, `proxy.assign`, `proxy.rotate`
 - **Интеллект:** `scoring.score`, `persona.generate`
 - **Верификация:** `verification.rent`
-- **Браузер:** `browser.providers`, `browser.session.open`, `browser.session.liveView`
+- **Браузер:** `browser.providers`, `browser.session.open`, `browser.session.liveView`, `browser.observe`, `browser.act`
 - **Скрапинг:** `scrape.run`, `scrape.results`
 - **Управление:** `reconcile.now`
 - **AI backends:** `llm.providers`, `llm.complete`
@@ -1031,7 +1031,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
   ```
   Явные refs продолжают работать без изменений. Для brain заземляется через **`acq://email-identities`**; проверено вживую по всем контурам (`scripts/ai-email-surfaces-live.mjs`). **Сами ящики — те, что создаёшь и которыми владеешь ты**: платформа их хранит и использует, но не регистрирует почтовые аккаунты за тебя.
 
-  **Каталог провайдеров (`email.providers`).** Единый источник истины для доступа к ящику — покрыт запрошенный список: **Gmail, Outlook/Hotmail, Yahoo, AOL, GMX, Mail.com, Rambler, Mail.ru, Onet.pl, Seznam.cz** (IMAP из коробки), плюс **Proton** (нужен локальный Proton Mail **Bridge** — публичного IMAP нет), **Mail.tm** (только API, IMAP нет), **Firstmail** (хост меняется по партиям — задай `imapHost` на идентичности) и **custom** IMAP. Провайдер без IMAP честно помечается (`imapReady:false`, `requiresBridge`/`apiOnly`) — платформа не выдумывает хост. `EmailCodeFetcher` резолвит через этот каталог (одна таблица хостов, без дублей). *Харнесс приоритета 1* `scripts/mail-shops-live.mjs` тестирует ящик на **dark.shopping + djekxa** end-to-end: резолв каталога + реальный IMAP-логин/чтение (при кредах) + балансы обоих магазинов + вся цепочка `signup → confirm → buy`.
+  **Каталог провайдеров (`email.providers`).** Единый источник истины для доступа к ящику — покрыт запрошенный список: **Gmail, Outlook/Hotmail, Yahoo, AOL, GMX, Mail.com, Rambler, Mail.ru, Onet.pl, Seznam.cz** (IMAP из коробки), плюс **Proton** (нужен локальный Proton Mail **Bridge** — публичного IMAP нет), **Mail.tm** (только API, IMAP нет), **Firstmail** (хост меняется по партиям — задай `imapHost` на идентичности) и **custom** IMAP. Провайдер без IMAP честно помечается (`imapReady:false`, `requiresBridge`/`apiOnly`) — платформа не выдумывает хост. **Reader-by-provider:** `createEmailCodeReader` выбирает правильный ридер кода под тип ящика — IMAP-`EmailCodeFetcher` для обычных, и **HTTP-API-ридер (`createMailTmCodeReader`) для API-only типов вроде Mail.tm** (у которых нет IMAP) — контракт `fetchLatestCode` один в обоих случаях, поэтому confirm в магазине работает для **любого** типа почты без ветвлений. Proton (bridge) и Firstmail (per-batch) задают хост явно и идут по IMAP-пути. *Харнесс приоритета 1* `scripts/mail-shops-live.mjs` тестирует ящик на **dark.shopping + djekxa** end-to-end: резолв каталога + реальный IMAP-логин/чтение (при кредах) + балансы обоих магазинов + вся цепочка `signup → confirm → buy`.
 - **Подключаемые AI-бэкенды (`llm.providers` / `llm.complete`).** Любой путь с ИИ (скан магазина и всё, что ведёт brain) идёт через **реестр провайдеров** — один контракт `complete()`, много вендоров:
 
   | провайдер | модель по умолчанию | примечание |
@@ -1050,7 +1050,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
   | `own` *(дефолт)* | self-hosted | наш пул Puppeteer/CDP — ноль платы за сессию, данные дома; масштаб/стелс/прокси на операторе; CAPTCHA — стоп-кран |
   | `browserbase` | cloud | управляемый флот — тысячи конкуррентных стелс-CDP-сессий, управляемые residential-прокси + решение CAPTCHA + live-view/перехват; плата за сессию, данные идут через вендора |
 
-  Self-hosted backend доступен всегда; облачный — `configured:true` только при заданном `BROWSERBASE_API_KEY` (+ `BROWSERBASE_PROJECT_ID`) — выбрать его без ключа = честный `BROWSERBASE_UNCONFIGURED`, сбой вендора = `BROWSERBASE_REQUEST_FAILED` (никогда не утёкший INTERNAL). Оба говорят по CDP, поэтому `browserBackendFor({provider})` меняет их **за тем же портом без правок ядра**. Поверх любого — **AI-актор в стиле Stagehand** (`createAiActor`, `observe→act` через `llm.complete`) ведёт логин по живому снимку страницы, переживая дрейф DOM — и остаётся честным (`BROWSER_ACT_UNSUPPORTED`), а не имитирует клик. Полное обоснование: [`research/login-architecture.md`](research/login-architecture.md).
+  Self-hosted backend доступен всегда; облачный — `configured:true` только при заданном `BROWSERBASE_API_KEY` (+ `BROWSERBASE_PROJECT_ID`) — выбрать его без ключа = честный `BROWSERBASE_UNCONFIGURED`, сбой вендора = `BROWSERBASE_REQUEST_FAILED` (никогда не утёкший INTERNAL). Оба говорят по CDP, поэтому `browserBackendFor({provider})` меняет их **за тем же портом без правок ядра**. **Выбор — реальный, а не косметика:** `browser.session.open {provider:'browserbase', …}` открывает сессию на выбранном backend'е (облако без ключа → кодированный шов), `browser.session.liveView {provider}` инспектирует её. Поверх любого — **AI-актор в стиле Stagehand** — экспонирован как first-class операции **`browser.observe {sessionId, goal, browserProvider?, provider?, model?}`** и **`browser.act {…}`** на всех контурах — ведёт логин по живому снимку страницы через `llm.complete`, переживая дрейф DOM, и остаётся честным (`BROWSER_ACT_UNSUPPORTED` если у backend'а нет action-примитива, `AI_ACTOR_SNAPSHOT_UNSUPPORTED` если не может снять снимок), а не имитирует клик. Полное обоснование: [`research/login-architecture.md`](research/login-architecture.md).
 - **Генерация (create).** Путь GENERATE — нативная регистрация на устройстве драйвером платформы (`signupVia`: phone/native/google), питается ресурсами верификации. Без инъектированного генератора — честный шов, никогда не фейк-аккаунт.
 - **Верификация.** `VerificationResourceProvider` + `createHttpSmsVendor({endpoints, map})` арендуют номера / поллят SMS-коды через любой декларативный вендор (sms-activate/5sim/…). Ожидающий код возвращает `null` (вызывающий поллит); исчерпанная аренда — `VERIFICATION_CODE_TIMEOUT`, никогда не выдуманный код.
 - **Персоны.** `persona.generate` производит связные личности (имя/хендл/био/ниша/локаль) для заполнения профилей.
@@ -1060,7 +1060,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 
 Выбирай контур под своего вызывающего; все говорят с одним фасадом.
 
-- **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (51 операция), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
+- **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (53 операция), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
 - **Из бэкенда / микросервиса:** **gRPC** (`:7550`, `Control.Execute`) для throughput, или **REST** (`/v1/op/:operation`) для простоты. Bearer-токен → роль.
 - **Из другой агентной платформы:** **A2A** — забрать agent card, POST-ить таски. Стандартизованный agent-to-agent.
 - **Из браузера / UI операторов:** встроенная **операторская панель** (`:7600`) — тонкая WCAG/CSP SPA над фасадом с фичами accounts · pool · devices · campaigns · scrape · on-device селекторы (каждая — юнит-тестируемая чистая view-model); плюс **WebSocket** (`/v1/ws`) и **SSE** (`/v1/events`).
@@ -1097,4 +1097,4 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 
 ---
 
-*Generated for the `@acq` platform. Single facade · 51 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*
+*Generated for the `@acq` platform. Single facade · 53 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*

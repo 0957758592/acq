@@ -13,7 +13,7 @@ import {
 import { reconcile } from '@acq/engine-domain';
 import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner, createShopSignup, createEncryptedCookieSessionStore } from '@acq/procurement';
 import { createBrowserProvider, listBrowserProviders, createBrowserbaseProvider, createAiActor } from '@acq/browser';
-import { createOpenRouterClient, createLlmClient, listLlmProviders, EmailCodeFetcher } from '@acq/integrations';
+import { createOpenRouterClient, createLlmClient, listLlmProviders, EmailCodeFetcher, createEmailCodeReader } from '@acq/integrations';
 import { createVerificationResourceProvider, createHttpSmsVendor } from '@acq/account-gen';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
 import { createDeviceProvider } from '@acq/device-control';
@@ -76,6 +76,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createShopSignup,
     createEncryptedCookieSessionStore,
     EmailCodeFetcher,
+    createEmailCodeReader,
     createOpenRouterClient,
     createLlmClient,
     listLlmProviders,
@@ -200,7 +201,9 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       shopRegistry,
       httpClient,
       secretResolver,
-      emailCodeFetcherFactory: ({ email, password, host, port }) => new D.EmailCodeFetcher({ email, password, host: host || undefined, port: port || undefined }),
+      // Reader-by-provider: IMAP for normal mailboxes, HTTP API for API-only
+      // types (Mail.tm) — one fetchLatestCode contract, every email type works.
+      emailCodeFetcherFactory: ({ email, password, host, port }) => D.createEmailCodeReader({ email, password, host: host || null, port: port || null }),
       identityStore: emailIdentityStore,
       cookieSessionStore
     });

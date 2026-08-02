@@ -37,6 +37,11 @@ export function createAiActor({ llm, browser, snapshotFn = () => document.body.i
 
   async function snapshot(sessionId, { url = null } = {}) {
     // Read the live page through the SAME BrowserProvider port both backends share.
+    // A backend without extract() (e.g. a raw CDP cloud session) can't snapshot —
+    // say so with a coded seam rather than throwing a TypeError.
+    if (typeof browser.extract !== 'function') {
+      throw domainError('AI_ACTOR_SNAPSHOT_UNSUPPORTED', 'browser backend has no extract() to snapshot the page');
+    }
     return browser.extract(sessionId, { url, pageFunction: snapshotFn });
   }
 
