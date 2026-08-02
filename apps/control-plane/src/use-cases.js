@@ -188,15 +188,16 @@ export function buildUseCases(ctx) {
       return ctx.emailIdentityStore.register({
         address: require$(args, 'address', 'ADDRESS_REQUIRED'),
         provider: args.provider ?? 'custom',
+        category: args.category ?? 'standard',
         imapHost: args.imapHost ?? '',
         imapPort: args.imapPort ?? 993,
         passwordRef: require$(args, 'passwordRef', 'PASSWORD_REF_REQUIRED'),
         notes: args.notes ?? ''
       });
     },
-    'email.identity.list': async () => {
+    'email.identity.list': async (args = {}) => {
       if (!ctx.emailIdentityStore) throw seam('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'email identity store not wired');
-      return { identities: await ctx.emailIdentityStore.list() };
+      return { identities: await ctx.emailIdentityStore.list({ category: args.category ?? null }) };
     },
     'email.identity.disable': async (args = {}) => {
       if (!ctx.emailIdentityStore) throw seam('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'email identity store not wired');

@@ -10,6 +10,9 @@ const engineEmailIdentitySchema = new mongoose.Schema(
     tenantId: { type: String, trim: true, default: 'default', index: true },
     address: { type: String, trim: true, required: true },
     provider: { type: String, trim: true, default: 'custom' },
+    // Email TYPE (operator label): standard / aged / us / manual / disposable /
+    // autoreg-purchased / … — free-form so any classification is representable.
+    category: { type: String, trim: true, default: 'standard', index: true },
     imapHost: { type: String, trim: true, default: '' },
     imapPort: { type: Number, default: 993 },
     // Refs only (vault:/env:) — resolved at use time by the SecretResolver.

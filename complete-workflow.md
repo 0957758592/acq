@@ -300,8 +300,11 @@ curl -XPOST localhost:7500/a2a -d '{"id":"a1","skill":"account.status","args":{"
 Execute({ operation:'pool.status', args_json:'{"platform":"youtube"}' }) → { data_json, error_json }
 ```
 
-**CLI / manual** — same facade, terminal envelope:
+**CLI / manual** — a real `acq` binary (`apps/control-plane/bin/acq.js`) that drives a **deployed** server over REST (`POST /v1/op/:operation`); set and get are the same call, RBAC by the bearer token. `ACQ_BASE_URL` (default `http://localhost:7500`) + `ACQ_TOKEN` configure it; exit code is non-zero on a coded error, transport failure is a coded `CLI_REQUEST_FAILED`:
 ```bash
+export ACQ_TOKEN=… ACQ_BASE_URL=http://localhost:7500
+acq pool.status platform=telegram                      # get
+acq account.retire accountId=a1                        # set
 acq scoring.score subjectType=target 'features={"followers":50000}'
 ```
 
@@ -472,7 +475,8 @@ The default stays the web scraper; Bot API and MTProto are parameter-selected ti
 
   | op | purpose |
   |---|---|
-  | `email.identity.register {address, provider?, imapHost?, imapPort?, passwordRef, notes?}` | store a mailbox + its **secret ref** (a plaintext password is refused: `EMAIL_PASSWORD_REF_REQUIRED`) |
+  | `email.identity.register {address, provider?, category?, imapHost?, imapPort?, passwordRef, notes?}` | store a mailbox + its **secret ref** (a plaintext password is refused: `EMAIL_PASSWORD_REF_REQUIRED`); `category` is the email **type** — `standard`/`aged`/`us`/`manual`/`disposable`/`autoreg-purchased`/… |
+  | `email.identity.list {category?}` | list mailboxes (secrets stripped), optionally filtered by email **type** (e.g. only `us`/`aged`) |
   | `email.identity.list` | list identities — **secrets stripped** (`hasPasswordRef` only) |
   | `email.identity.disable {address}` | retire an identity; further use fails `EMAIL_IDENTITY_DISABLED` |
 
@@ -486,7 +490,7 @@ The default stays the web scraper; Bot API and MTProto are parameter-selected ti
   ```
   Explicit refs still work unchanged. Grounded for the brain via **`acq://email-identities`**; verified live across every surface (`scripts/ai-email-surfaces-live.mjs`). **The mailboxes themselves are ones you create and own** — the platform stores and uses them, it does not register mail accounts for you.
 
-  **Provider catalog (`email.providers`).** A single source of truth for reaching a mailbox — the requested set is covered: **Gmail, Outlook/Hotmail, Yahoo, AOL, GMX, Mail.com, Rambler, Mail.ru, Onet.pl, Seznam.cz** (IMAP-ready out of the box), plus **Proton** (needs the local Proton Mail **Bridge** — no public IMAP), **Mail.tm** (API-only, no IMAP), **Firstmail** (host varies per batch — set `imapHost` on the identity) and **custom** IMAP. A no-IMAP provider is honestly flagged (`imapReady:false`, `requiresBridge`/`apiOnly`) — the platform never invents a hostname. **Reader-by-provider:** `createEmailCodeReader` picks the right code reader per email type — the IMAP `EmailCodeFetcher` for normal mailboxes, and an **HTTP API reader (`createMailTmCodeReader`) for API-only types like Mail.tm** (which have no IMAP) — one `fetchLatestCode` contract either way, so the shop-confirm flow works for **every** email type without branching. Proton (bridge) and Firstmail (per-batch) supply their host explicitly and take the IMAP path. *Priority-1 harness* `scripts/mail-shops-live.mjs` tests a mailbox against **dark.shopping + djekxa** end-to-end: catalog resolution + real IMAP login/read (with creds) + both shops' balance probe + the full `signup → confirm → buy` chain.
+  **Provider catalog (`email.providers`).** A single source of truth for reaching a mailbox — the requested set is covered: **Gmail, Outlook/Hotmail, Yahoo, AOL, GMX, Mail.com, Rambler, Mail.ru (incl. My.com / My World), Onet.pl, Seznam.cz** (IMAP-ready out of the box), plus **Proton** (needs the local Proton Mail **Bridge** — no public IMAP), **Mail.tm** (API-only, no IMAP), **Firstmail** (host varies per batch — set `imapHost` on the identity) and **custom** IMAP. A no-IMAP provider is honestly flagged (`imapReady:false`, `requiresBridge`/`apiOnly`) — the platform never invents a hostname. **Reader-by-provider:** `createEmailCodeReader` picks the right code reader per email type — the IMAP `EmailCodeFetcher` for normal mailboxes, and an **HTTP API reader (`createMailTmCodeReader`) for API-only types like Mail.tm** (which have no IMAP) — one `fetchLatestCode` contract either way, so the shop-confirm flow works for **every** email type without branching. Proton (bridge) and Firstmail (per-batch) supply their host explicitly and take the IMAP path. *Priority-1 harness* `scripts/mail-shops-live.mjs` tests a mailbox against **dark.shopping + djekxa** end-to-end: catalog resolution + real IMAP login/read (with creds) + both shops' balance probe + the full `signup → confirm → buy` chain.
 - **Pluggable AI backends (`llm.providers` / `llm.complete`).** Every AI-using path (shop scan, and anything the brain drives) runs over a **provider registry** — one `complete()` contract, many vendors:
 
   | provider | default model | notes |
@@ -845,8 +849,11 @@ curl -XPOST localhost:7500/a2a -d '{"id":"a1","skill":"account.status","args":{"
 Execute({ operation:'pool.status', args_json:'{"platform":"youtube"}' }) → { data_json, error_json }
 ```
 
-**CLI / вручную** — тот же фасад, терминальный конверт:
+**CLI / вручную** — реальный бинарь `acq` (`apps/control-plane/bin/acq.js`), который управляет **развёрнутым** сервером по REST (`POST /v1/op/:operation`); set и get — один и тот же вызов, RBAC по bearer-токену. Настройка через `ACQ_BASE_URL` (дефолт `http://localhost:7500`) + `ACQ_TOKEN`; код выхода ненулевой при кодированной ошибке, сбой транспорта — кодированный `CLI_REQUEST_FAILED`:
 ```bash
+export ACQ_TOKEN=… ACQ_BASE_URL=http://localhost:7500
+acq pool.status platform=telegram                      # get
+acq account.retire accountId=a1                        # set
 acq scoring.score subjectType=target 'features={"followers":50000}'
 ```
 
@@ -1017,7 +1024,8 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 
   | операция | назначение |
   |---|---|
-  | `email.identity.register {address, provider?, imapHost?, imapPort?, passwordRef, notes?}` | сохранить ящик + **ссылку на секрет** (открытый пароль отклоняется: `EMAIL_PASSWORD_REF_REQUIRED`) |
+  | `email.identity.register {address, provider?, category?, imapHost?, imapPort?, passwordRef, notes?}` | сохранить ящик + **ссылку на секрет** (открытый пароль отклоняется: `EMAIL_PASSWORD_REF_REQUIRED`); `category` — **тип** почты: `standard`/`aged`/`us`/`manual`/`disposable`/`autoreg-purchased`/… |
+  | `email.identity.list {category?}` | список ящиков (секреты вырезаны), с опциональным фильтром по **типу** почты (напр. только `us`/`aged`) |
   | `email.identity.list` | список идентичностей — **секреты вырезаны** (только `hasPasswordRef`) |
   | `email.identity.disable {address}` | вывести идентичность из оборота; дальнейшее использование → `EMAIL_IDENTITY_DISABLED` |
 
@@ -1031,7 +1039,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
   ```
   Явные refs продолжают работать без изменений. Для brain заземляется через **`acq://email-identities`**; проверено вживую по всем контурам (`scripts/ai-email-surfaces-live.mjs`). **Сами ящики — те, что создаёшь и которыми владеешь ты**: платформа их хранит и использует, но не регистрирует почтовые аккаунты за тебя.
 
-  **Каталог провайдеров (`email.providers`).** Единый источник истины для доступа к ящику — покрыт запрошенный список: **Gmail, Outlook/Hotmail, Yahoo, AOL, GMX, Mail.com, Rambler, Mail.ru, Onet.pl, Seznam.cz** (IMAP из коробки), плюс **Proton** (нужен локальный Proton Mail **Bridge** — публичного IMAP нет), **Mail.tm** (только API, IMAP нет), **Firstmail** (хост меняется по партиям — задай `imapHost` на идентичности) и **custom** IMAP. Провайдер без IMAP честно помечается (`imapReady:false`, `requiresBridge`/`apiOnly`) — платформа не выдумывает хост. **Reader-by-provider:** `createEmailCodeReader` выбирает правильный ридер кода под тип ящика — IMAP-`EmailCodeFetcher` для обычных, и **HTTP-API-ридер (`createMailTmCodeReader`) для API-only типов вроде Mail.tm** (у которых нет IMAP) — контракт `fetchLatestCode` один в обоих случаях, поэтому confirm в магазине работает для **любого** типа почты без ветвлений. Proton (bridge) и Firstmail (per-batch) задают хост явно и идут по IMAP-пути. *Харнесс приоритета 1* `scripts/mail-shops-live.mjs` тестирует ящик на **dark.shopping + djekxa** end-to-end: резолв каталога + реальный IMAP-логин/чтение (при кредах) + балансы обоих магазинов + вся цепочка `signup → confirm → buy`.
+  **Каталог провайдеров (`email.providers`).** Единый источник истины для доступа к ящику — покрыт запрошенный список: **Gmail, Outlook/Hotmail, Yahoo, AOL, GMX, Mail.com, Rambler, Mail.ru (incl. My.com / My World), Onet.pl, Seznam.cz** (IMAP из коробки), плюс **Proton** (нужен локальный Proton Mail **Bridge** — публичного IMAP нет), **Mail.tm** (только API, IMAP нет), **Firstmail** (хост меняется по партиям — задай `imapHost` на идентичности) и **custom** IMAP. Провайдер без IMAP честно помечается (`imapReady:false`, `requiresBridge`/`apiOnly`) — платформа не выдумывает хост. **Reader-by-provider:** `createEmailCodeReader` выбирает правильный ридер кода под тип ящика — IMAP-`EmailCodeFetcher` для обычных, и **HTTP-API-ридер (`createMailTmCodeReader`) для API-only типов вроде Mail.tm** (у которых нет IMAP) — контракт `fetchLatestCode` один в обоих случаях, поэтому confirm в магазине работает для **любого** типа почты без ветвлений. Proton (bridge) и Firstmail (per-batch) задают хост явно и идут по IMAP-пути. *Харнесс приоритета 1* `scripts/mail-shops-live.mjs` тестирует ящик на **dark.shopping + djekxa** end-to-end: резолв каталога + реальный IMAP-логин/чтение (при кредах) + балансы обоих магазинов + вся цепочка `signup → confirm → buy`.
 - **Подключаемые AI-бэкенды (`llm.providers` / `llm.complete`).** Любой путь с ИИ (скан магазина и всё, что ведёт brain) идёт через **реестр провайдеров** — один контракт `complete()`, много вендоров:
 
   | провайдер | модель по умолчанию | примечание |

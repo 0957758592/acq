@@ -4,7 +4,10 @@ function fakeModel() {
   const rows = new Map();
   return {
     findOne: (f) => ({ lean: async () => rows.get(f.address) ?? null }),
-    find: () => ({ lean: async () => [...rows.values()] }),
+    find: (f = {}) => ({
+      lean: async () =>
+        [...rows.values()].filter((r) => Object.entries(f).every(([k, v]) => k === 'tenantId' || r[k] === v))
+    }),
     findOneAndUpdate: async (f, u) => {
       const merged = { ...(rows.get(f.address) || {}), address: f.address, ...(u.$set || {}), ...(u.$setOnInsert || {}) };
       rows.set(f.address, merged);
@@ -50,5 +53,23 @@ describe('createEmailIdentityStore (operator-owned mailboxes, any provider)', ()
     const list = await store.list();
     expect(list.map((i) => i.address).sort()).toEqual(['a@x.y', 'b@x.y']);
     expect(JSON.stringify(list)).not.toContain('vault:');
+  });
+
+  it('records the email TYPE/category (aged/us/manual/disposable/…) and defaults to standard', async () => {
+    const store = createEmailIdentityStore({ model: fakeModel() });
+    const aged = await store.register({ address: 'aged@gmail.com', provider: 'gmail', category: 'aged', passwordRef: 'vault:1' });
+    expect(aged.category).toBe('aged');
+    const plain = await store.register({ address: 'new@gmail.com', provider: 'gmail', passwordRef: 'vault:2' });
+    expect(plain.category).toBe('standard');
+  });
+
+  it('filters the list by email type so the operator can pick e.g. only US/aged mailboxes', async () => {
+    const store = createEmailIdentityStore({ model: fakeModel() });
+    await store.register({ address: 'us1@gmail.com', category: 'us', passwordRef: 'vault:1' });
+    await store.register({ address: 'aged1@gmail.com', category: 'aged', passwordRef: 'vault:2' });
+    await store.register({ address: 'std@gmail.com', passwordRef: 'vault:3' });
+    const us = await store.list({ category: 'us' });
+    expect(us.map((i) => i.address)).toEqual(['us1@gmail.com']);
+    expect((await store.list()).length).toBe(3);
   });
 });

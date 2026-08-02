@@ -55,11 +55,12 @@ export const MAIL_PROVIDERS = {
     note: ''
   },
   mailru: {
-    label: 'Mail.ru',
-    domains: ['mail.ru', 'inbox.ru', 'bk.ru', 'list.ru', 'internet.ru'],
+    label: 'Mail.ru / My.com (My World)',
+    // My.com is Mail.ru's international brand (My World / Мой Мир) — same IMAP.
+    domains: ['mail.ru', 'inbox.ru', 'bk.ru', 'list.ru', 'internet.ru', 'my.com'],
     imapHost: 'imap.mail.ru',
     imapPort: 993,
-    note: 'App password required for external clients.'
+    note: 'App password required for external clients. Covers My.com / My World (Mail.ru).'
   },
   onet: {
     label: 'Onet Poczta',
