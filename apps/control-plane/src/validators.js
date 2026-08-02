@@ -40,6 +40,7 @@ export const SCHEMAS = {
   'device.status': schema({ status: str, provider: str }),
   'device.selectors': schema({ platform: str.required() }),
   'device.selectors.set': schema({ platform: str.required(), selectors: obj.required(), updatedBy: str.nullable() }),
+  'email.providers': schema({}),
   'email.identity.register': schema({ address: str.required(), provider: str, imapHost: str, imapPort: num.integer().positive(), passwordRef: str.required(), notes: str }),
   'email.identity.list': schema({}),
   'email.identity.disable': schema({ address: str.required() }),

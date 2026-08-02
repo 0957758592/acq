@@ -1,21 +1,18 @@
 import tls from 'node:tls';
 
+import { resolveMailbox } from './mail-providers.js';
+
 export function extractVerificationCode(text, { minLength = 4, maxLength = 8 } = {}) {
   const pattern = new RegExp(`\\b\\d{${minLength},${maxLength}}\\b`, 'g');
   const matches = String(text || '').match(pattern) || [];
   return matches[0] || '';
 }
 
+// Host resolution lives in the mail provider catalog (single source of truth for
+// every provider: gmail/outlook/yahoo/aol/gmx/mail.com/rambler/mail.ru/onet/
+// seznam/proton-bridge/firstmail/custom). No duplicated host table here.
 function inferImapHost(email, fallbackHost) {
-  if (fallbackHost) return fallbackHost;
-  const domain = String(email || '').split('@')[1]?.toLowerCase();
-  if (!domain) return 'imap.outlook.com';
-  if (['hotmail.com', 'outlook.com', 'live.com', 'msn.com'].includes(domain)) return 'imap-mail.outlook.com';
-  if (domain === 'gmail.com') return 'imap.gmail.com';
-  if (domain === 'yahoo.com') return 'imap.mail.yahoo.com';
-  if (domain === 'rambler.ru') return 'imap.rambler.ru';
-  if (domain === 'onet.pl') return 'imap.poczta.onet.pl';
-  return `imap.${domain}`;
+  return resolveMailbox(email, { imapHost: fallbackHost }).imapHost;
 }
 
 class SimpleImapClient {

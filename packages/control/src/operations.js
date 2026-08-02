@@ -49,6 +49,7 @@ export const OPERATIONS = [
   { name: 'scrape.run', mutating: true, roles: R.ops },
   { name: 'scrape.results', mutating: false, roles: R.all },
   { name: 'reconcile.now', mutating: true, roles: R.ops },
+  { name: 'email.providers', mutating: false, roles: R.all },
   { name: 'email.identity.register', mutating: true, roles: R.staff },
   { name: 'email.identity.list', mutating: false, roles: R.all },
   { name: 'email.identity.disable', mutating: true, roles: R.staff },

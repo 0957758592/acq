@@ -8,6 +8,7 @@ import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/
 import { scanShop } from '../../engine/src/services/scan-shop.js';
 import { domainSnapshot } from '../../engine/src/services/domain-snapshot.js';
 import { evaluateSlos } from '@acq/core/observability/slo';
+import { listMailProviders } from '@acq/integrations';
 import { scoreAccount, scoreTarget } from '@acq/intelligence';
 import { generatePersona } from '@acq/account-gen';
 
@@ -168,6 +169,8 @@ export function buildUseCases(ctx) {
     }),
 
     // ---- Email identities (operator-owned mailboxes, ANY provider) ---------
+    // Catalog of supported mail providers + their IMAP readiness (picker data).
+    'email.providers': async () => ({ providers: listMailProviders() }),
     'email.identity.register': async (args = {}) => {
       if (!ctx.emailIdentityStore) throw seam('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'email identity store not wired');
       return ctx.emailIdentityStore.register({
