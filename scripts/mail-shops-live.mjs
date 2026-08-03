@@ -29,7 +29,8 @@ async function main() {
     ['ops@gmail.com', 'IMAP'], ['a@outlook.com', 'IMAP'], ['b@yahoo.com', 'IMAP'],
     ['c@rambler.ru', 'IMAP'], ['d@mail.ru', 'IMAP'], ['e@gmx.com', 'IMAP'],
     ['f@onet.pl', 'IMAP'], ['g@seznam.cz', 'IMAP'], ['h@aol.com', 'IMAP'],
-    ['i@mail.tm', 'API'] // API-only — no IMAP; must use the HTTP reader
+    ['i@mail.tm', 'API'], // API-only — no IMAP; must use the HTTP reader
+    ['j@1secmail.com', 'API'] // 2nd API-only type — routed to the 1secmail reader
   ];
   for (const [addr, kind] of readerCases) {
     const reader = createEmailCodeReader({ email: addr, password: 'x' });

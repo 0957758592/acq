@@ -36,4 +36,23 @@ describe('createEmailCodeReader — reader-by-provider (IMAP vs API-only)', () =
     expect(reader.accessToken).toBe('ya29.tok');
     expect(reader.host).toBe('outlook.office365.com');
   });
+
+  it('picks the RIGHT API reader per api-only provider — 1secmail, not Mail.tm', async () => {
+    // 1secmail's API is queried (getMessages), proving it did not fall back to Mail.tm.
+    const seen = [];
+    const fetchImpl = async (url) => {
+      seen.push(url);
+      return {
+        ok: true, status: 200,
+        text: async () =>
+          url.includes('getMessages') ? JSON.stringify([{ id: 1, subject: 'verification' }])
+            : url.includes('readMessage') ? JSON.stringify({ textBody: 'code 224466' })
+              : '[]'
+      };
+    };
+    const reader = createEmailCodeReader({ email: 'z@1secmail.com', fetchImpl });
+    expect(reader).not.toBeInstanceOf(EmailCodeFetcher);
+    expect(await reader.fetchLatestCode({ limit: 3 })).toBe('224466');
+    expect(seen.some((u) => u.includes('1secmail') && u.includes('getMessages'))).toBe(true);
+  });
 });

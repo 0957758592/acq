@@ -8,6 +8,7 @@ export { LLM_PROVIDERS, listLlmProviders, resolveLlmModel, createLlmClient } fro
 export { MAIL_PROVIDERS, listMailProviders, providerIdForAddress, resolveMailbox } from './mail-providers.js';
 export { EmailCodeFetcher, extractVerificationCode } from './email-code.js';
 export { createMailTmCodeReader } from './mailtm-code.js';
+export { createOneSecMailCodeReader } from './onesecmail-code.js';
 export { createEmailCodeReader } from './email-reader.js';
 export { buildProxyUrl, verifyProxy } from './proxy-check.js';
 export { generateTOTP, totpCandidates, base32Decode } from './totp.js';

@@ -106,6 +106,15 @@ export const MAIL_PROVIDERS = {
     apiOnly: true,
     note: 'HTTP API only — no IMAP. Use an API-backed code reader, not EmailCodeFetcher.'
   },
+  onesecmail: {
+    label: '1secmail (disposable, API-only)',
+    authMethods: ['api'],
+    domains: ['1secmail.com', '1secmail.org', '1secmail.net', 'wwjmp.com', 'esiix.com', 'xojxe.com', 'yoggm.com'],
+    imapHost: null,
+    imapPort: null,
+    apiOnly: true,
+    note: 'HTTP API only — no IMAP, no auth. Use the 1secmail API code reader.'
+  },
   firstmail: {
     label: 'Firstmail (reseller)',
     authMethods: ['password'],
