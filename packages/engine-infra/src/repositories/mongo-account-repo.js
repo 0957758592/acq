@@ -10,6 +10,8 @@
 // so save() opt-locks on { _id, tenantId, version-1 } and $sets the already-
 // bumped fields. A null result means a concurrent writer moved the version ->
 // CONFLICT. Brand-new accounts (version 0) are INSERTED via insertAcquired.
+import { paginate } from '@acq/core/db/paginate';
+
 import { conflictError } from '../errors.js';
 
 function toFields(a) {
@@ -31,6 +33,11 @@ function toFields(a) {
 export function createMongoAccountRepo({ model, tenantId = 'default' } = {}) {
   if (!model) throw new Error('createMongoAccountRepo requires a mongoose model');
   return {
+    // Cursor-paginated inventory read (REQUIREM §2.5) — never loads the whole
+    // collection. Tenant-scoped like every other query.
+    async page(filter = {}, { cursor = null, limit } = {}) {
+      return paginate(model, { tenantId, ...filter }, { cursor, limit });
+    },
     async find(filter = {}) {
       try {
         return await model.find({ tenantId, ...filter }).lean();

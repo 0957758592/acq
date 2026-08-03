@@ -1,3 +1,5 @@
+import { paginate } from '@acq/core/db/paginate';
+
 // Email identity store (TZ §6.4). CRUD over operator-owned mailboxes used for
 // shop signup/confirmation. Secrets are REFS only; reads always strip them so no
 // surface (or the brain) can ever see credential material.
@@ -42,6 +44,12 @@ export function createEmailIdentityStore({ model, tenantId = 'default' } = {}) {
     async list({ category = null } = {}) {
       const filter = { tenantId, ...(category ? { category } : {}) };
       return (await model.find(filter).lean()).map(strip);
+    },
+    // Cursor-paginated list (REQUIREM §2.5) — same strip, bounded page.
+    async page({ category = null, cursor = null, limit } = {}) {
+      const filter = { tenantId, ...(category ? { category } : {}) };
+      const { items, nextCursor } = await paginate(model, filter, { cursor, limit });
+      return { items: items.map(strip), nextCursor };
     },
     async disable(address) {
       const doc = await model.findOneAndUpdate({ tenantId, address }, { $set: { status: 'disabled' } }, { new: true });

@@ -12,9 +12,11 @@ function fakeCtx() {
   return {
     clock: { now: () => new Date('2026-07-22T18:00:00.000Z') },
     config: { buyBatchSize: 5 },
+    pageCalls: [],
     accountRepo: {
       countAvailable: async () => 7,
       find: async (f) => (f._id ? [accounts[f._id]].filter(Boolean) : Object.values(accounts).filter((a) => a.platform === f.platform)),
+      page: async function (filter, opts = {}) { this._calls = this._calls || []; this._calls.push({ filter, opts }); const all = Object.values(accounts).filter((a) => !filter.platform || a.platform === filter.platform); const size = opts.limit || 50; const items = all.slice(0, size); return { items, nextCursor: all.length > size ? items[items.length - 1]._id : null }; },
       save: async (a) => { accounts[a.id] = { ...accounts[a.id], status: a.status, assignedDeviceId: a.assignedDeviceId, version: a.version }; return a; },
       tag: async (id, { add = [] }) => ({ _id: id, tags: add })
     },
@@ -314,5 +316,20 @@ describe('control-plane use-cases through the facade', () => {
     const { facade } = build();
     const res = await facade.execute('browser.observe', { role: 'operator', args: { sessionId: 'sess-1' } });
     expect(res.error.code).toBeDefined();
+  });
+
+  it('account.status is cursor-paginated (limit + nextCursor) — never loads the whole inventory', async () => {
+    const { facade, ctx } = build();
+    const res = await facade.execute('account.status', { role: 'readonly', args: { limit: 10, cursor: 'a0' } });
+    expect(res.data).toHaveProperty('accounts');
+    expect(res.data).toHaveProperty('nextCursor'); // paginated shape
+    // the cursor + limit were threaded to the repo's paginated read
+    expect(ctx.accountRepo._calls[0].opts).toMatchObject({ cursor: 'a0', limit: 10 });
+  });
+
+  it('account.status by accountId is still a point read', async () => {
+    const { facade } = build();
+    const res = await facade.execute('account.status', { role: 'readonly', args: { accountId: 'a1' } });
+    expect(res.data.accounts[0]).toMatchObject({ _id: 'a1' });
   });
 });

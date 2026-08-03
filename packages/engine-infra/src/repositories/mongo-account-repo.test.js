@@ -81,6 +81,17 @@ describe('generic MongoAccountRepo.countAvailable', () => {
     expect(model.calls[1].count).toMatchObject({ tenantId: 'tenant-A' });
   });
 
+  it('page() returns a cursor-bounded page scoped to the tenant (REQUIREM §2.5)', async () => {
+    const q = {};
+    const chain = { find: (f) => { q.filter = f; return chain; }, sort: (s) => { q.sort = s; return chain; }, limit: (n) => { q.limit = n; return chain; }, lean: async () => [{ _id: 'a1' }, { _id: 'a2' }] };
+    const repo = createMongoAccountRepo({ model: { find: chain.find }, tenantId: 'tenant-Z' });
+    const res = await repo.page({ platform: 'telegram' }, { cursor: 'a0', limit: 25 });
+    expect(res).toHaveProperty('items');
+    expect(res).toHaveProperty('nextCursor');
+    expect(q.filter).toMatchObject({ tenantId: 'tenant-Z', platform: 'telegram', _id: { $gt: 'a0' } });
+    expect(q.limit).toBe(26); // limit+1
+  });
+
   it('treats a malformed id (CastError) as no match instead of leaking', async () => {
     // Mongoose throws a CastError while casting a non-ObjectId `_id`. A find must
     // resolve to "no rows" (so callers surface a coded NOT_FOUND) — never leak.

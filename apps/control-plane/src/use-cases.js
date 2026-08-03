@@ -8,6 +8,7 @@ import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/
 import { scanShop } from '../../engine/src/services/scan-shop.js';
 import { domainSnapshot } from '../../engine/src/services/domain-snapshot.js';
 import { evaluateSlos } from '@acq/core/observability/slo';
+import { paginate } from '@acq/core/db/paginate';
 import { listMailProviders } from '@acq/integrations';
 import { scoreAccount, scoreTarget } from '@acq/intelligence';
 import { generatePersona } from '@acq/account-gen';
@@ -68,8 +69,10 @@ export function buildUseCases(ctx) {
     },
     // List enrolled cloud-phone devices (read-model for the dashboard/brain).
     'device.status': async (args = {}) => {
+      if (!ctx.deviceModel) return { devices: [], nextCursor: null };
       const filter = { ...(args.status ? { status: args.status } : {}), ...(args.provider ? { provider: args.provider } : {}) };
-      return { devices: ctx.deviceModel ? await ctx.deviceModel.find(filter).lean() : [] };
+      const { items, nextCursor } = await paginate(ctx.deviceModel, filter, { cursor: args.cursor ?? null, limit: args.limit });
+      return { devices: items, nextCursor };
     },
     // On-device selector overrides (read/tune the login/action/report selector
     // text sets for a live app build). Absent store -> honest coded seam.
@@ -120,9 +123,15 @@ export function buildUseCases(ctx) {
 
     // ---- Accounts ----------------------------------------------------------
     'account.status': async (args = {}) => {
-      const filter = args.accountId ? { _id: args.accountId } : args.platform ? { platform: args.platform } : {};
-      const rows = await ctx.accountRepo.find(filter);
-      return { accounts: rows };
+      // A single-account lookup is a point read; a list is cursor-paginated
+      // (REQUIREM §2.5) so it never loads the whole inventory.
+      if (args.accountId) return { accounts: await ctx.accountRepo.find({ _id: args.accountId }), nextCursor: null };
+      const filter = args.platform ? { platform: args.platform } : {};
+      if (ctx.accountRepo.page) {
+        const { items, nextCursor } = await ctx.accountRepo.page(filter, { cursor: args.cursor ?? null, limit: args.limit });
+        return { accounts: items, nextCursor };
+      }
+      return { accounts: await ctx.accountRepo.find(filter), nextCursor: null };
     },
     'account.retire': async (args = {}) => applyAccountTransition(ctx, { accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'), to: 'retired' }),
     'account.cooldown': async (args = {}) => applyAccountTransition(ctx, { accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'), to: 'cooldown' }),
@@ -206,7 +215,11 @@ export function buildUseCases(ctx) {
     },
     'email.identity.list': async (args = {}) => {
       if (!ctx.emailIdentityStore) throw seam('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'email identity store not wired');
-      return { identities: await ctx.emailIdentityStore.list({ category: args.category ?? null }) };
+      if (ctx.emailIdentityStore.page) {
+        const { items, nextCursor } = await ctx.emailIdentityStore.page({ category: args.category ?? null, cursor: args.cursor ?? null, limit: args.limit });
+        return { identities: items, nextCursor };
+      }
+      return { identities: await ctx.emailIdentityStore.list({ category: args.category ?? null }), nextCursor: null };
     },
     'email.identity.disable': async (args = {}) => {
       if (!ctx.emailIdentityStore) throw seam('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'email identity store not wired');

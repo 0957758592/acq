@@ -27,8 +27,12 @@ export function buildRagResources(ctx) {
     switch (uri) {
       case 'acq://pool/summary':
         return { available: await ctx.accountRepo.countAvailable({}) };
-      case 'acq://accounts':
-        return { accounts: (await ctx.accountRepo.find({})).map(stripAccount) };
+      case 'acq://accounts': {
+        // Bounded read-model (REQUIREM §2.5) — a grounding view is the first page,
+        // never the whole inventory.
+        const rows = ctx.accountRepo.page ? (await ctx.accountRepo.page({})).items : await ctx.accountRepo.find({});
+        return { accounts: rows.map(stripAccount) };
+      }
       case 'acq://campaigns':
         return { campaigns: await ctx.campaignRepo.listActiveCampaigns() };
       case 'acq://proxies':

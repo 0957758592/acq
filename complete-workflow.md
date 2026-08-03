@@ -318,6 +318,8 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 53 operations, RBAC per op (`readonly` < `operator` < `admin`).
 
+> **Cursor pagination (REQUIREM §2.5).** Every inventory list — `account.status`, `device.status`, `email.identity.list`, `scrape.results` — is **cursor-paginated**: pass `{cursor?, limit?}` and get back the rows plus a `nextCursor` (null on the last page). One centralized `paginate()` helper does an index-friendly `_id > cursor` range scan (O(log n)), clamps `limit` to ≤200, and **never loads a whole collection** — so the reads stay bounded under high account/device counts.
+
 - **Pool:** `pool.status`, `pool.acquire`
 - **Procurement:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
 - **Devices:** `device.enroll`, `device.queue.get`, `device.status`, `device.selectors`, `device.selectors.set`
@@ -866,6 +868,8 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 ## 8. Каталог операций
 
 53 операции, RBAC на каждую (`readonly` < `operator` < `admin`).
+
+> **Курсорная пагинация (REQUIREM §2.5).** Каждый список инвентаря — `account.status`, `device.status`, `email.identity.list`, `scrape.results` — **пагинируется курсором**: передаёшь `{cursor?, limit?}`, получаешь строки + `nextCursor` (null на последней странице). Один централизованный хелпер `paginate()` делает index-friendly range-scan `_id > cursor` (O(log n)), ограничивает `limit` до ≤200 и **никогда не грузит всю коллекцию** — чтения остаются ограниченными при больших объёмах аккаунтов/устройств.
 
 - **Пул:** `pool.status`, `pool.acquire`
 - **Закупка:** `shop.register`, `shop.scan`, `shop.approve`, `shop.signup`, `shop.signup.confirm`
