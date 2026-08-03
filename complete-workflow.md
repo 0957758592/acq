@@ -522,7 +522,7 @@ Pick the surface that matches your caller; all speak the same facade.
 - **From an LLM agent / autonomous "brain":** connect over **MCP** (`/mcp`). List tools (34 ops), call them, read `acq://` resources for grounded context (RAG). This is the intended path for agentic control.
 - **From a backend / microservice:** **gRPC** (`:7550`, `Control.Execute`) for throughput, or **REST** (`/v1/op/:operation`) for simplicity. Bearer token → role.
 - **From another agent platform:** **A2A** — fetch the agent card, POST tasks. Standards-compliant agent-to-agent.
-- **From a browser / ops UI:** the bundled **operator dashboard** (`:7600`) — a thin, WCAG/CSP SPA over the facade with feature views for accounts · pool · devices · campaigns · scrape · on-device selectors (each a unit-tested pure view-model); plus **WebSocket** (`/v1/ws`) for request/response and **SSE** (`/v1/events`) for the live event feed.
+- **From a browser / ops UI:** the bundled **operator dashboard** (`:7600`) — a thin, WCAG/CSP SPA over the facade with **10 feature views**: accounts · pool · devices · campaigns · scrape · on-device selectors · proxies · domain metrics · email identities (secrets stripped) · browser backends (each a unit-tested pure view-model); plus **WebSocket** (`/v1/ws`) for request/response and **SSE** (`/v1/events`) for the live event feed.
 - **From scripts / CI / humans:** **CLI** (`acq <operation> k=v …`).
 - **From external systems pushing events in:** **inbound webhooks** (`/webhooks/inbound`, HMAC + replay-guard).
 
@@ -1071,7 +1071,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
 - **Из LLM-агента / автономного «мозга»:** подключайся по **MCP** (`/mcp`). Список tools (53 операция), их вызов, чтение ресурсов `acq://` для заземлённого контекста (RAG). Это целевой путь для агентного управления.
 - **Из бэкенда / микросервиса:** **gRPC** (`:7550`, `Control.Execute`) для throughput, или **REST** (`/v1/op/:operation`) для простоты. Bearer-токен → роль.
 - **Из другой агентной платформы:** **A2A** — забрать agent card, POST-ить таски. Стандартизованный agent-to-agent.
-- **Из браузера / UI операторов:** встроенная **операторская панель** (`:7600`) — тонкая WCAG/CSP SPA над фасадом с фичами accounts · pool · devices · campaigns · scrape · on-device селекторы (каждая — юнит-тестируемая чистая view-model); плюс **WebSocket** (`/v1/ws`) и **SSE** (`/v1/events`).
+- **Из браузера / UI операторов:** встроенная **операторская панель** (`:7600`) — тонкая WCAG/CSP SPA над фасадом с **10 фичами**: accounts · pool · devices · campaigns · scrape · on-device селекторы · proxies · доменные метрики · email-идентичности (секреты вырезаны) · браузерные backend'ы (каждая — юнит-тестируемая чистая view-model); плюс **WebSocket** (`/v1/ws`) и **SSE** (`/v1/events`).
 - **Из скриптов / CI / людей:** **CLI** (`acq <operation> k=v …`).
 - **Из внешних систем, пушащих события:** **входящие вебхуки** (`/webhooks/inbound`, HMAC + защита от повторов).
 

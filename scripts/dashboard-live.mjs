@@ -12,6 +12,10 @@ import { devicesViewModel } from '../apps/dashboard/src/features/devices.js';
 import { campaignsViewModel } from '../apps/dashboard/src/features/campaigns.js';
 import { poolViewModel } from '../apps/dashboard/src/features/pool.js';
 import { scrapeViewModel } from '../apps/dashboard/src/features/scrape.js';
+import { proxiesViewModel } from '../apps/dashboard/src/features/proxies.js';
+import { metricsViewModel } from '../apps/dashboard/src/features/metrics.js';
+import { emailIdentitiesViewModel } from '../apps/dashboard/src/features/email-identities.js';
+import { browserProvidersViewModel } from '../apps/dashboard/src/features/browser-providers.js';
 import { createPuppeteerBrowserProvider } from '@acq/scraping';
 import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
 import { EngineAccount } from '@acq/core/models/engine-account';
@@ -46,11 +50,11 @@ async function main() {
   const idx = await get('127.0.0.1', 7600, '/');
   (idx.status === 200 && idx.body.includes('data-view="devices"') && idx.body.includes('data-view="selectors"')) ? ok('index.html with feature nav') : bad('index', `status=${idx.status}`);
   (String(idx.headers['content-security-policy'] || '').includes("script-src 'self'")) ? ok('strict CSP header') : bad('csp', idx.headers['content-security-policy']);
-  for (const m of ['devices', 'campaigns', 'scrape', 'selectors', 'pool', 'accounts']) {
+  for (const m of ['devices', 'campaigns', 'scrape', 'selectors', 'pool', 'accounts', 'proxies', 'metrics', 'email-identities', 'browser-providers']) {
     const r = await get('127.0.0.1', 7600, `/js/features/${m}.js`);
     (r.status === 200 && r.body.includes('ViewModel')) || bad(`module ${m}.js`, `status=${r.status}`);
   }
-  ok('all 6 feature modules served from /js/features');
+  ok('all 10 feature modules served from /js/features');
   (await get('127.0.0.1', 7600, '/config.js')).body.includes('__ACQ_API__') ? ok('config.js (api origin)') : bad('config.js');
 
   // ── 2) the browser's api-client + view-models fetch REAL read-models from the facade ──
@@ -66,6 +70,14 @@ async function main() {
   ok('pool view', `total available=${poolVm.totalAvailable}`);
   const scrapeVm = scrapeViewModel((await client.execute('scrape.results', {})).results);
   ok('scrape view', `${scrapeVm.total} results`);
+  const proxVm = proxiesViewModel((await client.execute('proxy.status', {})).proxies);
+  ok('proxies view', `${proxVm.total} proxies`);
+  const metVm = metricsViewModel((await client.execute('metrics.domain', {})).platforms);
+  (metVm.total >= 1) ? ok('metrics view', `${metVm.total} platforms`) : bad('metrics', metVm.total);
+  const emailVm = emailIdentitiesViewModel((await client.execute('email.identity.list', {})).identities);
+  (JSON.stringify(emailVm).match(/vault:/) ? bad('email secrets leaked') : ok('email identities view', `${emailVm.total} identities, byCategory=${JSON.stringify(emailVm.byCategory)}`));
+  const bpVm = browserProvidersViewModel(await client.execute('browser.providers', {}));
+  (bpVm.rows.some((r) => r.provider === 'own') && bpVm.rows.some((r) => r.provider === 'browserbase')) ? ok('browser backends view', `default=${bpVm.default}`) : bad('browser backends', JSON.stringify(bpVm));
 
   // ── 3) real Chromium loads the dashboard shell ──
   console.log('\n[3] real headless Chromium loads the dashboard SPA shell');
@@ -75,7 +87,7 @@ async function main() {
     try {
       await page.goto('http://127.0.0.1:7600/');
       const info = await page.evaluate(() => ({ title: document.title, navButtons: Array.from(document.querySelectorAll('#nav button')).map((b) => b.dataset.view), hasApp: !!document.getElementById('app') }));
-      (info.title.includes('Operator Dashboard') && info.navButtons.length === 6 && info.hasApp)
+      (info.title.includes('Operator Dashboard') && info.navButtons.length === 10 && info.hasApp)
         ? ok('SPA shell rendered in real browser', `nav: ${info.navButtons.join(', ')}`)
         : bad('shell', JSON.stringify(info));
     } finally { await page.close(); }
@@ -88,6 +100,6 @@ async function main() {
   await EngineDevice.deleteMany({ providerDeviceId: 'dash-demo-pad' });
   await EngineCampaign.deleteMany({ targets: '@dash_demo_target' });
   await disconnectMongo();
-  console.log('\n✔ OPERATOR DASHBOARD SPA — serves under CSP + real facade data path (accounts/pool/devices/campaigns/scrape/selectors) + renders in real Chromium — LIVE ✓');
+  console.log('\n✔ OPERATOR DASHBOARD SPA — serves under CSP + real facade data path (accounts/pool/devices/campaigns/scrape/selectors/proxies/metrics/email/browser) + renders in real Chromium — LIVE ✓');
 }
 main().catch((e) => { console.error('dashboard-live error:', e); process.exit(1); });

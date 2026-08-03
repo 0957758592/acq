@@ -10,6 +10,10 @@ import { devicesViewModel } from '/js/features/devices.js';
 import { campaignsViewModel } from '/js/features/campaigns.js';
 import { scrapeViewModel } from '/js/features/scrape.js';
 import { selectorsViewModel } from '/js/features/selectors.js';
+import { proxiesViewModel } from '/js/features/proxies.js';
+import { metricsViewModel } from '/js/features/metrics.js';
+import { emailIdentitiesViewModel } from '/js/features/email-identities.js';
+import { browserProvidersViewModel } from '/js/features/browser-providers.js';
 
 const apiOrigin = window.__ACQ_API__ && window.__ACQ_API__ !== 'self' ? window.__ACQ_API__ : '';
 const PLATFORMS = ['whatsapp', 'telegram', 'discord', 'facebook', 'gmail', 'tiktok', 'instagram', 'youtube'];
@@ -90,6 +94,30 @@ const VIEWS = {
     }
     const vm = selectorsViewModel(overrides);
     render({ title: `On-device selectors (${vm.total})`, columns: [{ label: 'Platform', get: (r) => r.platform }, { label: 'Groups', get: (r) => r.groups.join(', ') }, { label: 'Overrides', get: (r) => r.json }], rows: vm.rows });
+  },
+  async proxies() {
+    const { proxies = [] } = await client.execute('proxy.status', {});
+    const vm = proxiesViewModel(proxies);
+    render({ title: `Proxies (${vm.total})`, chips: chipsOf(vm.byStatus),
+      columns: [{ label: 'ID', get: (r) => r.id }, { label: 'Geo', get: (r) => r.geo }, { label: 'Status', get: (r) => r.status }, { label: 'Device', get: (r) => r.device }, { label: 'Health', get: (r) => r.health }], rows: vm.rows });
+  },
+  async metrics() {
+    const { platforms = [] } = await client.execute('metrics.domain', {});
+    const vm = metricsViewModel(platforms);
+    render({ title: `Domain metrics (${vm.total} platforms)`,
+      columns: [{ label: 'Platform', get: (r) => r.platform }, { label: 'Pool', get: (r) => r.poolAvailable }, { label: 'Online', get: (r) => r.online }, { label: 'Banned', get: (r) => r.banned }, { label: 'Ban share', get: (r) => r.banShare }, { label: 'Campaigns', get: (r) => r.campaigns }, { label: 'Max sat.', get: (r) => r.maxSaturation }], rows: vm.rows });
+  },
+  async email() {
+    const { identities = [] } = await client.execute('email.identity.list', {});
+    const vm = emailIdentitiesViewModel(identities);
+    render({ title: `Email identities (${vm.total})`, chips: chipsOf(vm.byCategory),
+      columns: [{ label: 'Address', get: (r) => r.address }, { label: 'Provider', get: (r) => r.provider }, { label: 'Type', get: (r) => r.category }, { label: 'Auth', get: (r) => r.auth }, { label: 'Status', get: (r) => r.status }], rows: vm.rows });
+  },
+  async browser() {
+    const { providers = [], default: def } = await client.execute('browser.providers', {});
+    const vm = browserProvidersViewModel({ providers, default: def });
+    render({ title: `Browser backends (default: ${vm.default})`,
+      columns: [{ label: 'Backend', get: (r) => r.provider }, { label: 'Kind', get: (r) => r.kind }, { label: 'Configured', get: (r) => r.configured }, { label: 'Concurrency', get: (r) => r.concurrency }, { label: 'Default', get: (r) => (r.isDefault ? '✓' : '—') }], rows: vm.rows });
   }
 };
 
