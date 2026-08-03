@@ -177,7 +177,12 @@ export function buildUseCases(ctx) {
     'shop.scan': async (args = {}) => scanShop(ctx, {
       shopUrl: require$(args, 'shopUrl', 'SHOP_URL_REQUIRED'),
       dryRun: Boolean(args.dryRun),
-      scanner: (args.provider || args.model) && ctx.scannerFor ? ctx.scannerFor({ provider: args.provider, model: args.model }) : null
+      // Pick a scanner bound to the chosen LLM vendor AND browser backend when the
+      // caller overrides any of them (own pool / Browserbase). No override → the
+      // default wired scanner.
+      scanner: (args.provider || args.model || args.browserProvider) && ctx.scannerFor
+        ? ctx.scannerFor({ provider: args.provider, model: args.model, browserProvider: args.browserProvider })
+        : null
     }),
 
     // ---- Email identities (operator-owned mailboxes, ANY provider) ---------
@@ -185,13 +190,17 @@ export function buildUseCases(ctx) {
     'email.providers': async () => ({ providers: listMailProviders() }),
     'email.identity.register': async (args = {}) => {
       if (!ctx.emailIdentityStore) throw seam('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'email identity store not wired');
+      // A secret ref is required — either passwordRef OR accessTokenRef (OAuth).
+      // The store enforces "at least one" with a coded seam, so both stay optional
+      // here and modern-auth mailboxes register token-only.
       return ctx.emailIdentityStore.register({
         address: require$(args, 'address', 'ADDRESS_REQUIRED'),
         provider: args.provider ?? 'custom',
         category: args.category ?? 'standard',
         imapHost: args.imapHost ?? '',
         imapPort: args.imapPort ?? 993,
-        passwordRef: require$(args, 'passwordRef', 'PASSWORD_REF_REQUIRED'),
+        passwordRef: args.passwordRef,
+        accessTokenRef: args.accessTokenRef,
         notes: args.notes ?? ''
       });
     },

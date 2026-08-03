@@ -8,6 +8,19 @@ export function extractVerificationCode(text, { minLength = 4, maxLength = 8 } =
   return matches[0] || '';
 }
 
+// The IMAP auth command for a mailbox: OAuth (AUTHENTICATE XOAUTH2 with a SASL
+// bearer blob) when an access token is supplied — required by providers that
+// enforce modern auth (Outlook/Hotmail, OAuth-configured Gmail) — otherwise plain
+// password LOGIN. One helper so the choice is testable and lives in one place.
+export function imapAuthCommand({ username, password, accessToken } = {}) {
+  if (accessToken) {
+    const sasl = `user=${username}\x01auth=Bearer ${accessToken}\x01\x01`;
+    return `AUTHENTICATE XOAUTH2 ${Buffer.from(sasl, 'utf8').toString('base64')}`;
+  }
+  const esc = (s) => String(s).replace(/"/g, '\\"');
+  return `LOGIN "${esc(username)}" "${esc(password)}"`;
+}
+
 // Host resolution lives in the mail provider catalog (single source of truth for
 // every provider: gmail/outlook/yahoo/aol/gmx/mail.com/rambler/mail.ru/onet/
 // seznam/proton-bridge/firstmail/custom). No duplicated host table here.
@@ -16,11 +29,12 @@ function inferImapHost(email, fallbackHost) {
 }
 
 class SimpleImapClient {
-  constructor({ host, port = 993, username, password, timeoutMs = 30_000 } = {}) {
+  constructor({ host, port = 993, username, password, accessToken = null, timeoutMs = 30_000 } = {}) {
     this.host = host;
     this.port = port;
     this.username = username;
     this.password = password;
+    this.accessToken = accessToken;
     this.timeoutMs = timeoutMs;
     this.tagCounter = 0;
     this.socket = null;
@@ -71,7 +85,7 @@ class SimpleImapClient {
   }
 
   async login() {
-    await this.command(`LOGIN "${String(this.username).replace(/"/g, '\\"')}" "${String(this.password).replace(/"/g, '\\"')}"`);
+    await this.command(imapAuthCommand({ username: this.username, password: this.password, accessToken: this.accessToken }));
     await this.command('SELECT INBOX');
   }
 
@@ -100,6 +114,7 @@ export class EmailCodeFetcher {
   constructor({
     email,
     password,
+    accessToken = null,
     host,
     port = 993,
     timeoutMs = 30_000,
@@ -109,6 +124,10 @@ export class EmailCodeFetcher {
   } = {}) {
     this.email = email;
     this.password = password;
+    // OAuth bearer token (XOAUTH2) for providers that reject password IMAP LOGIN
+    // (Outlook/Hotmail, OAuth-configured Gmail). When present, it is used instead
+    // of the password.
+    this.accessToken = accessToken;
     this.host = inferImapHost(email, host);
     this.port = port;
     this.timeoutMs = timeoutMs;
@@ -118,12 +137,13 @@ export class EmailCodeFetcher {
   }
 
   async fetchLatestCode({ limit = 12 } = {}) {
-    if (!this.email || !this.password) return '';
+    if (!this.email || (!this.password && !this.accessToken)) return '';
     const client = new SimpleImapClient({
       host: this.host,
       port: this.port,
       username: this.email,
       password: this.password,
+      accessToken: this.accessToken,
       timeoutMs: this.timeoutMs
     });
     await client.connect();

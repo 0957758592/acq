@@ -13,19 +13,25 @@ function strip(doc) {
     imapPort: doc.imapPort ?? 993,
     status: doc.status ?? 'active',
     notes: doc.notes ?? '',
-    hasPasswordRef: Boolean(doc.secretRefs?.password)
+    hasPasswordRef: Boolean(doc.secretRefs?.password),
+    hasAccessTokenRef: Boolean(doc.secretRefs?.accessToken)
   };
 }
 
 export function createEmailIdentityStore({ model, tenantId = 'default' } = {}) {
   if (!model) throw new Error('createEmailIdentityStore requires a model');
   return {
-    async register({ address, provider = 'custom', category = 'standard', imapHost = '', imapPort = 993, passwordRef, notes = '' }) {
+    async register({ address, provider = 'custom', category = 'standard', imapHost = '', imapPort = 993, passwordRef, accessTokenRef, notes = '' }) {
       if (!address) throw Object.assign(new Error('EMAIL_ADDRESS_REQUIRED: address is required'), { code: 'EMAIL_ADDRESS_REQUIRED' });
-      if (!passwordRef) throw Object.assign(new Error('EMAIL_PASSWORD_REF_REQUIRED: a secret ref is required (never a plaintext password)'), { code: 'EMAIL_PASSWORD_REF_REQUIRED' });
+      // A secret REF is mandatory — either an IMAP password ref OR an OAuth access
+      // token ref (modern-auth providers). Never a plaintext credential.
+      if (!passwordRef && !accessTokenRef) throw Object.assign(new Error('EMAIL_PASSWORD_REF_REQUIRED: a secret ref is required (password or accessToken; never a plaintext credential)'), { code: 'EMAIL_PASSWORD_REF_REQUIRED' });
+      const secretRefs = {};
+      if (passwordRef) secretRefs.password = passwordRef;
+      if (accessTokenRef) secretRefs.accessToken = accessTokenRef;
       const doc = await model.findOneAndUpdate(
         { tenantId, address },
-        { $set: { provider, category, imapHost, imapPort, notes, secretRefs: { password: passwordRef }, status: 'active' }, $setOnInsert: { tenantId, address } },
+        { $set: { provider, category, imapHost, imapPort, notes, secretRefs, status: 'active' }, $setOnInsert: { tenantId, address } },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
       return strip(doc);
@@ -46,7 +52,7 @@ export function createEmailIdentityStore({ model, tenantId = 'default' } = {}) {
       const doc = await model.findOne({ tenantId, address }).lean();
       if (!doc) throw Object.assign(new Error(`EMAIL_IDENTITY_NOT_FOUND: ${address}`), { code: 'EMAIL_IDENTITY_NOT_FOUND' });
       if (doc.status !== 'active') throw Object.assign(new Error(`EMAIL_IDENTITY_DISABLED: ${address}`), { code: 'EMAIL_IDENTITY_DISABLED' });
-      return { address: doc.address, passwordRef: doc.secretRefs?.password ?? null, imapHost: doc.imapHost || '', imapPort: doc.imapPort ?? 993, provider: doc.provider ?? 'custom' };
+      return { address: doc.address, passwordRef: doc.secretRefs?.password ?? null, accessTokenRef: doc.secretRefs?.accessToken ?? null, imapHost: doc.imapHost || '', imapPort: doc.imapPort ?? 993, provider: doc.provider ?? 'custom' };
     }
   };
 }

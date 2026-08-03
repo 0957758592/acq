@@ -58,6 +58,7 @@ function fakeCtx() {
       probeState: async () => 'online',
       runAction: async (_c, act) => ({ ok: false, reason: 'ACTION_NOT_CONFIRMED', echo: `${platform}:${act.type}` })
     }),
+    scannerForCalls: [],
     browserProviders: () => listBrowserProviders({ configured: {} }),
     defaultBrowserProvider: 'own',
     browserBackendFor: ({ provider = 'own' } = {}) => {
@@ -79,6 +80,8 @@ function fakeCtx() {
 
 function build() {
   const ctx = fakeCtx();
+  // records the {provider, model, browserProvider} passed when shop.scan picks a scanner
+  ctx.scannerFor = (opts = {}) => { ctx.scannerForCalls.push(opts); return ctx.shopScanner; };
   const facade = createFacade({ useCases: buildUseCases(ctx), audit: { record: async () => {} } });
   return { ctx, facade };
 }
@@ -188,6 +191,20 @@ describe('control-plane use-cases through the facade', () => {
     const facade = createFacade({ useCases: buildUseCases(ctx), audit: { record: async () => {} } });
     const res = await facade.execute('shop.scan', { role: 'operator', args: { shopUrl: 'https://x' } });
     expect(res.error.code).toBe('SHOP_SCANNER_UNAVAILABLE');
+  });
+
+  it('shop.scan threads the chosen browser backend (+ llm vendor) into the scanner', async () => {
+    const { facade, ctx } = build();
+    await facade.execute('shop.scan', { role: 'operator', args: { shopUrl: 'https://shop.example', provider: 'anthropic', model: 'claude-fable-5', browserProvider: 'browserbase' } });
+    expect(ctx.scannerForCalls).toHaveLength(1);
+    expect(ctx.scannerForCalls[0]).toMatchObject({ provider: 'anthropic', model: 'claude-fable-5', browserProvider: 'browserbase' });
+  });
+
+  it('shop.scan picks a scanner when ONLY the browser backend is chosen (no llm override)', async () => {
+    const { facade, ctx } = build();
+    await facade.execute('shop.scan', { role: 'operator', args: { shopUrl: 'https://shop.example', browserProvider: 'browserbase' } });
+    expect(ctx.scannerForCalls).toHaveLength(1);
+    expect(ctx.scannerForCalls[0].browserProvider).toBe('browserbase');
   });
 
   it('scrape.results reads normalized read-models', async () => {

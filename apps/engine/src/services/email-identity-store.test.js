@@ -55,6 +55,20 @@ describe('createEmailIdentityStore (operator-owned mailboxes, any provider)', ()
     expect(JSON.stringify(list)).not.toContain('vault:');
   });
 
+  it('accepts an OAuth accessTokenRef instead of a password (Outlook/Hotmail modern auth)', async () => {
+    const store = createEmailIdentityStore({ model: fakeModel() });
+    const saved = await store.register({ address: 'u@outlook.com', provider: 'outlook', accessTokenRef: 'vault:oauth-tok' });
+    expect(saved).toMatchObject({ address: 'u@outlook.com', hasAccessTokenRef: true });
+    expect(JSON.stringify(saved)).not.toContain('vault:oauth-tok');
+    const creds = await store.credentialsFor('u@outlook.com');
+    expect(creds.accessTokenRef).toBe('vault:oauth-tok');
+  });
+
+  it('still requires SOME secret ref (password or token), never plaintext', async () => {
+    const store = createEmailIdentityStore({ model: fakeModel() });
+    await expect(store.register({ address: 'x@y.z' })).rejects.toMatchObject({ code: 'EMAIL_PASSWORD_REF_REQUIRED' });
+  });
+
   it('records the email TYPE/category (aged/us/manual/disposable/…) and defaults to standard', async () => {
     const store = createEmailIdentityStore({ model: fakeModel() });
     const aged = await store.register({ address: 'aged@gmail.com', provider: 'gmail', category: 'aged', passwordRef: 'vault:1' });

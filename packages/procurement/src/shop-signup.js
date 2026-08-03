@@ -35,8 +35,8 @@ export function createShopSignup({ shopRegistry, httpClient, secretResolver, ema
   // store (ANY provider — gmail / outlook / custom IMAP) and use its stored refs
   // + IMAP coordinates. Explicit refs still work unchanged, so existing callers
   // and specs keep working (no duplication of the credential path).
-  async function identityFor({ address, emailRef, passwordRef, imapPasswordRef }) {
-    if (!address) return { emailRef, passwordRef, imapPasswordRef, imapHost: null, imapPort: null };
+  async function identityFor({ address, emailRef, passwordRef, imapPasswordRef, imapAccessTokenRef }) {
+    if (!address) return { emailRef, passwordRef, imapPasswordRef, imapAccessTokenRef, imapHost: null, imapPort: null };
     if (!identityStore?.credentialsFor) {
       throw domainError('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'no email identity store wired');
     }
@@ -45,6 +45,9 @@ export function createShopSignup({ shopRegistry, httpClient, secretResolver, ema
       emailRef: identity.address,
       passwordRef: passwordRef ?? identity.passwordRef,
       imapPasswordRef: imapPasswordRef ?? identity.passwordRef,
+      // OAuth mailboxes (Outlook/Hotmail/Gmail-OAuth) carry a token ref instead of
+      // a password — used for XOAUTH2 IMAP auth when reading the code.
+      imapAccessTokenRef: imapAccessTokenRef ?? identity.accessTokenRef ?? null,
       imapHost: identity.imapHost || null,
       imapPort: identity.imapPort ?? null
     };
@@ -73,9 +76,10 @@ export function createShopSignup({ shopRegistry, httpClient, secretResolver, ema
       const ident = await identityFor({ address, emailRef, imapPasswordRef });
       emailRef = ident.emailRef;
       imapPasswordRef = ident.imapPasswordRef;
-      const [email, imapPassword] = await Promise.all([resolve(emailRef), resolve(imapPasswordRef)]);
-      // Per-identity IMAP coordinates when the provider isn't auto-inferable.
-      const fetcher = emailCodeFetcherFactory({ email, password: imapPassword, host: ident.imapHost, port: ident.imapPort });
+      const [email, imapPassword, accessToken] = await Promise.all([resolve(emailRef), resolve(imapPasswordRef), resolve(ident.imapAccessTokenRef)]);
+      // Per-identity IMAP coordinates + OAuth token (XOAUTH2) when the mailbox uses
+      // modern auth. A password-only mailbox passes accessToken=null (plain LOGIN).
+      const fetcher = emailCodeFetcherFactory({ email, password: imapPassword, accessToken: accessToken || null, host: ident.imapHost, port: ident.imapPort });
       const code = await fetcher.fetchLatestCode();
       if (!code) throw domainError('SHOP_SIGNUP_CODE_PENDING', `confirmation code for ${shopId} not arrived yet`);
 

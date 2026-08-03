@@ -29,4 +29,11 @@ describe('createEmailCodeReader — reader-by-provider (IMAP vs API-only)', () =
     expect(reader).toBeInstanceOf(EmailCodeFetcher);
     expect(reader.host).toBe('mail.fmbatch7.com');
   });
+
+  it('carries an OAuth access token through the IMAP reader (Outlook/Hotmail modern auth)', () => {
+    const reader = createEmailCodeReader({ email: 'user@outlook.com', accessToken: 'ya29.tok' });
+    expect(reader).toBeInstanceOf(EmailCodeFetcher);
+    expect(reader.accessToken).toBe('ya29.tok');
+    expect(reader.host).toBe('outlook.office365.com');
+  });
 });

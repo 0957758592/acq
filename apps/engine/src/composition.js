@@ -167,16 +167,24 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     return D.createLlmClient({ provider, apiKey, model, baseUrl });
   });
   const llmProviders = () => D.listLlmProviders({ configured: llmKeys });
-  const fetchShopText = async ({ shopUrl }) => {
-    const { sessionId } = await browserProvider.createSession({});
+  // Read shop text through a SELECTED browser backend (own pool / Browserbase) —
+  // so the AI scan is pluggable, not pinned to the self-hosted pool.
+  const fetchShopTextVia = (backend) => async ({ shopUrl }) => {
+    const { sessionId } = await backend.createSession({});
     try {
-      return await browserProvider.extract(sessionId, { url: shopUrl, pageFunction: () => document.body.innerText });
+      return await backend.extract(sessionId, { url: shopUrl, pageFunction: () => document.body.innerText });
     } finally {
-      await browserProvider.close(sessionId);
+      await backend.close(sessionId);
     }
   };
-  // Build a scanner bound to a specific vendor/model for a single call.
-  const scannerFor = D.scannerFor ?? (({ provider, model } = {}) => D.createLlmShopScanner({ llmClient: llmFor({ provider, model }), fetchShopText }));
+  const fetchShopText = fetchShopTextVia(browserProvider);
+  // Build a scanner bound to a specific LLM vendor/model AND browser backend for a
+  // single call. `browserProvider` picks own/browserbase; keyless cloud fails safe.
+  const scannerFor = D.scannerFor ?? (({ provider, model, browserProvider: bp } = {}) =>
+    D.createLlmShopScanner({
+      llmClient: llmFor({ provider, model }),
+      fetchShopText: bp ? fetchShopTextVia(browserBackendFor({ provider: bp })) : fetchShopText
+    }));
 
   const shopScanner =
     D.shopScanner ??
@@ -203,7 +211,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       secretResolver,
       // Reader-by-provider: IMAP for normal mailboxes, HTTP API for API-only
       // types (Mail.tm) — one fetchLatestCode contract, every email type works.
-      emailCodeFetcherFactory: ({ email, password, host, port }) => D.createEmailCodeReader({ email, password, host: host || null, port: port || null }),
+      emailCodeFetcherFactory: ({ email, password, accessToken, host, port }) => D.createEmailCodeReader({ email, password, accessToken: accessToken || null, host: host || null, port: port || null }),
       identityStore: emailIdentityStore,
       cookieSessionStore
     });

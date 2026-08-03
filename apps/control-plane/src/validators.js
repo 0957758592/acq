@@ -33,7 +33,7 @@ export const SCHEMAS = {
   'pool.acquire': schema({ platform: str.required(), source: str, quantity: num.integer().positive(), shopId: str, deviceId: str, niche: str, locale: str }),
   // Shops
   'shop.register': schema({ spec: obj.required() }),
-  'shop.scan': schema({ shopUrl: str.required(), dryRun: bool, provider: str, model: str }),
+  'shop.scan': schema({ shopUrl: str.required(), dryRun: bool, provider: str, model: str, browserProvider: str }),
   'shop.approve': schema({ shopId: str.required(), approvedBy: str.nullable() }),
   'shop.signup': schema({ shopId: str.required(), address: str, emailRef: str, passwordRef: str, usernameRef: str, extraFields: obj }),
   'shop.signup.confirm': schema({ shopId: str.required(), address: str, emailRef: str, imapPasswordRef: str, extraFields: obj }),
@@ -41,7 +41,7 @@ export const SCHEMAS = {
   'device.selectors': schema({ platform: str.required() }),
   'device.selectors.set': schema({ platform: str.required(), selectors: obj.required(), updatedBy: str.nullable() }),
   'email.providers': schema({}),
-  'email.identity.register': schema({ address: str.required(), provider: str, category: str, imapHost: str, imapPort: num.integer().positive(), passwordRef: str.required(), notes: str }),
+  'email.identity.register': schema({ address: str.required(), provider: str, category: str, imapHost: str, imapPort: num.integer().positive(), passwordRef: str, accessTokenRef: str, notes: str }),
   'email.identity.list': schema({ category: str }),
   'email.identity.disable': schema({ address: str.required() }),
   'llm.providers': schema({}),
