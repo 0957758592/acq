@@ -5,17 +5,32 @@ import http from 'node:http';
 
 import { createScrapeProvider } from '@acq/scraping';
 
-import { consumeJsonWithDlq, createMongoScrapeResultRepo } from '@acq/engine-infra';
+import { consumeJsonWithDlq, createMongoScrapeResultRepo, createMongoProxyRepo } from '@acq/engine-infra';
 import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
 import { connectRabbitmq, disconnectRabbitmq, consumeJson, publishJson } from '@acq/core/queue/rabbitmq';
 import { getRedis, disconnectRedis } from '@acq/core/db/redis';
 import { EngineScrapeResult } from '@acq/core/models/engine-scrape-result';
+import { EngineProxy } from '@acq/core/models/engine-proxy';
 import { createStructuredLogger } from '@acq/logger';
 
 import { scrapeTaskHandler } from './scrape-handler.js';
 import { buildScrapeAdapters } from './composition.js';
 
 const QUEUE = 'engine.scrape';
+
+// Env-backed secret resolver for proxy endpoints: an `env:NAME` ref reads
+// process.env[NAME]; a JSON value is returned as the endpoint object (host/port/
+// user/pass), otherwise the raw string. A real vault/KMS adapter plugs in via deps.
+function createEnvSecretResolver() {
+  return {
+    async resolve(ref) {
+      if (typeof ref !== 'string' || !ref.startsWith('env:')) return ref;
+      const value = process.env[ref.slice(4)];
+      if (value == null) return null;
+      try { return JSON.parse(value); } catch { return value; }
+    }
+  };
+}
 
 // Liveness endpoint (TZ §13/§16) — every process exposes /health.
 export function startHealthServer(port) {
@@ -68,6 +83,11 @@ export async function main({ env, deps = {} } = {}) {
     logger,
     scrapeProvider: createScrapeProvider({ adapters: wired.adapters }),
     scrapeResultRepo: createMongoScrapeResultRepo({ model: EngineScrapeResult }),
+    // Proxy pool + secret resolution so a scrape can auto-pick a residential
+    // proxy (`params.useResidential`). Endpoints are vaulted (env: refs may hold a
+    // JSON endpoint object); absent one, the pick fails safe with a coded seam.
+    proxyRepo: deps.proxyRepo ?? createMongoProxyRepo({ model: EngineProxy }),
+    secretResolver: deps.secretResolver ?? createEnvSecretResolver(),
     eventBus: deps.eventBus ?? makeEventBus(redis)
   };
 

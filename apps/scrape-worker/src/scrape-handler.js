@@ -1,10 +1,19 @@
 import { makeEvent } from '@acq/engine-domain';
 
+import { resolveResidentialProxy } from './services/resolve-residential-proxy.js';
+
 // scrape-task consumer (TZ §8.3/§10): route the request through the hybrid
 // ScrapeProvider, idempotently upsert the normalized entities by natural key,
 // and emit scrape.done. Ports injected via ctx.
 export async function scrapeTaskHandler(ctx, payload) {
   const clock = () => ctx.clock.now();
+  // Auto-pick a residential proxy from the pool for the scrape when asked
+  // (`params.useResidential`), unless an explicit proxy was supplied. Resolved
+  // just-in-time here so the credential never travels through the queue.
+  if (payload?.params?.useResidential && !payload.params.proxy) {
+    const { proxy } = await resolveResidentialProxy(ctx, { geo: payload.params.geo });
+    payload = { ...payload, params: { ...payload.params, proxy } };
+  }
   let tier;
   let entities;
   try {
