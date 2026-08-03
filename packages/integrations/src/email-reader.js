@@ -19,8 +19,10 @@ const API_CODE_READERS = {
 // One `fetchLatestCode({limit})` contract either way, so the confirm flow never
 // branches on the provider. Proton (bridge) / Firstmail (per-batch) supply their
 // host explicitly and take the IMAP path.
-export function createEmailCodeReader({ email, password, host = null, port = null, fetchImpl, ...opts } = {}) {
-  const box = resolveMailbox(email, { imapHost: host, imapPort: port });
+export function createEmailCodeReader({ email, password, host = null, port = null, provider = null, fetchImpl, ...opts } = {}) {
+  // `provider` is an optional hint (e.g. 'gmail' for a Google Workspace mailbox on
+  // a custom domain) that resolves the right host when the domain isn't known.
+  const box = resolveMailbox(email, { imapHost: host, imapPort: port, provider });
   if (box.apiOnly) {
     const make = API_CODE_READERS[box.provider];
     if (!make) throw Object.assign(new Error(`EMAIL_API_READER_UNSUPPORTED: no API code reader for provider '${box.provider}'`), { code: 'EMAIL_API_READER_UNSUPPORTED' });

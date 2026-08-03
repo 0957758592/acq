@@ -36,7 +36,7 @@ export function createShopSignup({ shopRegistry, httpClient, secretResolver, ema
   // + IMAP coordinates. Explicit refs still work unchanged, so existing callers
   // and specs keep working (no duplication of the credential path).
   async function identityFor({ address, emailRef, passwordRef, imapPasswordRef, imapAccessTokenRef }) {
-    if (!address) return { emailRef, passwordRef, imapPasswordRef, imapAccessTokenRef, imapHost: null, imapPort: null };
+    if (!address) return { emailRef, passwordRef, imapPasswordRef, imapAccessTokenRef, imapHost: null, imapPort: null, imapProvider: null };
     if (!identityStore?.credentialsFor) {
       throw domainError('EMAIL_IDENTITY_STORE_UNAVAILABLE', 'no email identity store wired');
     }
@@ -49,7 +49,10 @@ export function createShopSignup({ shopRegistry, httpClient, secretResolver, ema
       // a password — used for XOAUTH2 IMAP auth when reading the code.
       imapAccessTokenRef: imapAccessTokenRef ?? identity.accessTokenRef ?? null,
       imapHost: identity.imapHost || null,
-      imapPort: identity.imapPort ?? null
+      imapPort: identity.imapPort ?? null,
+      // Provider hint so a Google Workspace / custom-domain mailbox resolves to the
+      // right IMAP host (imap.gmail.com) instead of an inferred imap.<domain>.
+      imapProvider: identity.provider ?? null
     };
   }
 
@@ -79,7 +82,7 @@ export function createShopSignup({ shopRegistry, httpClient, secretResolver, ema
       const [email, imapPassword, accessToken] = await Promise.all([resolve(emailRef), resolve(imapPasswordRef), resolve(ident.imapAccessTokenRef)]);
       // Per-identity IMAP coordinates + OAuth token (XOAUTH2) when the mailbox uses
       // modern auth. A password-only mailbox passes accessToken=null (plain LOGIN).
-      const fetcher = emailCodeFetcherFactory({ email, password: imapPassword, accessToken: accessToken || null, host: ident.imapHost, port: ident.imapPort });
+      const fetcher = emailCodeFetcherFactory({ email, password: imapPassword, accessToken: accessToken || null, host: ident.imapHost, port: ident.imapPort, provider: ident.imapProvider });
       const code = await fetcher.fetchLatestCode();
       if (!code) throw domainError('SHOP_SIGNUP_CODE_PENDING', `confirmation code for ${shopId} not arrived yet`);
 

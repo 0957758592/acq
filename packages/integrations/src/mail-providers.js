@@ -167,8 +167,12 @@ export function providerIdForAddress(address) {
 // (per-identity override); an unknown domain falls back to the conventional
 // `imap.<domain>` only as a hint, flagged `inferred: true` so callers know it
 // was not verified.
-export function resolveMailbox(address, { imapHost = null, imapPort = null } = {}) {
-  const providerId = providerIdForAddress(address);
+export function resolveMailbox(address, { imapHost = null, imapPort = null, provider = null } = {}) {
+  // Domain match wins; otherwise an explicit provider hint fills in (Google
+  // Workspace / Gmail on a custom domain → provider:'gmail' → imap.gmail.com).
+  const domainProviderId = providerIdForAddress(address);
+  const hintId = provider && MAIL_PROVIDERS[provider] ? provider : null;
+  const providerId = domainProviderId ?? hintId;
   const spec = providerId ? MAIL_PROVIDERS[providerId] : null;
   const domain = String(address || '').split('@')[1]?.toLowerCase() || '';
   // A KNOWN provider that declares no IMAP (Proton/Mail.tm/reseller batches)

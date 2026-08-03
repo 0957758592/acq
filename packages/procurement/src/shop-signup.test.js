@@ -59,6 +59,23 @@ describe('createShopSignup', () => {
     expect(stored[0]).toMatchObject({ shopId: 'shop1', cookies: [{ name: 'sid', value: 'abc' }] });
   });
 
+  it('confirm-by-address threads the identity provider (Google Workspace) to the code reader', async () => {
+    const seen = {};
+    const identityStore = {
+      credentialsFor: async (address) => ({ address, passwordRef: 'vault:imap', accessTokenRef: null, imapHost: '', imapPort: 993, provider: 'gmail' })
+    };
+    const signup = createShopSignup({
+      shopRegistry: { get: async () => shopWithSignup() },
+      httpClient: fakeHttp({ '/confirm': { ok: true, cookies: [{ name: 'sid', value: 'z' }] } }),
+      secretResolver,
+      identityStore,
+      emailCodeFetcherFactory: (opts) => { Object.assign(seen, opts); return { fetchLatestCode: async () => '482913' }; },
+      cookieSessionStore: { put: async () => {} }
+    });
+    await signup.confirm('shop1', { address: 'ceo@workspace-domain.com' });
+    expect(seen.provider).toBe('gmail'); // so the reader resolves imap.gmail.com, not imap.<domain>
+  });
+
   it('returns a coded pending seam when the confirmation code has not arrived yet', async () => {
     const signup = createShopSignup({
       shopRegistry: { get: async () => shopWithSignup() },

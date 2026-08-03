@@ -37,6 +37,12 @@ describe('createEmailCodeReader — reader-by-provider (IMAP vs API-only)', () =
     expect(reader.host).toBe('outlook.office365.com');
   });
 
+  it('uses a provider hint to read Google Workspace / custom-domain Gmail via imap.gmail.com', () => {
+    const reader = createEmailCodeReader({ email: 'ceo@mycompany.com', password: 'app-pass', provider: 'gmail' });
+    expect(reader).toBeInstanceOf(EmailCodeFetcher);
+    expect(reader.host).toBe('imap.gmail.com');
+  });
+
   it('picks the RIGHT API reader per api-only provider — 1secmail, not Mail.tm', async () => {
     // 1secmail's API is queried (getMessages), proving it did not fall back to Mail.tm.
     const seen = [];

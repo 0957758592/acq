@@ -39,6 +39,18 @@ describe('mail provider catalog', () => {
     expect(resolveMailbox('a@corp.tld')).toMatchObject({ provider: 'custom', imapHost: 'imap.corp.tld', inferred: true });
   });
 
+  it('an explicit provider hint resolves Google Workspace / custom-domain Gmail to imap.gmail.com', () => {
+    // A Workspace mailbox lives on a company domain but is really Google → the
+    // operator declares provider:'gmail' and gets the verified host (not inferred).
+    const ws = resolveMailbox('user@mycompany.com', { provider: 'gmail' });
+    expect(ws).toMatchObject({ provider: 'gmail', imapHost: 'imap.gmail.com', inferred: false });
+    expect(ws.authMethods).toEqual(expect.arrayContaining(['oauth', 'app-password']));
+  });
+
+  it('a KNOWN domain still wins over a (nonsensical) provider hint', () => {
+    expect(resolveMailbox('a@yahoo.com', { provider: 'gmail' })).toMatchObject({ provider: 'yahoo', imapHost: 'imap.mail.yahoo.com' });
+  });
+
   it('listMailProviders reports imapReady/apiOnly/bridge so a UI can render the picker', () => {
     const list = listMailProviders();
     expect(list.find((p) => p.provider === 'gmail').imapReady).toBe(true);

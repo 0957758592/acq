@@ -211,7 +211,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       secretResolver,
       // Reader-by-provider: IMAP for normal mailboxes, HTTP API for API-only
       // types (Mail.tm) — one fetchLatestCode contract, every email type works.
-      emailCodeFetcherFactory: ({ email, password, accessToken, host, port }) => D.createEmailCodeReader({ email, password, accessToken: accessToken || null, host: host || null, port: port || null }),
+      emailCodeFetcherFactory: ({ email, password, accessToken, host, port, provider }) => D.createEmailCodeReader({ email, password, accessToken: accessToken || null, host: host || null, port: port || null, provider: provider || null }),
       identityStore: emailIdentityStore,
       cookieSessionStore
     });
