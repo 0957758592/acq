@@ -52,16 +52,20 @@ export function createBrowserbaseProvider({
     provider: 'browserbase',
     // Open a managed stealth session. Geo/proxy/context map onto Browserbase's
     // session config; the returned CDP url is what Puppeteer/Stagehand connects to.
-    async createSession({ geo = null, proxyId = null, contextId = null, stealth = true } = {}) {
+    async createSession({ geo = null, proxyId = null, contextId = null, stealth = false } = {}) {
+      // Browserbase rejects unknown top-level keys. Stealth and persistent
+      // contexts live under `browserSettings`; only send it when there's content.
+      const browserSettings = {};
+      if (contextId) browserSettings.context = { id: contextId, persist: true };
+      if (stealth) browserSettings.advancedStealth = true;
       const json = await call('/v1/sessions', {
         method: 'POST',
         body: {
           projectId,
           ...(proxyId ? { proxies: true } : {}),
-          ...(contextId ? { browserSettings: { context: { id: contextId, persist: true } } } : {}),
+          ...(Object.keys(browserSettings).length ? { browserSettings } : {}),
           ...(geo ? { region: geo } : {}),
-          keepAlive: false,
-          stealth
+          keepAlive: false
         }
       });
       return { sessionId: json.id, cdpUrl: json.connectUrl ?? json.connectionUrl ?? null };

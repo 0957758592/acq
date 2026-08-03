@@ -39,7 +39,23 @@ describe('Browserbase adapter (cloud BrowserProvider backend)', () => {
     expect(url).toContain('/v1/sessions');
     expect(init.method).toBe('POST');
     expect(init.headers['x-bb-api-key']).toBe('bb-key');
-    expect(JSON.parse(init.body).projectId).toBe('proj-9');
+    const body = JSON.parse(init.body);
+    expect(body.projectId).toBe('proj-9');
+    // Browserbase rejects unknown top-level keys — `stealth` is NOT one of them
+    // (advanced stealth lives under browserSettings). A plain session sends only
+    // the valid minimal body.
+    expect(body).not.toHaveProperty('stealth');
+    expect(body.region).toBe('US');
+  });
+
+  it('maps optional stealth/context under browserSettings, never as top-level keys', async () => {
+    const fetchImpl = fakeFetch({ '/v1/sessions': { ok: true, body: JSON.stringify({ id: 'bb-2', connectUrl: 'wss://x' }) } });
+    const bb = createBrowserbaseProvider({ apiKey: 'k', projectId: 'p', fetchImpl });
+    await bb.createSession({ stealth: true, contextId: 'ctx-1' });
+    const body = JSON.parse(fetchImpl.calls[0].init.body);
+    expect(body).not.toHaveProperty('stealth');
+    expect(body.browserSettings.advancedStealth).toBe(true);
+    expect(body.browserSettings.context).toMatchObject({ id: 'ctx-1', persist: true });
   });
 
   it('maps a vendor error to a coded BROWSERBASE_REQUEST_FAILED (never a leaked INTERNAL)', async () => {
