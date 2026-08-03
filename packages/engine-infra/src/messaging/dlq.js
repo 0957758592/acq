@@ -30,7 +30,9 @@ export function consumeJsonWithDlq(queueName, handler, {
     } catch (error) {
       if (!isTerminal(error, maxAttempts)) {
         // Transient: re-throw so the underlying consumer nack-drops it and the
-        // Mongo ledger / retry cron re-delivers later. No DLQ publish.
+        // Mongo ledger / retry cron re-delivers later. No DLQ publish — but LOG it
+        // (§6.1/§16): a parked job must never disappear without a trace.
+        logger?.warn?.('job failed, will retry', { queue: queueName, code: error.code ?? null, reason: error.message });
         throw error;
       }
       const code = error.code ?? null;

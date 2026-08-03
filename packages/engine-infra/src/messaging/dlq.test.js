@@ -46,14 +46,17 @@ describe('consumeJsonWithDlq (generic)', () => {
     expect(publishJson.calls[0].payload).toMatchObject({ reason: 'permanent boom', payload: { x: 1 } });
   });
 
-  it('re-throws a transient failure (no DLQ)', async () => {
+  it('re-throws a transient failure (no DLQ) but LOGS it — never fails silently (§6.1/§16)', async () => {
     const consumeJson = fakeConsumeJson();
     const publishJson = fakePublishJson();
-    const handler = async () => {
-      throw new Error('transient');
-    };
-    consumeJsonWithDlq('engine.action', handler, { consumeJson, publishJson, clock });
-    await expect(consumeJson.wrapped()({ x: 1 })).rejects.toThrow('transient');
+    const warns = [];
+    const logger = { warn: (msg, ctx) => warns.push({ msg, ctx }) };
+    const handler = async () => { const e = new Error('no proxy'); e.code = 'NO_RESIDENTIAL_PROXY_AVAILABLE'; throw e; };
+    consumeJsonWithDlq('engine.scrape', handler, { consumeJson, publishJson, clock, logger });
+    await expect(consumeJson.wrapped()({ x: 1 })).rejects.toThrow('no proxy');
     expect(publishJson.calls).toHaveLength(0);
+    // the transient failure is visible in the logs (queue + code), so a parked
+    // job never disappears without a trace
+    expect(warns[0]).toMatchObject({ ctx: { queue: 'engine.scrape', code: 'NO_RESIDENTIAL_PROXY_AVAILABLE' } });
   });
 });
