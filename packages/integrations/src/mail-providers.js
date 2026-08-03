@@ -7,6 +7,7 @@
 export const MAIL_PROVIDERS = {
   gmail: {
     label: 'Gmail / Google Workspace',
+    authMethods: ['app-password', 'oauth'],
     domains: ['gmail.com', 'googlemail.com'],
     imapHost: 'imap.gmail.com',
     imapPort: 993,
@@ -14,6 +15,7 @@ export const MAIL_PROVIDERS = {
   },
   outlook: {
     label: 'Outlook / Hotmail / Live',
+    authMethods: ['oauth', 'app-password'],
     domains: ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'],
     imapHost: 'outlook.office365.com',
     imapPort: 993,
@@ -21,6 +23,7 @@ export const MAIL_PROVIDERS = {
   },
   yahoo: {
     label: 'Yahoo Mail',
+    authMethods: ['app-password'],
     domains: ['yahoo.com', 'ymail.com', 'rocketmail.com'],
     imapHost: 'imap.mail.yahoo.com',
     imapPort: 993,
@@ -28,6 +31,7 @@ export const MAIL_PROVIDERS = {
   },
   aol: {
     label: 'AOL Mail',
+    authMethods: ['app-password'],
     domains: ['aol.com'],
     imapHost: 'imap.aol.com',
     imapPort: 993,
@@ -35,6 +39,7 @@ export const MAIL_PROVIDERS = {
   },
   gmx: {
     label: 'GMX',
+    authMethods: ['password'],
     domains: ['gmx.com', 'gmx.net', 'gmx.de', 'gmx.at', 'gmx.ch'],
     imapHost: 'imap.gmx.com',
     imapPort: 993,
@@ -42,6 +47,7 @@ export const MAIL_PROVIDERS = {
   },
   mailcom: {
     label: 'Mail.com',
+    authMethods: ['password'],
     domains: ['mail.com', 'email.com', 'usa.com', 'consultant.com'],
     imapHost: 'imap.mail.com',
     imapPort: 993,
@@ -49,6 +55,7 @@ export const MAIL_PROVIDERS = {
   },
   rambler: {
     label: 'Rambler',
+    authMethods: ['password'],
     domains: ['rambler.ru', 'lenta.ru', 'autorambler.ru', 'myrambler.ru', 'ro.ru'],
     imapHost: 'imap.rambler.ru',
     imapPort: 993,
@@ -56,6 +63,7 @@ export const MAIL_PROVIDERS = {
   },
   mailru: {
     label: 'Mail.ru / My.com (My World)',
+    authMethods: ['app-password'],
     // My.com is Mail.ru's international brand (My World / Мой Мир) — same IMAP.
     domains: ['mail.ru', 'inbox.ru', 'bk.ru', 'list.ru', 'internet.ru', 'my.com'],
     imapHost: 'imap.mail.ru',
@@ -64,6 +72,7 @@ export const MAIL_PROVIDERS = {
   },
   onet: {
     label: 'Onet Poczta',
+    authMethods: ['password'],
     domains: ['onet.pl', 'op.pl', 'poczta.onet.pl'],
     imapHost: 'imap.poczta.onet.pl',
     imapPort: 993,
@@ -71,6 +80,7 @@ export const MAIL_PROVIDERS = {
   },
   seznam: {
     label: 'Seznam.cz',
+    authMethods: ['password'],
     domains: ['seznam.cz', 'email.cz', 'post.cz', 'spoluzaci.cz'],
     imapHost: 'imap.seznam.cz',
     imapPort: 993,
@@ -78,6 +88,7 @@ export const MAIL_PROVIDERS = {
   },
   proton: {
     label: 'Proton Mail',
+    authMethods: ['bridge'],
     domains: ['protonmail.com', 'proton.me', 'pm.me'],
     // Proton has NO public IMAP: reading requires the local Proton Mail Bridge,
     // which exposes IMAP on 127.0.0.1. Point the identity at the bridge host.
@@ -88,6 +99,7 @@ export const MAIL_PROVIDERS = {
   },
   mailtm: {
     label: 'Mail.tm (disposable, API-only)',
+    authMethods: ['api'],
     domains: ['mail.tm'],
     imapHost: null,
     imapPort: null,
@@ -96,6 +108,7 @@ export const MAIL_PROVIDERS = {
   },
   firstmail: {
     label: 'Firstmail (reseller)',
+    authMethods: ['password'],
     domains: ['firstmail.ltd', 'firstmail.com'],
     // Reseller domains rotate; the host is per-batch — supply it explicitly.
     imapHost: null,
@@ -104,6 +117,7 @@ export const MAIL_PROVIDERS = {
   },
   custom: {
     label: 'Custom / self-hosted IMAP',
+    authMethods: ['password', 'oauth'],
     domains: [],
     imapHost: null,
     imapPort: 993,
@@ -127,6 +141,9 @@ export function listMailProviders() {
     imapReady: Boolean(spec.imapHost),
     requiresBridge: Boolean(spec.requiresBridge),
     apiOnly: Boolean(spec.apiOnly),
+    // How this email type authenticates: password / app-password / oauth (needs an
+    // accessTokenRef) / bridge (Proton) / api (Mail.tm). Declared, not guessed.
+    authMethods: spec.authMethods ?? ['password'],
     note: spec.note
   }));
 }
@@ -157,6 +174,7 @@ export function resolveMailbox(address, { imapHost = null, imapPort = null } = {
     inferred: !imapHost && !known && Boolean(host),
     apiOnly: Boolean(spec?.apiOnly),
     requiresBridge: Boolean(spec?.requiresBridge),
+    authMethods: spec?.authMethods ?? ['password'],
     note: spec?.note ?? ''
   };
 }

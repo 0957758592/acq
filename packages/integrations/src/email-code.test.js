@@ -1,4 +1,26 @@
-import { imapAuthCommand, extractVerificationCode, EmailCodeFetcher } from './email-code.js';
+import { imapAuthCommand, extractVerificationCode, EmailCodeFetcher, SimpleImapClient } from './email-code.js';
+
+// A scriptable in-memory IMAP socket: responses[0] is the connect greeting
+// (emitted when the client first listens), responses[1..] are one server reply
+// per client write, in order. Lets us drive the real client logic (auth choice,
+// SASL continuation) without a network.
+function fakeImapSocket(responses) {
+  const data = new Set();
+  let greeted = false;
+  const queue = responses.slice(1);
+  const emit = (msg) => { for (const f of data) f(Buffer.from(msg)); };
+  const sock = {
+    writes: [],
+    on(ev, cb) {
+      if (ev === 'data') { data.add(cb); if (!greeted) { greeted = true; setImmediate(() => emit(responses[0])); } }
+      return sock;
+    },
+    off(ev, cb) { if (ev === 'data') data.delete(cb); return sock; },
+    end() {},
+    write(line) { sock.writes.push(line); const r = queue.shift(); if (r != null) setImmediate(() => emit(r)); return true; }
+  };
+  return sock;
+}
 
 describe('imapAuthCommand — password LOGIN vs OAuth XOAUTH2 (other email types)', () => {
   it('uses plain LOGIN when only a password is present', () => {
@@ -26,6 +48,43 @@ describe('EmailCodeFetcher carries an OAuth access token when configured', () =>
   it('accepts accessToken and returns "" without creds (no throw)', async () => {
     const f = new EmailCodeFetcher({ email: 'u@outlook.com', accessToken: 'tok', host: 'outlook.office365.com' });
     expect(f.accessToken).toBe('tok');
+  });
+});
+
+describe('SimpleImapClient login (socket-level, no network)', () => {
+  it('logs in with a password (LOGIN) then SELECTs the inbox', async () => {
+    let sock;
+    const client = new SimpleImapClient({
+      host: 'h', username: 'u@x.y', password: 'pw', timeoutMs: 1000,
+      socketFactory: () => (sock = fakeImapSocket(['* OK ready\r\n', 'A0001 OK login\r\n', 'A0002 OK select\r\n']))
+    });
+    await client.connect();
+    await client.login();
+    expect(sock.writes[0]).toMatch(/^A0001 LOGIN "u@x\.y" "pw"/);
+  });
+
+  it('logs in with XOAUTH2 when an access token is present', async () => {
+    let sock;
+    const client = new SimpleImapClient({
+      host: 'h', username: 'u@outlook.com', accessToken: 'ya29.tok', timeoutMs: 1000,
+      socketFactory: () => (sock = fakeImapSocket(['* OK ready\r\n', 'A0001 OK auth\r\n', 'A0002 OK select\r\n']))
+    });
+    await client.connect();
+    await client.login();
+    expect(sock.writes[0]).toMatch(/^A0001 AUTHENTICATE XOAUTH2 /);
+  });
+
+  it('does NOT hang on XOAUTH2 auth failure — acks the "+" continuation and rejects promptly', async () => {
+    let sock;
+    const client = new SimpleImapClient({
+      host: 'h', username: 'u@outlook.com', accessToken: 'bad', timeoutMs: 2000,
+      // greeting, then a SASL "+" continuation, then the tagged NO after our ack
+      socketFactory: () => (sock = fakeImapSocket(['* OK ready\r\n', '+ eyJlcnJvciI6ICJpbnZhbGlkIn0=\r\n', 'A0001 NO AUTHENTICATE failed\r\n']))
+    });
+    await client.connect();
+    await expect(client.login()).rejects.toThrow(/AUTHENTICATE failed/);
+    // proves we sent the empty-line ack (2nd write) rather than waiting for timeout
+    expect(sock.writes[1]).toBe('\r\n');
   });
 });
 

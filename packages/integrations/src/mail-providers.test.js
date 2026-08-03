@@ -45,4 +45,21 @@ describe('mail provider catalog', () => {
     expect(list.find((p) => p.provider === 'mailtm')).toMatchObject({ imapReady: false, apiOnly: true });
     expect(list.find((p) => p.provider === 'proton').requiresBridge).toBe(true);
   });
+
+  it('declares HOW each email type authenticates (password/app-password/oauth/bridge/api)', () => {
+    const list = listMailProviders();
+    const auth = (id) => list.find((p) => p.provider === id).authMethods;
+    expect(auth('outlook')).toContain('oauth'); // modern auth → needs accessTokenRef
+    expect(auth('gmail')).toEqual(expect.arrayContaining(['app-password', 'oauth']));
+    expect(auth('rambler')).toContain('password');
+    expect(auth('proton')).toEqual(['bridge']);
+    expect(auth('mailtm')).toEqual(['api']);
+    // every provider declares at least one auth method
+    expect(list.every((p) => Array.isArray(p.authMethods) && p.authMethods.length > 0)).toBe(true);
+  });
+
+  it('resolveMailbox surfaces the auth methods so the confirm flow knows what secret to use', () => {
+    expect(resolveMailbox('u@outlook.com').authMethods).toContain('oauth');
+    expect(resolveMailbox('u@rambler.ru').authMethods).toContain('password');
+  });
 });

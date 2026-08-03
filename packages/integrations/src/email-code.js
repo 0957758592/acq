@@ -28,14 +28,17 @@ function inferImapHost(email, fallbackHost) {
   return resolveMailbox(email, { imapHost: fallbackHost }).imapHost;
 }
 
-class SimpleImapClient {
-  constructor({ host, port = 993, username, password, accessToken = null, timeoutMs = 30_000 } = {}) {
+const defaultSocketFactory = ({ host, port }) => tls.connect({ host, port, servername: host });
+
+export class SimpleImapClient {
+  constructor({ host, port = 993, username, password, accessToken = null, timeoutMs = 30_000, socketFactory = defaultSocketFactory } = {}) {
     this.host = host;
     this.port = port;
     this.username = username;
     this.password = password;
     this.accessToken = accessToken;
     this.timeoutMs = timeoutMs;
+    this.socketFactory = socketFactory;
     this.tagCounter = 0;
     this.socket = null;
     this.buffer = '';
@@ -43,9 +46,8 @@ class SimpleImapClient {
 
   connect() {
     return new Promise((resolve, reject) => {
-      const socket = tls.connect({ host: this.host, port: this.port, servername: this.host }, () => {
-        this.socket = socket;
-      });
+      const socket = this.socketFactory({ host: this.host, port: this.port });
+      this.socket = socket;
       const timeout = setTimeout(() => reject(new Error('IMAP connect timeout')), this.timeoutMs);
       const onData = (chunk) => {
         this.buffer += chunk.toString('utf8');
@@ -67,12 +69,23 @@ class SimpleImapClient {
   async command(command) {
     const tag = `A${String((this.tagCounter += 1)).padStart(4, '0')}`;
     const line = `${tag} ${command}\r\n`;
+    const isSasl = command.startsWith('AUTHENTICATE');
+    let ackedContinuation = false;
     this.buffer = '';
     this.socket.write(line);
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => reject(new Error(`IMAP command timeout: ${command}`)), this.timeoutMs);
       const onData = (chunk) => {
         this.buffer += chunk.toString('utf8');
+        // A SASL command (XOAUTH2) that FAILS gets a `+ <base64 error>` server
+        // continuation and expects an empty line before the tagged NO. Ack it once
+        // so auth failure resolves promptly instead of hanging to the timeout.
+        if (isSasl && !ackedContinuation && /(^|\r\n)\+ /.test(this.buffer)
+          && !this.buffer.includes(`${tag} OK`) && !this.buffer.includes(`${tag} NO`) && !this.buffer.includes(`${tag} BAD`)) {
+          ackedContinuation = true;
+          this.socket.write('\r\n');
+          return;
+        }
         if (this.buffer.includes(`${tag} OK`) || this.buffer.includes(`${tag} NO`) || this.buffer.includes(`${tag} BAD`)) {
           clearTimeout(timeout);
           this.socket.off('data', onData);
