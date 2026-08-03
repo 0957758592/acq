@@ -34,7 +34,14 @@ export async function main({ env } = {}) {
   // Optional RabbitMQ: enables scrape.run to enqueue real engine.scrape jobs.
   const rabbit = env.rabbitUrl ? await connectRabbitmq(env.rabbitUrl).then(() => true).catch(() => false) : false;
   const dispatchScrape = rabbit ? async (job) => { await publishJson('engine.scrape', job); return null; } : null;
-  const ctx = buildEngineContext({ env: { platforms: env.platforms, llmKeys: env.llmKeys, llmProvider: env.llmProvider, llmModel: env.llmModel, llmBaseUrl: env.llmBaseUrl }, deps: { dispatchScrape } });
+  const ctx = buildEngineContext({
+    env: {
+      platforms: env.platforms,
+      llmKeys: env.llmKeys, llmProvider: env.llmProvider, llmModel: env.llmModel, llmBaseUrl: env.llmBaseUrl,
+      browserProvider: env.browserProvider, browserbaseApiKey: env.browserbaseApiKey, browserbaseProjectId: env.browserbaseProjectId
+    },
+    deps: { dispatchScrape }
+  });
   const useCases = buildUseCases(ctx);
   // Immutable audit trail for every mutating command (TZ §14.7).
   const audit = env.audit ?? createMongoAuditLog({ model: EngineAuditLog });
@@ -130,6 +137,10 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
       llmProvider: process.env.LLM_PROVIDER || undefined,
       llmModel: process.env.LLM_MODEL || undefined,
       llmBaseUrl: process.env.LLM_BASE_URL || undefined,
+      // Pluggable browser backend (own pool default; Browserbase cloud when keyed).
+      browserProvider: process.env.BROWSER_PROVIDER || undefined,
+      browserbaseApiKey: process.env.BROWSERBASE_API_KEY || undefined,
+      browserbaseProjectId: process.env.BROWSERBASE_PROJECT_ID || undefined,
       port: Number(process.env.CONTROL_PORT || 7500),
       grpcPort: Number(process.env.GRPC_PORT || 7550),
       tokens

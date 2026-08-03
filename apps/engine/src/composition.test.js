@@ -35,4 +35,14 @@ describe('buildEngineContext (pure wiring)', () => {
     const ctx = buildEngineContext({ env: { poolThreshold: 3, autobuyEnabled: true }, deps });
     expect(ctx.config).toMatchObject({ poolThreshold: 3, autobuyEnabled: true });
   });
+
+  it('enables the Browserbase backend from env.browserbaseApiKey (config path must exist)', () => {
+    const off = buildEngineContext({ env: {}, deps });
+    expect(off.browserProviders().find((p) => p.provider === 'browserbase').configured).toBe(false);
+
+    const on = buildEngineContext({ env: { browserbaseApiKey: 'bb-key', browserbaseProjectId: 'proj-1' }, deps });
+    expect(on.browserProviders().find((p) => p.provider === 'browserbase').configured).toBe(true);
+    // and it actually resolves the cloud backend instead of failing UNCONFIGURED
+    expect(() => on.browserBackendFor({ provider: 'browserbase' })).not.toThrow();
+  });
 });
