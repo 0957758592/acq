@@ -72,4 +72,41 @@ describe('generic acquireHandler', () => {
       code: 'GENERATION_UNAVAILABLE'
     });
   });
+
+  // Money-safety (REQUIREM §2.1 idempotency / §3.4 exactly-once): a redelivered
+  // acquire (e.g. a post-purchase error triggered a retry) must NOT buy again.
+  function ledgerCtx() {
+    const store = new Map();
+    let purchases = 0;
+    const ctx = fakeCtx({ shop: { shopId: 's1', verified: true, spec: {}, unitPriceUsdCents: 100 } });
+    ctx.compileShopAdapter = () => ({
+      purchase: async (q) => { purchases += 1; return { orderId: `ORD-${purchases}`, amountUsdCents: q * 100 }; },
+      fetchDelivered: async () => [{ identifier: '@d1', platform: 'telegram', source: 'purchase', secretRefs: {} }]
+    });
+    ctx.purchaseLedger = {
+      begin: async (key) => { const p = store.get(key); if (p) return p; store.set(key, { status: 'purchasing' }); return null; },
+      recordOrder: async (key, v) => store.set(key, v)
+    };
+    return { ctx, purchases: () => purchases };
+  }
+
+  it('is idempotent on the money path: a retry with the same key RESUMES, never double-buys', async () => {
+    const { ctx, purchases } = ledgerCtx();
+    const run = () => acquireHandler(ctx, { platform: 'telegram', source: 'purchase', quantity: 2 }, { idempotencyKey: 'acquire:telegram:5' });
+    const first = await run();
+    expect(first).toMatchObject({ acquired: 1, orderId: 'ORD-1' });
+    expect(purchases()).toBe(1);
+    // redelivery of the SAME job → must resume off the recorded order, not re-buy
+    const retry = await run();
+    expect(retry.orderId).toBe('ORD-1');
+    expect(purchases()).toBe(1); // STILL one purchase — no double spend
+  });
+
+  it('a concurrent in-flight acquire (claim without an order yet) is a coded retryable seam, not a second buy', async () => {
+    const { ctx } = ledgerCtx();
+    // simulate another worker already claimed but not yet recorded the order
+    await ctx.purchaseLedger.begin('acquire:telegram:9');
+    await expect(acquireHandler(ctx, { platform: 'telegram', source: 'purchase', quantity: 2 }, { idempotencyKey: 'acquire:telegram:9' }))
+      .rejects.toMatchObject({ code: 'ACQUIRE_IN_PROGRESS' });
+  });
 });

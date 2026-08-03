@@ -38,7 +38,9 @@ export function registerConsumers(ctx, {
   return Object.entries(handlers).map(([queue, handler]) =>
     consumeJsonWithDlq(
       queue,
-      (job) => handler(ctx, job?.payload ?? job),
+      // The dispatcher embeds the idempotency key on every job; pass it to the
+      // handler so money-critical work (acquire) can be exactly-once on redelivery.
+      (job) => handler(ctx, job?.payload ?? job, { idempotencyKey: job?.idempotencyKey ?? null }),
       { consumeJson, publishJson, clock: ctx.clock, logger: ctx.logger }
     )
   );

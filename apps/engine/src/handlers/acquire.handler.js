@@ -9,7 +9,7 @@ function seam(code, message) {
   return Object.assign(new Error(`${code}: ${message}`), { code });
 }
 
-export async function acquireHandler(ctx, { platform, source = 'purchase', quantity, shopId, deviceId, niche, locale }) {
+export async function acquireHandler(ctx, { platform, source = 'purchase', quantity, shopId, deviceId, niche, locale }, { idempotencyKey = null } = {}) {
   const clock = () => ctx.clock.now();
 
   if (source === 'generate') {
@@ -41,7 +41,27 @@ export async function acquireHandler(ctx, { platform, source = 'purchase', quant
     }
   });
 
-  const { orderId, amountUsdCents } = await adapter.purchase(quantity);
+  // Exactly-once on the MONEY path (REQUIREM §2.1/§3.4): claim the purchase by the
+  // job's idempotency key BEFORE spending, and record the order the instant it is
+  // placed. A redelivery (e.g. a post-purchase error triggered a DLQ retry) then
+  // RESUMES off the recorded order — it never buys twice. Absent a ledger this is
+  // an honest best-effort (dispatch-dedup + spend-cap + self-correcting reconciler).
+  let orderId;
+  let amountUsdCents;
+  const ledger = idempotencyKey ? ctx.purchaseLedger : null;
+  if (ledger) {
+    const prior = await ledger.begin(idempotencyKey);
+    if (prior?.orderId) {
+      ({ orderId, amountUsdCents } = prior); // resume — order already placed
+    } else if (prior && !prior.orderId) {
+      throw seam('ACQUIRE_IN_PROGRESS', `acquire ${idempotencyKey} already in progress`);
+    } else {
+      ({ orderId, amountUsdCents } = await adapter.purchase(quantity));
+      await ledger.recordOrder(idempotencyKey, { orderId, amountUsdCents });
+    }
+  } else {
+    ({ orderId, amountUsdCents } = await adapter.purchase(quantity));
+  }
   const delivered = await adapter.fetchDelivered({ orderId });
   await ctx.accountRepo.insertAcquired(delivered, { orderId });
   await ctx.expenseRecorder?.record?.({ provider: shop.shopId, externalReference: orderId, amountUsdCents, platform });

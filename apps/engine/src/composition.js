@@ -27,10 +27,12 @@ import { EngineScrapeResult } from '@acq/core/models/engine-scrape-result';
 import { EngineProxy } from '@acq/core/models/engine-proxy';
 import { EngineSelectorOverride } from '@acq/core/models/engine-selector-override';
 import { EngineEmailIdentity } from '@acq/core/models/engine-email-identity';
+import { EnginePurchaseClaim } from '@acq/core/models/engine-purchase-claim';
 import { canDeviceAcceptAccount } from '@acq/core/utils/device-account-eligibility';
 import { claimRunningDeviceLease, releaseDeviceLease } from '@acq/core/services/device-lease';
 import { createSelectorStore } from './services/selector-store.js';
 import { createEmailIdentityStore } from './services/email-identity-store.js';
+import { createPurchaseLedger } from './services/purchase-ledger.js';
 import { getRedis } from '@acq/core/db/redis';
 import { createCircuitBreaker } from '@acq/core/reliability/circuit-breaker';
 import { createUnitOfWork } from '@acq/core/db/unit-of-work';
@@ -100,6 +102,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     EngineProxy,
     EngineSelectorOverride,
     EngineEmailIdentity,
+    EnginePurchaseClaim,
+    createPurchaseLedger,
     canDeviceAcceptAccount,
     claimRunningDeviceLease,
     releaseDeviceLease,
@@ -201,6 +205,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   // per-shop signup endpoints live in the spec; absent -> honest coded seam.
   // Operator-owned mailboxes used for shop signup/confirmation (ANY provider).
   const emailIdentityStore = D.emailIdentityStore ?? createEmailIdentityStore({ model: D.EngineEmailIdentity });
+  // Exactly-once money-path ledger for the acquire handler (REQUIREM §2.1/§3.4).
+  const purchaseLedger = D.purchaseLedger ?? D.createPurchaseLedger({ model: D.EnginePurchaseClaim });
   const cookieSessionStore =
     D.cookieSessionStore ?? (env.cookieSessionKey ? D.createEncryptedCookieSessionStore({ key: env.cookieSessionKey }) : null);
   const shopSignup =
@@ -277,6 +283,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     shopSignup,
     selectorStore,
     emailIdentityStore,
+    purchaseLedger,
     gdpr,
     llmFor,
     llmProviders,
