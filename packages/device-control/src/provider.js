@@ -6,6 +6,18 @@ import { GeeLarkClient } from './geelark-client.js';
 import { AdbClient } from './adb-client.js';
 import { DeviceControlError } from './errors.js';
 
+// DuoPlus power ops return per-device { success:[ids], fail:[ids], fail_reason:{id} }.
+// A device in `fail` did NOT change state (e.g. an expired lease) — surface it as a
+// coded seam with the vendor reason, never a false success (verify-by-fact).
+function assertDuoPlusPower(result, providerDeviceId, code, verb) {
+  const data = result?.data || result || {};
+  const failed = Array.isArray(data.fail) ? data.fail.map(String) : [];
+  if (failed.includes(String(providerDeviceId))) {
+    const reason = data.fail_reason?.[providerDeviceId] || `failed to ${verb}`;
+    throw new DeviceControlError(`device ${providerDeviceId} failed to ${verb}: ${reason}`, { code, details: data });
+  }
+}
+
 function listFromInstanceResponse(result = {}) {
   const data = result.data || result;
   if (Array.isArray(data)) return data;
@@ -116,11 +128,13 @@ export class DuoplusCloudPhoneProvider {
 
   async startDevice(providerDeviceId) {
     const result = await this.client.powerOn([providerDeviceId]);
+    assertDuoPlusPower(result, providerDeviceId, 'DEVICE_POWER_ON_FAILED', 'power on');
     return { success: true, result };
   }
 
   async stopDevice(providerDeviceId) {
     const result = await this.client.powerOff([providerDeviceId]);
+    assertDuoPlusPower(result, providerDeviceId, 'DEVICE_POWER_OFF_FAILED', 'power off');
     return { success: true, result };
   }
 
