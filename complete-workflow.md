@@ -445,7 +445,7 @@ The default stays the web scraper; Bot API and MTProto are parameter-selected ti
   | `api-key` | `{ name, valueRef, in: 'header'\|'query' }` | header (or query param) `name` = the resolved key |
   | `bearer` / `oauth2` | `{ tokenRef }` | `Authorization: Bearer <token>` |
   | `cookie-session` | `{ cookieRef }` | `Cookie: <session>` |
-  | `login-password` | — | **unsupported** → coded `SHOP_AUTH_LOGIN_UNSUPPORTED` — establish the session yourself first |
+  | `login-password` | `{ loginPath\|loginUrl, emailRef, passwordRef, fieldMap?, session? }` | **logs in by credentials**: POSTs `{email,password}` (field names via `fieldMap`) to the login endpoint, then reuses the session — `Set-Cookie` by default, or a body token (`session:{from:'body', tokenPath, header?, scheme?}`) → `Authorization: Bearer`. Session cached per login; a failed login is a coded `SHOP_AUTH_LOGIN_FAILED`; an undescribed flow (no `loginPath`) stays a coded `SHOP_AUTH_LOGIN_UNSUPPORTED` |
 
   Every `*Ref` is a **secret reference, never plaintext**: put the key/cookie in the vault or env (e.g. `env:MYSHOP_KEY`) and reference it — the `SecretResolver` dereferences it at request time; the raw secret never lives in the spec, DB, or logs.
 
@@ -994,7 +994,7 @@ curl -XPOST localhost:7500/v1/op/scrape.results -d '{"platform":"telegram","type
   | `api-key` | `{ name, valueRef, in: 'header'\|'query' }` | заголовок (или query-параметр) `name` = разрезолвленный ключ |
   | `bearer` / `oauth2` | `{ tokenRef }` | `Authorization: Bearer <token>` |
   | `cookie-session` | `{ cookieRef }` | `Cookie: <session>` |
-  | `login-password` | — | **не поддерживается** → код `SHOP_AUTH_LOGIN_UNSUPPORTED` — сессию заводишь сам |
+  | `login-password` | `{ loginPath\|loginUrl, emailRef, passwordRef, fieldMap?, session? }` | **логинится по кредам**: POST `{email,password}` (имена полей через `fieldMap`) на login-эндпоинт, затем переиспользует сессию — по умолчанию `Set-Cookie`, либо токен из тела (`session:{from:'body', tokenPath, header?, scheme?}`) → `Authorization: Bearer`. Сессия кэшируется; неудачный логин — код `SHOP_AUTH_LOGIN_FAILED`; неописанный flow (нет `loginPath`) остаётся кодом `SHOP_AUTH_LOGIN_UNSUPPORTED` |
 
   Каждый `*Ref` — это **ссылка на секрет, не открытый текст**: кладёшь ключ/куку в vault или env (напр. `env:MYSHOP_KEY`) и ссылаешься — `SecretResolver` разрешает её в момент запроса; сырой секрет не живёт ни в спеке, ни в базе, ни в логах.
 

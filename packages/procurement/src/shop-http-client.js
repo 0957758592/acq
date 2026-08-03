@@ -6,7 +6,52 @@ import { domainError } from '@acq/engine-domain';
 // through the injected secretResolver (no plaintext creds in specs). Non-2xx is
 // a hard coded error; login-password (needs an interactive session first) is an
 // honest seam, never guessed.
-async function applyAuth({ auth, headers, url, secretResolver }) {
+function dig(obj, path) {
+  return String(path).split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
+}
+
+// Log in with the credential refs and return the session headers (Cookie or
+// Authorization), per the shop's described login flow. The session is cached so
+// we don't re-login on every request. A failed login is a coded seam — never a
+// false/empty session.
+async function loginForSession({ config, url, fetchImpl, resolve, sessionCache }) {
+  if (!config.loginUrl && !config.loginPath) {
+    throw domainError('SHOP_AUTH_LOGIN_UNSUPPORTED', 'login-password requires a described login flow (loginPath/loginUrl)');
+  }
+  const loginUrl = config.loginUrl || new URL(config.loginPath, url).toString();
+  const cacheKey = `${loginUrl}::${config.emailRef ?? ''}`;
+  const cached = sessionCache?.get(cacheKey);
+  if (cached) return cached;
+
+  const [email, password] = await Promise.all([resolve(config.emailRef), resolve(config.passwordRef)]);
+  const fieldMap = config.fieldMap ?? { email: 'email', password: 'password' };
+  const loginBody = { [fieldMap.email ?? 'email']: email, [fieldMap.password ?? 'password']: password, ...(config.extraFields ?? {}) };
+  const resp = await fetchImpl(loginUrl, {
+    method: config.method ?? 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify(loginBody)
+  });
+  if (!resp.ok) throw domainError('SHOP_AUTH_LOGIN_FAILED', `shop login failed (${resp.status})`);
+
+  const session = config.session ?? { from: 'cookie' };
+  let sessionHeaders;
+  if (session.from === 'body') {
+    const text = await resp.text();
+    const json = text ? JSON.parse(text) : {};
+    const token = session.tokenPath ? dig(json, session.tokenPath) : json.token;
+    if (!token) throw domainError('SHOP_AUTH_LOGIN_FAILED', 'no token in login response body');
+    sessionHeaders = { [session.header ?? 'Authorization']: `${session.scheme ?? 'Bearer'} ${token}`.trim() };
+  } else {
+    const setCookie = resp.headers?.get?.('set-cookie') || '';
+    const cookie = String(setCookie).split(';')[0].trim(); // name=value, drop attributes
+    if (!cookie) throw domainError('SHOP_AUTH_LOGIN_FAILED', 'no session cookie in login response');
+    sessionHeaders = { Cookie: cookie };
+  }
+  sessionCache?.set(cacheKey, sessionHeaders);
+  return sessionHeaders;
+}
+
+async function applyAuth({ auth, headers, url, secretResolver, fetchImpl, sessionCache }) {
   const kind = auth?.kind;
   const config = auth?.config ?? {};
   const resolve = (ref) => (ref == null ? null : secretResolver.resolve(ref));
@@ -29,7 +74,8 @@ async function applyAuth({ auth, headers, url, secretResolver }) {
     return { url, headers: { ...headers, Cookie: cookie ?? '' } };
   }
   if (kind === 'login-password') {
-    throw domainError('SHOP_AUTH_LOGIN_UNSUPPORTED', 'login-password requires an interactive session first');
+    const sessionHeaders = await loginForSession({ config, url, fetchImpl, resolve, sessionCache });
+    return { url, headers: { ...headers, ...sessionHeaders } };
   }
   throw domainError('SHOP_AUTH_KIND_UNSUPPORTED', `unsupported auth kind ${kind}`);
 }
@@ -42,6 +88,8 @@ export function createShopHttpClient({ fetchImpl = globalThis.fetch, secretResol
   // with CIRCUIT_OPEN instead of cascading, and never trips a different shop.
   // The breaker is injected (port) so this package stays infrastructure-free.
   const breakers = new Map();
+  // Cached shop sessions for login-password auth (avoid re-login per request).
+  const sessionCache = new Map();
   function breakerFor(url) {
     if (!breakerFactory) return null;
     let host;
@@ -66,7 +114,9 @@ export function createShopHttpClient({ fetchImpl = globalThis.fetch, secretResol
         auth,
         headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...baseHeaders },
         url,
-        secretResolver
+        secretResolver,
+        fetchImpl,
+        sessionCache
       });
 
       // GET/HEAD must not carry a body (fetch throws otherwise) — an endpoint

@@ -72,10 +72,61 @@ describe('createShopHttpClient (auth-aware, request-by-object)', () => {
     expect(cap.init.body).toBeUndefined();
   });
 
-  it('login-password without a session is an honest seam (never guessed)', async () => {
+  it('login-password without a described login flow is an honest seam (never guessed)', async () => {
     const client = createShopHttpClient({ fetchImpl: fakeFetch({}), secretResolver });
     await expect(client.request({ method: 'GET', url: 'https://s/x', auth: { kind: 'login-password', config: {} } }))
       .rejects.toMatchObject({ code: 'SHOP_AUTH_LOGIN_UNSUPPORTED' });
+  });
+
+  const creds = { resolve: async (r) => ({ 'env:EMAIL': 'me@x.com', 'env:PW': 'pw' }[r] ?? r) };
+
+  it('login-password logs in with the credential refs and carries the Set-Cookie session on the real request', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init });
+      if (url.includes('/api/login')) {
+        return { ok: true, status: 200, headers: { get: (h) => (String(h).toLowerCase() === 'set-cookie' ? 'sid=abc123; Path=/; HttpOnly' : 'application/json') }, text: async () => JSON.stringify({ ok: true }) };
+      }
+      return { ok: true, status: 200, headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ balance: 500 }) };
+    };
+    const client = createShopHttpClient({ fetchImpl, secretResolver: creds });
+    const res = await client.request({
+      method: 'GET',
+      url: 'https://shop.example/api/balance',
+      auth: { kind: 'login-password', config: { loginPath: '/api/login', emailRef: 'env:EMAIL', passwordRef: 'env:PW', fieldMap: { email: 'email', password: 'password' }, session: { from: 'cookie' } } }
+    });
+    expect(res).toEqual({ balance: 500 });
+    const login = calls.find((c) => c.url.includes('/api/login'));
+    expect(login.url).toBe('https://shop.example/api/login');
+    expect(JSON.parse(login.init.body)).toEqual({ email: 'me@x.com', password: 'pw' });
+    const real = calls.find((c) => c.url.includes('/api/balance'));
+    expect(real.init.headers.Cookie).toBe('sid=abc123');
+  });
+
+  it('login-password can extract a token from the login response body → Authorization: Bearer', async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init });
+      if (url.includes('/login')) return { ok: true, status: 200, headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ data: { token: 'JWT-9' } }) };
+      return { ok: true, status: 200, headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ balance: 1 }) };
+    };
+    const client = createShopHttpClient({ fetchImpl, secretResolver: creds });
+    await client.request({
+      method: 'GET', url: 'https://shop.example/api/balance',
+      auth: { kind: 'login-password', config: { loginPath: '/login', emailRef: 'env:EMAIL', passwordRef: 'env:PW', session: { from: 'body', tokenPath: 'data.token' } } }
+    });
+    expect(calls.find((c) => c.url.includes('/api/balance')).init.headers.Authorization).toBe('Bearer JWT-9');
+  });
+
+  it('a failed login is a coded SHOP_AUTH_LOGIN_FAILED (never a false session)', async () => {
+    const fetchImpl = async (url) => (url.includes('/login')
+      ? { ok: false, status: 401, headers: { get: () => 'application/json' }, text: async () => '{"error":"bad creds"}' }
+      : { ok: true, status: 200, headers: { get: () => 'application/json' }, text: async () => '{}' });
+    const client = createShopHttpClient({ fetchImpl, secretResolver: creds });
+    await expect(client.request({
+      method: 'GET', url: 'https://shop.example/api/balance',
+      auth: { kind: 'login-password', config: { loginPath: '/login', emailRef: 'env:EMAIL', passwordRef: 'env:PW', session: { from: 'cookie' } } }
+    })).rejects.toMatchObject({ code: 'SHOP_AUTH_LOGIN_FAILED' });
   });
 });
 
