@@ -95,7 +95,10 @@ export async function main({ env, deps = {} } = {}) {
     consumeJson,
     publishJson,
     clock: ctx.clock,
-    logger
+    logger,
+    // Scrape is a one-shot request (no reconciler re-emit) — capture a transient
+    // failure in the DLQ instead of dropping it (§10).
+    deadLetterTransient: true
   });
   const server = await startHealthServer(env.healthPort || 7700);
   logger.info?.('scrape-worker up', { queue: QUEUE, healthPort: env.healthPort || 7700 });

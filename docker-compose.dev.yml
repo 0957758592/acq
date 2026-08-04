@@ -55,17 +55,21 @@ services:
     build: .
     image: acq:latest
     container_name: acq-engine
+    restart: on-failure
     command: yarn workspace @acq/engine-app start
     environment:
       <<: *app-env
       ENGINE_HEALTH_PORT: '7401'
     extra_hosts: ['host.docker.internal:host-gateway']
     ports: ['7401:7401']
-    depends_on: [redis, rabbitmq]
+    depends_on:
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
 
   api:
     image: acq:latest
     container_name: acq-api
+    restart: on-failure
     command: yarn workspace @acq/control-plane-app start
     environment:
       <<: *app-env
@@ -79,14 +83,21 @@ services:
   scrape:
     image: acq:latest
     container_name: acq-scrape
+    restart: on-failure
     command: yarn workspace @acq/scrape-worker-app start
-    environment: *app-env
+    environment:
+      <<: *app-env
+      SCRAPE_HEALTH_PORT: '7700'
     extra_hosts: ['host.docker.internal:host-gateway']
-    depends_on: [redis, rabbitmq]
+    ports: ['7700:7700']
+    depends_on:
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
 
   dashboard:
     image: acq:latest
     container_name: acq-dashboard
+    restart: on-failure
     command: yarn workspace @acq/dashboard-app start
     environment:
       DASHBOARD_PORT: '7600'

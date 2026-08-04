@@ -19,6 +19,10 @@ export function consumeJsonWithDlq(queueName, handler, {
   maxAttempts = 3,
   prefetch = 1,
   requeueOnError = false,
+  // One-shot queues (e.g. scrape) have no reconciler to re-emit a dropped job, so
+  // a transient failure must be CAPTURED in the DLQ rather than nack-dropped and
+  // lost (§10). Reconciler-driven queues keep the default (re-throw → re-emit).
+  deadLetterTransient = false,
   publishJson,
   consumeJson,
   clock = { now: () => new Date() },
@@ -28,12 +32,17 @@ export function consumeJsonWithDlq(queueName, handler, {
     try {
       await handler(payload);
     } catch (error) {
-      if (!isTerminal(error, maxAttempts)) {
-        // Transient: re-throw so the underlying consumer nack-drops it and the
-        // Mongo ledger / retry cron re-delivers later. No DLQ publish — but LOG it
-        // (§6.1/§16): a parked job must never disappear without a trace.
+      if (!isTerminal(error, maxAttempts) && !deadLetterTransient) {
+        // Transient on a reconciler-driven queue: re-throw so the underlying
+        // consumer nack-drops it and the reconciler re-emits next cycle. No DLQ
+        // publish — but LOG it (§6.1/§16): a parked job never disappears silently.
         logger?.warn?.('job failed, will retry', { queue: queueName, code: error.code ?? null, reason: error.message });
         throw error;
+      }
+      if (!isTerminal(error, maxAttempts)) {
+        // One-shot queue: capture the transient failure in the DLQ so it is never
+        // lost — inspectable/replayable instead of silently dropped.
+        logger?.warn?.('transient job dead-lettered (one-shot queue)', { queue: queueName, code: error.code ?? null, reason: error.message });
       }
       const code = error.code ?? null;
       try {

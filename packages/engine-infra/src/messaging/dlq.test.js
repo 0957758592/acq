@@ -46,6 +46,18 @@ describe('consumeJsonWithDlq (generic)', () => {
     expect(publishJson.calls[0].payload).toMatchObject({ reason: 'permanent boom', payload: { x: 1 } });
   });
 
+  it('with deadLetterTransient, a transient failure is CAPTURED in the DLQ (not lost) — §10', async () => {
+    const consumeJson = fakeConsumeJson();
+    const publishJson = fakePublishJson();
+    const warns = [];
+    const handler = async () => { const e = new Error('no proxy'); e.code = 'NO_RESIDENTIAL_PROXY_AVAILABLE'; throw e; };
+    consumeJsonWithDlq('engine.scrape', handler, { consumeJson, publishJson, clock, logger: { warn: (m, c) => warns.push(c) }, deadLetterTransient: true });
+    // resolves (ACK) instead of re-throwing — the job is recorded, never silently dropped
+    await expect(consumeJson.wrapped()({ x: 1 })).resolves.toBeUndefined();
+    expect(publishJson.calls[0].queue).toBe('engine.scrape.dlq');
+    expect(publishJson.calls[0].payload).toMatchObject({ code: 'NO_RESIDENTIAL_PROXY_AVAILABLE' });
+  });
+
   it('re-throws a transient failure (no DLQ) but LOGS it — never fails silently (§6.1/§16)', async () => {
     const consumeJson = fakeConsumeJson();
     const publishJson = fakePublishJson();

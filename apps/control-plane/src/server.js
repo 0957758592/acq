@@ -31,8 +31,12 @@ import { createGrpcServer, startGrpcServer } from './grpc-server.js';
 export async function main({ env } = {}) {
   await connectMongo(env.mongoUri);
   const logger = createStructuredLogger({ level: env.logLevel || 'info', base: { service: 'control-plane' } });
-  // Optional RabbitMQ: enables scrape.run to enqueue real engine.scrape jobs.
-  const rabbit = env.rabbitUrl ? await connectRabbitmq(env.rabbitUrl).then(() => true).catch(() => false) : false;
+  // RabbitMQ enables scrape.run to enqueue real engine.scrape jobs. When a URL is
+  // configured it is REQUIRED: a connect failure (e.g. a startup race with the
+  // broker) propagates so the process exits and `restart: on-failure` retries —
+  // rather than silently degrading to a "healthy" api that can't dispatch (§16).
+  // With no URL, rabbit is intentionally absent and scrape dispatch is a seam.
+  const rabbit = env.rabbitUrl ? await connectRabbitmq(env.rabbitUrl).then(() => true) : false;
   const dispatchScrape = rabbit ? async (job) => { await publishJson('engine.scrape', job); return null; } : null;
   const ctx = buildEngineContext({
     env: {
