@@ -13,4 +13,5 @@ export { gmailCapabilities } from './descriptors/gmail.js';
 export { tiktokCapabilities } from './descriptors/tiktok.js';
 export { instagramCapabilities } from './descriptors/instagram.js';
 export { youtubeCapabilities } from './descriptors/youtube.js';
+export { linkedinCapabilities } from './descriptors/linkedin.js';
 export { PlatformRegistryError, platformRegistryError } from './errors.js';

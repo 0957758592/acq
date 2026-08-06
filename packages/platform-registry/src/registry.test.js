@@ -32,12 +32,23 @@ describe('getPlatformCapabilities', () => {
 });
 
 describe('listPlatforms', () => {
-  test('covers all 8 built-in platforms (registry is the single source of truth)', () => {
+  test('covers all 9 built-in platforms (registry is the single source of truth)', () => {
     expect(listPlatforms()).toEqual(
       expect.arrayContaining([
-        'whatsapp', 'telegram', 'discord', 'facebook', 'gmail', 'tiktok', 'instagram', 'youtube'
+        'whatsapp', 'telegram', 'discord', 'facebook', 'gmail', 'tiktok', 'instagram', 'youtube', 'linkedin'
       ])
     );
+  });
+});
+
+describe('built-in linkedin descriptor', () => {
+  test('is registered with the expected capabilities', () => {
+    const caps = getPlatformCapabilities('linkedin');
+    expect(caps.appPackage).toBe('com.linkedin.android');
+    expect(caps.appCatalogName).toBe('LinkedIn');
+    expect(caps.onlineMethod).toBe('login');
+    expect(caps.supportedActions).toEqual(expect.arrayContaining(['publish', 'follow', 'connect', 'dm']));
+    expect(caps.scrapeTargets).toEqual(expect.arrayContaining(['profile', 'connections', 'company']));
   });
 });
 

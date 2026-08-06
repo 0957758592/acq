@@ -16,7 +16,7 @@ import { emailIdentitiesViewModel } from '/js/features/email-identities.js';
 import { browserProvidersViewModel } from '/js/features/browser-providers.js';
 
 const apiOrigin = window.__ACQ_API__ && window.__ACQ_API__ !== 'self' ? window.__ACQ_API__ : '';
-const PLATFORMS = ['whatsapp', 'telegram', 'discord', 'facebook', 'gmail', 'tiktok', 'instagram', 'youtube'];
+const PLATFORMS = ['whatsapp', 'telegram', 'discord', 'facebook', 'gmail', 'tiktok', 'instagram', 'youtube', 'linkedin'];
 let client = null;
 
 const $ = (id) => document.getElementById(id);
