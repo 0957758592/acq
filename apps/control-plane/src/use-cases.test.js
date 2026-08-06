@@ -8,8 +8,24 @@ import { buildUseCases } from './use-cases.js';
 function fakeCtx() {
   const accounts = { a1: { _id: 'a1', platform: 'telegram', identifier: '@x', source: 'purchase', status: 'online', assignedDeviceId: 'd1', version: 3 } };
   const campaigns = {};
+  const vendorCalls = [];
   let seq = 0;
   return {
+    vendorCalls,
+    // Reseller vendor client registry (keystore-api shops). Fake dark.shopping.
+    shopVendorFor: (shopId = 'dark.shopping') => {
+      if (shopId === 'missing') throw Object.assign(new Error('SHOP_VENDOR_UNAVAILABLE: none'), { code: 'SHOP_VENDOR_UNAVAILABLE' });
+      return {
+        getBalance: async () => ({ balance: '991.2500', currency: 'RUB' }),
+        listProducts: async (params) => {
+          vendorCalls.push({ shopId, params });
+          return [
+            { id: 166920, name: 'LinkedIn.com | ManReg | 2FA | USA IP', price: 1703.75, quantity: 1, minimum_order: 1 },
+            { id: 160767, name: 'Linkedin.com | EUROPA IP | 2fa', price: 78.33, quantity: 93, minimum_order: 1 }
+          ];
+        }
+      };
+    },
     clock: { now: () => new Date('2026-07-22T18:00:00.000Z') },
     config: { buyBatchSize: 5 },
     pageCalls: [],
@@ -82,6 +98,7 @@ function fakeCtx() {
 
 function build() {
   const ctx = fakeCtx();
+  ctx.config = { ...ctx.config, rubPerUsd: 90 };
   // records the {provider, model, browserProvider} passed when shop.scan picks a scanner
   ctx.scannerFor = (opts = {}) => { ctx.scannerForCalls.push(opts); return ctx.shopScanner; };
   const facade = createFacade({ useCases: buildUseCases(ctx), audit: { record: async () => {} } });
@@ -105,6 +122,42 @@ describe('control-plane use-cases through the facade', () => {
     // the self-hosted backend is always usable; the cloud one needs a key
     expect(res.data.providers.find((p) => p.provider === 'own').configured).toBe(true);
     expect(res.data.providers.find((p) => p.provider === 'browserbase').configured).toBe(false);
+  });
+
+  it('shop.balance reads the vendor balance through the facade and converts to USD cents via configured FX', async () => {
+    const { facade } = build();
+    const res = await facade.execute('shop.balance', { role: 'operator', args: { shopId: 'dark.shopping' } });
+    expect(res.error).toBeNull();
+    expect(res.data).toMatchObject({ shopId: 'dark.shopping', balance: 991.25, currency: 'RUB' });
+    // 991.25 RUB / 90 RUB-per-USD = 11.0139 USD -> 1101 cents
+    expect(res.data.balanceUsdCents).toBe(1101);
+  });
+
+  it('shop.balance surfaces a coded seam when the vendor is not wired', async () => {
+    const { facade } = build();
+    const res = await facade.execute('shop.balance', { role: 'operator', args: { shopId: 'missing' } });
+    expect(res.data).toBeNull();
+    expect(res.error.code).toBe('SHOP_VENDOR_UNAVAILABLE');
+  });
+
+  it('shop.search maps query/platform/country/stock/price into product/list params and returns normalized items', async () => {
+    const { ctx, facade } = build();
+    const res = await facade.execute('shop.search', {
+      role: 'operator',
+      args: { shopId: 'dark.shopping', query: 'linkedin', onlyInStock: true, priceToRub: 2000 }
+    });
+    expect(res.error).toBeNull();
+    expect(res.data.shopId).toBe('dark.shopping');
+    expect(res.data.count).toBe(2);
+    expect(res.data.items[0]).toMatchObject({ id: 166920, price: 1703.75, quantity: 1 });
+    // the handler translated the facade args into the vendor's real search params
+    expect(ctx.vendorCalls[0].params).toMatchObject({ name: 'linkedin', only_in_stock: 1, price_to: 2000 });
+  });
+
+  it('shop.search is gated by RBAC (readonly forbidden)', async () => {
+    const { facade } = build();
+    const res = await facade.execute('shop.search', { role: 'readonly', args: { query: 'gmail' } });
+    expect(res.error.code).toBe('FORBIDDEN');
   });
 
   it('device.enroll registers an operator-managed device', async () => {

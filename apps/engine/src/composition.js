@@ -13,7 +13,7 @@ import {
 import { reconcile } from '@acq/engine-domain';
 import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner, createShopSignup, createEncryptedCookieSessionStore } from '@acq/procurement';
 import { createBrowserProvider, listBrowserProviders, createBrowserbaseProvider, createAiActor } from '@acq/browser';
-import { createOpenRouterClient, createLlmClient, listLlmProviders, EmailCodeFetcher, createEmailCodeReader } from '@acq/integrations';
+import { createOpenRouterClient, createLlmClient, listLlmProviders, EmailCodeFetcher, createEmailCodeReader, createDarkShoppingClient } from '@acq/integrations';
 import { createVerificationResourceProvider, createHttpSmsVendor } from '@acq/account-gen';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
 import { createDeviceProvider } from '@acq/device-control';
@@ -77,6 +77,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createLlmShopScanner,
     createShopSignup,
     createEncryptedCookieSessionStore,
+    createDarkShoppingClient,
     EmailCodeFetcher,
     createEmailCodeReader,
     createOpenRouterClient,
@@ -129,6 +130,20 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   // account GENERATE path is injected (per-platform on-device signup) — absent
   // by default, in which case that path is an honest seam.
   const shopRegistry = D.shopRegistry ?? D.createShopRegistry({ model: D.EngineShopSpec });
+  // Reseller VENDOR API clients (keystore-api shops) — a registry keyed by shopId,
+  // used by the read ops shop.balance/shop.search and (later) the buy path. Pluggable:
+  // dark.shopping is wired from its env key; absent -> shopVendorFor is an honest
+  // coded seam (SHOP_VENDOR_UNAVAILABLE). No vendor is hardcoded into any handler.
+  const shopVendors = D.shopVendors ?? {};
+  if (!shopVendors['dark.shopping'] && env.darkShoppingApiKey) {
+    shopVendors['dark.shopping'] = D.createDarkShoppingClient({ apiKey: env.darkShoppingApiKey, baseUrl: env.darkShoppingBaseUrl });
+  }
+  const defaultShopId = env.defaultShopId ?? 'dark.shopping';
+  const shopVendorFor = D.shopVendorFor ?? ((shopId = defaultShopId) => {
+    const client = shopVendors[shopId];
+    if (!client) throw Object.assign(new Error(`SHOP_VENDOR_UNAVAILABLE: no vendor client for '${shopId ?? defaultShopId}'`), { code: 'SHOP_VENDOR_UNAVAILABLE' });
+    return client;
+  });
   // Browserbase-class session provider (lazy: Chromium launches on first
   // createSession). debugPort enables the live-view devtools URL.
   const browserProvider = D.browserProvider ?? D.createBrowserProvider({
@@ -280,6 +295,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     provider,
     automationFor,
     shopRegistry,
+    shopVendorFor,
+    defaultShopId,
     shopSignup,
     selectorStore,
     emailIdentityStore,
@@ -313,6 +330,9 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       autobuyEnabled: Boolean(env.autobuyEnabled),
       maxUnitPriceUsdCents: env.maxUnitPriceUsdCents ?? null,
       expectedUnitUsdCents: env.expectedUnitUsdCents ?? null,
+      // FX for converting reseller-vendor balances/prices (RUB) to the USD-cents
+      // the guards use. Configurable, never hardcoded; null -> no conversion.
+      rubPerUsd: env.rubPerUsd ?? null,
       priceDriftTolerance: env.priceDriftTolerance ?? 0.2,
       maxTotalUsdCents: env.maxTotalUsdCents ?? null,
       deviceTargetDepth: env.deviceTargetDepth ?? 3,

@@ -17,6 +17,8 @@ export const OPERATIONS = [
   { name: 'shop.approve', mutating: true, roles: R.admin },
   { name: 'shop.signup', mutating: true, roles: R.ops },
   { name: 'shop.signup.confirm', mutating: true, roles: R.ops },
+  { name: 'shop.balance', mutating: false, roles: R.ops },
+  { name: 'shop.search', mutating: false, roles: R.ops },
   { name: 'device.enroll', mutating: true, roles: R.staff },
   { name: 'device.queue.get', mutating: false, roles: R.all },
   { name: 'device.status', mutating: false, roles: R.all },

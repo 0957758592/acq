@@ -181,6 +181,46 @@ export function buildUseCases(ctx) {
       if (!doc) throw Object.assign(new Error('SHOP_NOT_FOUND: shop not found'), { code: 'SHOP_NOT_FOUND' });
       return { shopId: doc.shopId, verified: doc.verified };
     },
+    // Read the reseller vendor's live balance (keystore-api shops, e.g.
+    // dark.shopping) on every surface, so the brain/operator can see funds before
+    // buying. Returns the raw vendor amount + a USD-cents conversion when an FX
+    // rate is configured (never hardcoded). Absent vendor -> honest coded seam.
+    'shop.balance': async (args = {}) => {
+      const raw = await ctx.shopVendorFor(args.shopId).getBalance();
+      const balance = Number(raw.balance);
+      const rubPerUsd = ctx.config?.rubPerUsd ?? null;
+      const balanceUsdCents = rubPerUsd && raw.currency === 'RUB' && Number.isFinite(balance)
+        ? Math.round((balance / rubPerUsd) * 100)
+        : null;
+      return { shopId: args.shopId ?? ctx.defaultShopId ?? 'dark.shopping', balance, currency: raw.currency, balanceUsdCents };
+    },
+    // Search the vendor catalog by (query|platform+country)+stock+price — the REAL
+    // inventory (the vendor's product/list), which surfaces far more than category
+    // browsing. Maps facade args to the vendor's search params; one op, all
+    // surfaces. Read-only (no spend), so brain/operator can pick what to buy.
+    'shop.search': async (args = {}) => {
+      const name = args.query ?? ([args.platform, args.country].filter(Boolean).join(' ') || undefined);
+      const items = await ctx.shopVendorFor(args.shopId).listProducts({
+        name,
+        category_id: args.categoryId,
+        group_id: args.groupId,
+        only_in_stock: args.onlyInStock ? 1 : undefined,
+        price_from: args.priceFromRub,
+        price_to: args.priceToRub,
+        quantity_from: args.quantityFrom
+      });
+      // Narrow by country keyword client-side (the vendor embeds it in the name).
+      const matched = args.country
+        ? items.filter((p) => String(p.name).toLowerCase().includes(String(args.country).toLowerCase()))
+        : items;
+      const capped = args.limit ? matched.slice(0, args.limit) : matched;
+      return {
+        shopId: args.shopId ?? ctx.defaultShopId ?? 'dark.shopping',
+        count: capped.length,
+        items: capped.map((p) => ({ id: p.id, name: p.name, price: p.price, quantity: p.quantity, minimum_order: p.minimum_order }))
+      };
+    },
+
     // The AI backend is selectable per call: pass provider/model to scan with a
     // different vendor (openai | anthropic | google | openrouter | custom).
     'shop.scan': async (args = {}) => scanShop(ctx, {
