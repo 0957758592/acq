@@ -14,7 +14,8 @@
     "./observability/*": "./src/observability/*.js",
     "./reliability/*": "./src/reliability/*.js",
     "./auth/*": "./src/auth/*.js",
-    "./config/*": "./src/config/*.js"
+    "./config/*": "./src/config/*.js",
+    "./security/*": "./src/security/*.js"
   },
   "scripts": {
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.config.js --passWithNoTests",

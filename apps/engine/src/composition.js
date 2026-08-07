@@ -35,6 +35,7 @@ import { createEmailIdentityStore } from './services/email-identity-store.js';
 import { createPurchaseLedger } from './services/purchase-ledger.js';
 import { getRedis } from '@acq/core/db/redis';
 import { createCircuitBreaker } from '@acq/core/reliability/circuit-breaker';
+import { createLocalVault } from '@acq/core/security/credential-vault';
 import { createUnitOfWork } from '@acq/core/db/unit-of-work';
 import { createStructuredLogger } from '@acq/logger';
 
@@ -78,6 +79,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createShopSignup,
     createEncryptedCookieSessionStore,
     createDarkShoppingClient,
+    createLocalVault,
     EmailCodeFetcher,
     createEmailCodeReader,
     createOpenRouterClient,
@@ -139,6 +141,10 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     shopVendors['dark.shopping'] = D.createDarkShoppingClient({ apiKey: env.darkShoppingApiKey, baseUrl: env.darkShoppingBaseUrl });
   }
   const defaultShopId = env.defaultShopId ?? 'dark.shopping';
+  // Encrypted-at-rest credential vault for delivered account secrets (§14.4).
+  // Present only when a 32-byte key is configured; absent -> shop.deliver refuses
+  // to store plaintext (coded CREDENTIAL_VAULT_UNAVAILABLE seam).
+  const credentialVault = D.credentialVault ?? (env.secretVaultKey ? D.createLocalVault({ key: env.secretVaultKey }) : null);
   const shopVendorFor = D.shopVendorFor ?? ((shopId = defaultShopId) => {
     const client = shopVendors[shopId];
     if (!client) throw Object.assign(new Error(`SHOP_VENDOR_UNAVAILABLE: no vendor client for '${shopId ?? defaultShopId}'`), { code: 'SHOP_VENDOR_UNAVAILABLE' });
@@ -297,6 +303,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     shopRegistry,
     shopVendorFor,
     defaultShopId,
+    credentialVault,
     shopSignup,
     selectorStore,
     emailIdentityStore,

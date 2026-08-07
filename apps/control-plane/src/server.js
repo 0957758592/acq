@@ -43,7 +43,8 @@ export async function main({ env } = {}) {
       platforms: env.platforms,
       llmKeys: env.llmKeys, llmProvider: env.llmProvider, llmModel: env.llmModel, llmBaseUrl: env.llmBaseUrl,
       browserProvider: env.browserProvider, browserbaseApiKey: env.browserbaseApiKey, browserbaseProjectId: env.browserbaseProjectId,
-      darkShoppingApiKey: env.darkShoppingApiKey, darkShoppingBaseUrl: env.darkShoppingBaseUrl, rubPerUsd: env.rubPerUsd
+      darkShoppingApiKey: env.darkShoppingApiKey, darkShoppingBaseUrl: env.darkShoppingBaseUrl, rubPerUsd: env.rubPerUsd,
+      secretVaultKey: env.secretVaultKey
     },
     deps: { dispatchScrape }
   });
@@ -151,6 +152,7 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
       darkShoppingApiKey: process.env.DARKSHOP_API_KEY || process.env.DARK_SHOPPING_API_KEY || undefined,
       darkShoppingBaseUrl: process.env.DARKSHOP_BASE_URL || process.env.DARK_SHOPPING_BASE_URL || undefined,
       rubPerUsd: process.env.RUB_PER_USD ? Number(process.env.RUB_PER_USD) : undefined,
+      secretVaultKey: process.env.SECRET_VAULT_KEY || undefined,
       port: Number(process.env.CONTROL_PORT || 7500),
       grpcPort: Number(process.env.GRPC_PORT || 7550),
       tokens

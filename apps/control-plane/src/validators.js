@@ -40,6 +40,7 @@ export const SCHEMAS = {
   'shop.balance': schema({ shopId: str }),
   'shop.search': schema({ shopId: str, query: str, platform: str, country: str, onlyInStock: bool, priceFromRub: num.positive(), priceToRub: num.positive(), quantityFrom: num.integer().positive(), categoryId: num.integer(), groupId: num.integer(), limit: num.integer().positive() }),
   'shop.buy': schema({ shopId: str, platform: str, country: str, query: str, categoryId: num.integer().positive(), quantity: num.integer().positive(), strategy: str.oneOf(['cheapest', 'reliable']), maxUnitPriceRub: num.positive(), minRating: num.min(0), maxInvalidPercent: num.min(0), includeGroups: arr.of(str), excludeGroups: arr.of(str), excludeNames: arr.of(str), confirm: bool, idempotenceId: str }),
+  'shop.deliver': schema({ shopId: str, orderId: yup.mixed().required(), platform: str.required() }),
   'device.status': schema({ status: str, provider: str, cursor: str.nullable(), limit: num.integer().positive() }),
   'device.selectors': schema({ platform: str.required() }),
   'device.selectors.set': schema({ platform: str.required(), selectors: obj.required(), updatedBy: str.nullable() }),

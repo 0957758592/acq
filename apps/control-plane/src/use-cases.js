@@ -7,6 +7,7 @@ import { assertSupportedAction } from '../../engine/src/services/action-support.
 import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/src/services/proxy-ops.js';
 import { scanShop } from '../../engine/src/services/scan-shop.js';
 import { shopBuy } from '../../engine/src/services/shop-buy.js';
+import { shopDeliver } from '../../engine/src/services/shop-deliver.js';
 import { domainSnapshot } from '../../engine/src/services/domain-snapshot.js';
 import { evaluateSlos } from '@acq/core/observability/slo';
 import { paginate } from '@acq/core/db/paginate';
@@ -227,6 +228,11 @@ export function buildUseCases(ctx) {
     // the approval surface for the brain/operator. `confirm:true` places the order
     // by product id with an idempotence key. One op, every surface.
     'shop.buy': async (args = {}) => shopBuy(ctx, args),
+
+    // Deliver + import a COMPLETED order into the pool: fetch order/download, parse,
+    // vault credentials (encrypted at rest), insertAcquired. The async tail of the
+    // buy path — also what the autonomous acquire job calls once status=completed.
+    'shop.deliver': async (args = {}) => shopDeliver(ctx, args),
 
     // The AI backend is selectable per call: pass provider/model to scan with a
     // different vendor (openai | anthropic | google | openrouter | custom).
