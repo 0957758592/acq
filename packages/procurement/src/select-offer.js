@@ -15,6 +15,8 @@ export function selectOffer(items, {
   quantity = 1,
   maxUnitPriceRub = null,
   minPurchaseCounter = 0,
+  minRating = null,
+  maxInvalidPercent = null,
   includeGroups = null,
   excludeGroups = null,
   excludeNames = null
@@ -22,6 +24,8 @@ export function selectOffer(items, {
   const wanted = String(country ?? '').trim().toLowerCase();
   const lc = (v) => String(v ?? '').toLowerCase();
   const anyIncluded = (hay, needles) => needles.some((n) => hay.includes(lc(n)));
+  const ratingOf = (p) => (p.rating == null ? null : Number(p.rating));
+  const invalidOf = (p) => (p.invalid_items_percent == null ? null : Number(p.invalid_items_percent));
   const candidates = (Array.isArray(items) ? items : []).filter((it) => {
     if (!it || typeof it !== 'object') return false;
     const stock = Number(it.quantity ?? 0);
@@ -30,6 +34,10 @@ export function selectOffer(items, {
     if (!Number.isFinite(price)) return false;
     if (maxUnitPriceRub != null && price > maxUnitPriceRub) return false;
     if ((Number(it.purchase_counter ?? 0)) < minPurchaseCounter) return false;
+    // Supplier-quality floors: an explicit min rating excludes unrated offers;
+    // a max invalid-items% excludes suppliers with too many reported bad items.
+    if (minRating != null && !(ratingOf(it) != null && ratingOf(it) >= minRating)) return false;
+    if (maxInvalidPercent != null && invalidOf(it) != null && invalidOf(it) > maxInvalidPercent) return false;
     if (wanted && !lc(it.name).includes(wanted)) return false;
     // Product-TYPE scoping via the vendor `group` + name (accounts, not Stars/edu).
     const groupName = lc(it.group?.name);
@@ -42,9 +50,13 @@ export function selectOffer(items, {
 
   const byPriceAsc = (a, b) => Number(a.price) - Number(b.price);
   const bySoldDesc = (a, b) => Number(b.purchase_counter ?? 0) - Number(a.purchase_counter ?? 0);
+  // Supplier reliability: higher rating first (unrated last), then fewer invalid
+  // items (unknown last), then more sales, then cheaper.
+  const byRatingDesc = (a, b) => (ratingOf(b) ?? -1) - (ratingOf(a) ?? -1);
+  const byInvalidAsc = (a, b) => (invalidOf(a) ?? 101) - (invalidOf(b) ?? 101);
 
   const sorted = strategy === 'reliable'
-    ? [...candidates].sort((a, b) => bySoldDesc(a, b) || byPriceAsc(a, b))
+    ? [...candidates].sort((a, b) => byRatingDesc(a, b) || byInvalidAsc(a, b) || bySoldDesc(a, b) || byPriceAsc(a, b))
     : [...candidates].sort((a, b) => byPriceAsc(a, b) || bySoldDesc(a, b));
   return sorted[0];
 }

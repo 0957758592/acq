@@ -67,3 +67,32 @@ test('excludeNames drops offers whose name matches (e.g. edu gmail)', () => {
   const pick = selectOffer(typed, { strategy: 'cheapest', quantity: 1, includeGroups: ['gmail'], excludeNames: ['edu', 'not @gmail'] });
   expect(pick.id).toBe(13); // the .edu (id12) dropped -> real @gmail.com
 });
+
+// supplier-quality ranking: rating -> invalid_items_percent -> sales -> price.
+const rated = [
+  { id: 1, price: 50, quantity: 10, rating: 4.9, invalid_items_percent: 0, purchase_counter: 100 },
+  { id: 2, price: 20, quantity: 10, rating: null, invalid_items_percent: 0, purchase_counter: 5 },
+  { id: 3, price: 30, quantity: 10, rating: 4.5, invalid_items_percent: 2, purchase_counter: 50 },
+  { id: 4, price: 10, quantity: 10, rating: null, invalid_items_percent: null, purchase_counter: null }
+];
+
+test('reliable strategy prefers the highest-rated supplier even if pricier', () => {
+  const pick = selectOffer(rated, { strategy: 'reliable', quantity: 1 });
+  expect(pick.id).toBe(1); // rating 4.9 wins over cheaper unrated
+});
+
+test('reliable falls back to invalid% then sales when ratings are equal/absent', () => {
+  const unrated = rated.filter((r) => r.rating == null); // id2 (inv0, sold5), id4 (inv null, sold null)
+  const pick = selectOffer(unrated, { strategy: 'reliable', quantity: 1 });
+  expect(pick.id).toBe(2); // 0% invalid + sold beats no-data cheaper
+});
+
+test('minRating drops unrated / lower-rated offers', () => {
+  const pick = selectOffer(rated, { strategy: 'reliable', quantity: 1, minRating: 4.6 });
+  expect(pick.id).toBe(1); // only 4.9 qualifies (4.5 and nulls excluded)
+});
+
+test('maxInvalidPercent drops offers with too many invalid items', () => {
+  const pick = selectOffer(rated, { strategy: 'reliable', quantity: 1, maxInvalidPercent: 1 });
+  expect(pick.id).toBe(1); // id3 (2% invalid) excluded; id1 (0%) wins on rating
+});

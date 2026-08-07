@@ -19,6 +19,8 @@ export async function shopBuy(ctx, {
   quantity = 1,
   strategy = 'cheapest',
   maxUnitPriceRub = null,
+  minRating = null,
+  maxInvalidPercent = null,
   includeGroups,
   excludeGroups,
   excludeNames,
@@ -49,6 +51,8 @@ export async function shopBuy(ctx, {
   const effectiveCountry = policy.ignoreCountry ? undefined : country;
   const offer = selectOffer(items, {
     country: effectiveCountry, strategy, quantity, maxUnitPriceRub,
+    minRating: minRating ?? policy.minRating ?? null,
+    maxInvalidPercent: maxInvalidPercent ?? policy.maxInvalidPercent ?? null,
     includeGroups: includeGroups ?? policy.includeGroups ?? null,
     excludeGroups: excludeGroups ?? policy.excludeGroups ?? null,
     excludeNames: excludeNames ?? policy.excludeNames ?? null
@@ -68,7 +72,7 @@ export async function shopBuy(ctx, {
     shopId: resolvedShopId,
     platform: platform ?? null,
     country: country ?? null,
-    product: { id: offer.id, name: offer.name, group: offer.group?.name ?? null, price: unitRub, stock: offer.quantity, minimum_order: offer.minimum_order },
+    product: { id: offer.id, name: offer.name, group: offer.group?.name ?? null, price: unitRub, stock: offer.quantity, minimum_order: offer.minimum_order, rating: offer.rating ?? null, invalidPercent: offer.invalid_items_percent ?? null },
     quantity,
     unitRub,
     totalRub,
