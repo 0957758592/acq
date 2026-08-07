@@ -59,6 +59,13 @@ describe('generic bringOnlineHandler', () => {
     expect(res.ok).toBe(true);
   });
 
+  it('a login-runner verify seam (LOGIN_SCREEN_UNVERIFIED) fails safe: revert to assigned, blocked — not stuck', async () => {
+    const ctx = fakeCtx({ account: account(), bringOnlineThrows: 'LINKEDIN_LOGIN_SCREEN_UNVERIFIED' });
+    const res = await bringOnlineHandler(ctx, { ...payload, platform: 'linkedin' });
+    expect(res).toMatchObject({ ok: false, blocked: 'LINKEDIN_LOGIN_SCREEN_UNVERIFIED' });
+    expect(ctx.saved.map((s) => s.status)).toEqual(['bringing_online', 'assigned']); // reverted, never stuck
+  });
+
   it('brings an account online across the state machine and emits account.online', async () => {
     const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: true } });
     const res = await bringOnlineHandler(ctx, payload);

@@ -7,8 +7,14 @@ import { toDomainAccount } from './map.js';
 // bringing_online -> online/banned/checkpointed, and reverts to assigned on a
 // verify-by-fact seam (session-import unverified / no login) WITHOUT faking
 // success. Ports injected via ctx.
+// A verify-by-fact bring-online seam: the driver couldn't confirm the account
+// online (unsupported online method, unrecognized login screen, missing creds,
+// login/session not confirmed). ALL of these must fail safe (revert to assigned,
+// report blocked) — never pretend online, never leave the account stuck.
 function isOnlineSeam(code) {
-  return code === 'ONLINE_METHOD_UNSUPPORTED' || /SESSION_IMPORT_UNVERIFIED$/.test(code || '');
+  return code === 'ONLINE_METHOD_UNSUPPORTED'
+    || /_UNVERIFIED$/.test(code || '')
+    || /_CREDENTIALS_REQUIRED$/.test(code || '');
 }
 
 export async function bringOnlineHandler(ctx, { accountId, deviceId, platform: platformArg, proxyMode }) {
