@@ -31,6 +31,28 @@ describe('proxy-ops service (1:1 sticky, Mongo-backed)', () => {
     expect((await ctx.proxyRepo.findById('p1')).assignedDeviceId).toBe('d1');
   });
 
+  it('assignDeviceProxy pushes the proxy onto the real cloud phone via setSmartIp (endpoint from vault)', async () => {
+    const ctx = fakeCtx([healthy({ secretRef: 'vault:endpoint-ref' })]);
+    const calls = [];
+    ctx.provider = { setSmartIp: async (pid, proxy) => { calls.push({ pid, proxy }); } };
+    ctx.deviceModel = { findById: (id) => ({ lean: async () => ({ _id: id, providerDeviceId: 'qXFA1' }) }) };
+    ctx.secretResolver = { resolve: async (ref) => (ref === 'vault:endpoint-ref' ? '1.2.3.4:8080:user1:pass1' : ref) };
+
+    const res = await assignDeviceProxy(ctx, { deviceId: 'd1' });
+
+    expect(res.applied).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].pid).toBe('qXFA1'); // applied to the REAL device
+    expect(calls[0].proxy).toEqual({ host: '1.2.3.4', port: 8080, user: 'user1', password: 'pass1' });
+    expect((await ctx.proxyRepo.findById('p1')).assignedDeviceId).toBe('d1');
+  });
+
+  it('assignDeviceProxy stays a no-op on the device when no cloud-phone provider is wired', async () => {
+    const ctx = fakeCtx([healthy()]);
+    const res = await assignDeviceProxy(ctx, { deviceId: 'd1' });
+    expect(res.applied).toBe(false); // DB assignment only (own-pool / no provider)
+  });
+
   it('assignDeviceProxy honors a requested proxyId', async () => {
     const ctx = fakeCtx([healthy(), healthy({ _id: 'p2' })]);
     const res = await assignDeviceProxy(ctx, { deviceId: 'd1', proxyId: 'p2' });
