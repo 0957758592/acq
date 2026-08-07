@@ -26,6 +26,11 @@ export function buildLoginRunner({
   usernameHints = [],
   passwordHints = [],
   submitTexts = [],
+  // Some apps (e.g. LinkedIn) open on a "prereg" screen where the email/password
+  // form is behind a button (e.g. "Sign in with Email"). preLoginTapTexts taps one
+  // of these to reach the credential form, then re-reads the screen. Empty = the
+  // form is on the first screen (most platforms).
+  preLoginTapTexts = [],
   settleMs = 3000
 } = {}) {
   const P = platform.toUpperCase();
@@ -58,6 +63,14 @@ export function buildLoginRunner({
     const username = account.credentials?.username || account.credentials?.email;
     const password = account.credentials?.password;
     if (!username || !password) throw seam('CREDENTIALS_REQUIRED', 'username/email + password are required to log in');
+
+    // Prereg flow: tap through to the credential form, then re-read the screen.
+    const preTap = unionTexts(preLoginTapTexts, ov.preLoginTapTexts);
+    if (preTap.length && !findElement(nodes, ...userH)) {
+      await actor.findAndTap(preTap, { rounds: 2 }).catch(() => {});
+      await delay(settleMs);
+      nodes = parseUIDump(await controller.getUIDump());
+    }
 
     const userField = findElement(nodes, ...userH);
     if (userField && typeof controller.inputText === 'function') {

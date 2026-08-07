@@ -45,7 +45,13 @@ export function parseUIDump(xml = '') {
 export function findElement(elements = [], ...textOptions) {
   for (const searchText of textOptions) {
     const needle = String(searchText || '').toLowerCase();
-    const found = elements.find((element) => String(element.text || '').toLowerCase().includes(needle));
+    if (!needle) continue;
+    // Match by visible text/content-desc OR by resource-id — many input fields
+    // (e.g. LinkedIn's email/password) carry no text, only a distinctive
+    // resource-id, so a resource-id fragment is a valid selector hint.
+    const found = elements.find((element) =>
+      String(element.text || '').toLowerCase().includes(needle)
+      || String(element.resourceId || '').toLowerCase().includes(needle));
     if (found) return found;
   }
   return null;

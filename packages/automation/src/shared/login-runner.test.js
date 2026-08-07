@@ -59,6 +59,31 @@ describe('buildLoginRunner (§9.4 generic login)', () => {
 });
 
 const fakeActor = { tapElement: async () => {}, findAndTap: async () => {} };
+
+describe('buildLoginRunner prereg flow (preLoginTapTexts)', () => {
+  it('taps through the prereg screen to the credential form, then logs in', async () => {
+    const login2 = buildLoginRunner({
+      platform: 'linkedin', appPackage: 'com.linkedin.android',
+      homeTexts: ['My Network'], loginTexts: ['Sign in with Email'],
+      preLoginTapTexts: ['Sign in with Email'],
+      usernameHints: ['email_address'], passwordHints: ['Password'], submitTexts: ['Sign in'], settleMs: 0
+    });
+    const calls = { started: false, typed: [], preTapped: false };
+    const actor = { tapElement: async () => {}, findAndTap: async (texts = []) => { if (texts.includes('Sign in with Email')) calls.preTapped = true; } };
+    const form = '<hierarchy rotation="0"><node text="" resource-id="growth_login_join_fragment_email_address" bounds="[0,0][10,10]" /><node text="" resource-id="growth_login_join_fragment_password" bounds="[0,20][10,30]" /><node text="Sign in" bounds="[0,40][10,50]" /></hierarchy>';
+    const c = {
+      calls,
+      startApp: async () => { calls.started = true; },
+      getUIDump: async () => (calls.typed.includes('pw') ? dump('My Network') : (calls.preTapped ? form : dump('Sign in with Email', 'New to LinkedIn?'))),
+      tap: async () => {},
+      inputText: async (t) => calls.typed.push(t)
+    };
+    const res = await login2(c, { credentials: { email: 'e@x', password: 'pw' } }, { actor });
+    expect(calls.preTapped).toBe(true); // advanced past the prereg screen
+    expect(res).toEqual({ ok: true });
+    expect(calls.typed).toEqual(expect.arrayContaining(['e@x', 'pw']));
+  });
+});
 function stateController(screenFn) {
   const calls = { started: false, typed: [] };
   return {
