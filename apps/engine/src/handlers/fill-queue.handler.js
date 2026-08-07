@@ -29,7 +29,7 @@ export async function fillQueueHandler(ctx, { deviceId, platform, count }) {
 
   const available = await ctx.accountRepo.countAvailable({ platform });
   if (available < ctx.config.poolThreshold) {
-    await ctx.eventBus.publish(makeEvent('pool.low', { platform, available }, { clock }));
+    await ctx.eventBus?.publish?.(makeEvent('pool.low', { platform, available }, { clock }));
   }
   return { filled };
 }

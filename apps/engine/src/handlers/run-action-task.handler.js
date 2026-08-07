@@ -36,15 +36,15 @@ export async function runActionTaskHandler(ctx, payload) {
 
   if (result?.banned) {
     await ctx.actionTaskRepo.markTask({ ...key, lastError: 'banned' }, 'failed');
-    await ctx.eventBus.publish(makeEvent('account.banned', { accountId: payload.accountId }, { clock }));
+    await ctx.eventBus?.publish?.(makeEvent('account.banned', { accountId: payload.accountId }, { clock }));
     return { ok: false, banned: true };
   }
 
   if (result?.ok) {
     await ctx.actionTaskRepo.markTask(key, 'done');
-    await ctx.eventBus.publish(makeEvent('action.done', key, { clock }));
+    await ctx.eventBus?.publish?.(makeEvent('action.done', key, { clock }));
     if (!(await ctx.actionTaskRepo.hasOpenTasks(payload.campaignId))) {
-      await ctx.eventBus.publish(makeEvent('campaign.completed', { campaignId: payload.campaignId }, { clock }));
+      await ctx.eventBus?.publish?.(makeEvent('campaign.completed', { campaignId: payload.campaignId }, { clock }));
     }
     return { ok: true };
   }

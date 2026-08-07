@@ -26,13 +26,13 @@ export async function probeHealthHandler(ctx, { accountId, deviceId, platform })
     if (state === 'banned') {
       account = transition(account, 'banned', { clock });
       await ctx.accountRepo.save(account);
-      await ctx.eventBus.publish(makeEvent('account.banned', { accountId, platform }, { clock }));
+      await ctx.eventBus?.publish?.(makeEvent('account.banned', { accountId, platform }, { clock }));
       return { state, banned: true };
     }
     if (state === 'checkpointed') {
       account = markCheckpoint(account, 'probe', { clock });
       await ctx.accountRepo.save(account);
-      await ctx.eventBus.publish(makeEvent('account.checkpointed', { accountId, platform }, { clock }));
+      await ctx.eventBus?.publish?.(makeEvent('account.checkpointed', { accountId, platform }, { clock }));
       return { state, checkpointed: true };
     }
     if (state === 'logged_out') {

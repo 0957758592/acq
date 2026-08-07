@@ -15,7 +15,7 @@ export async function replaceBannedHandler(ctx, { accountId, deviceId, platform 
     if (account.status === 'banned') {
       account = transition(account, 'retired', { clock });
       await ctx.accountRepo.save(account);
-      await ctx.eventBus.publish(makeEvent('account.retired', { accountId, platform }, { clock }));
+      await ctx.eventBus?.publish?.(makeEvent('account.retired', { accountId, platform }, { clock }));
     }
   }
 
@@ -31,7 +31,7 @@ export async function replaceBannedHandler(ctx, { accountId, deviceId, platform 
   if (promotedId) await ctx.deviceQueueRepo.save(after);
 
   if (depth(after) < after.targetDepth) {
-    await ctx.eventBus.publish(makeEvent('queue.low', { deviceId, platform }, { clock }));
+    await ctx.eventBus?.publish?.(makeEvent('queue.low', { deviceId, platform }, { clock }));
   }
   return { ok: true, promotedId };
 }
