@@ -11,7 +11,8 @@ import {
   LINKEDIN_CHECKPOINT_TEXTS,
   LINKEDIN_USERNAME_HINTS,
   LINKEDIN_PASSWORD_HINTS,
-  LINKEDIN_SUBMIT_TEXTS
+  LINKEDIN_SUBMIT_TEXTS,
+  LINKEDIN_SUBMIT_KEYEVENT
 } from './constants.js';
 
 const STATUS_BY_STATE = {
@@ -37,7 +38,8 @@ export const linkedinAdapter = {
     checkpointTexts: LINKEDIN_CHECKPOINT_TEXTS,
     usernameHints: LINKEDIN_USERNAME_HINTS,
     passwordHints: LINKEDIN_PASSWORD_HINTS,
-    submitTexts: LINKEDIN_SUBMIT_TEXTS
+    submitTexts: LINKEDIN_SUBMIT_TEXTS,
+    submitKeyevent: LINKEDIN_SUBMIT_KEYEVENT
   }),
 
   async healthCheck(controller, account, opts = {}) {

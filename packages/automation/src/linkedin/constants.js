@@ -20,7 +20,10 @@ export const LINKEDIN_DISMISS_TEXTS = ['OK', 'Continue', 'Skip', 'Not now', 'Got
 // Match the real form fields by resource-id (findElement matches resource-id too).
 export const LINKEDIN_USERNAME_HINTS = ['growth_login_join_fragment_email_address', 'Email or phone', 'Email'];
 export const LINKEDIN_PASSWORD_HINTS = ['growth_login_join_fragment_password', 'Password'];
-export const LINKEDIN_SUBMIT_TEXTS = ['Sign in'];
+// No plain "Sign in" submit button (only "Sign in with Google/Apple" — do NOT tap
+// those). Submit via the keyboard Enter key after the password.
+export const LINKEDIN_SUBMIT_TEXTS = [];
+export const LINKEDIN_SUBMIT_KEYEVENT = 66;
 
 // Action seeds (trigger -> confirm). Verify-by-fact against a live app build.
 export const LINKEDIN_CONNECT_TEXTS = ['Connect', 'Invite to connect'];

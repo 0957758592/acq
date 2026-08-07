@@ -26,6 +26,9 @@ export function buildLoginRunner({
   usernameHints = [],
   passwordHints = [],
   submitTexts = [],
+  // Some forms have no distinct submit BUTTON (or an ambiguous one, e.g. LinkedIn's
+  // "Sign in with Google"); submit via the keyboard action key instead (66 = ENTER).
+  submitKeyevent = null,
   // Some apps (e.g. LinkedIn) open on a "prereg" screen where the email/password
   // form is behind a button (e.g. "Sign in with Email"). preLoginTapTexts taps one
   // of these to reach the credential form, then re-reads the screen. Empty = the
@@ -82,7 +85,9 @@ export function buildLoginRunner({
       await actor.tapElement(passField, { afterMs: 400 });
       await controller.inputText(password);
     }
-    await actor.findAndTap(submitT, { rounds: 2 }).catch(() => {});
+    // Submit: prefer the keyboard action (unambiguous) then any explicit button.
+    if (submitKeyevent && typeof controller.keyevent === 'function') await controller.keyevent(submitKeyevent).catch(() => {});
+    if (submitT.length) await actor.findAndTap(submitT, { rounds: 2 }).catch(() => {});
     await delay(settleMs);
 
     nodes = parseUIDump(await controller.getUIDump());
