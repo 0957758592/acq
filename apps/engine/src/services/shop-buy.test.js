@@ -75,6 +75,16 @@ test('gmail policy ignores country (accounts are not geo-tagged) and drops .edu'
   expect(res.plan.product.id).toBe(81); // .edu dropped -> real @gmail.com, country ignored
 });
 
+test('minRating is pushed into the vendor search (rating_from) and drives the pick', async () => {
+  const vendor = makeVendor({ items: [
+    { id: 9, name: 'USA | HQ | Instagram accounts', price: 18.85, quantity: 13, rating: 5.0, invalid_items_percent: 0, purchase_counter: 51, group: { name: 'Ручная регистрация Instagram' } }
+  ] });
+  const res = await shopBuy(ctxWith(vendor), { platform: 'instagram', country: 'USA', quantity: 1, strategy: 'reliable', minRating: 4.5, confirm: false });
+  expect(vendor.calls.listProducts).toMatchObject({ rating_from: 4.5 }); // high-rated suppliers only, at the source
+  expect(res.plan.product.id).toBe(9);
+  expect(res.plan.product.rating).toBe(5.0);
+});
+
 test('buy policy scopes telegram to ACCOUNT groups (excludes Stars) and by category id', async () => {
   const telegramItems = [
     { id: 90, name: 'Telegram Stars', price: 3.94, quantity: 9000, purchase_counter: 9, group: { name: 'Telegram Stars' } },

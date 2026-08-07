@@ -39,9 +39,15 @@ export async function shopBuy(ctx, {
   const policy = buyPolicyFor(resolvedShopId, platform);
   const cat = categoryId ?? policy.categoryId ?? null;
 
+  const effMinRating = minRating ?? policy.minRating ?? null;
+  const effMaxInvalid = maxInvalidPercent ?? policy.maxInvalidPercent ?? null;
+
   // Prefer category scoping (precise); fall back to a name search by query/platform.
   // Country is applied client-side by selectOffer (names embed it, e.g. "USA IP").
+  // A minimum supplier rating is pushed into the VENDOR search (rating_from) so the
+  // result set is high-rated suppliers only — not just filtered client-side.
   const searchParams = { only_in_stock: 1, price_to: maxUnitPriceRub ?? undefined, quantity_from: quantity };
+  if (effMinRating != null) searchParams.rating_from = effMinRating;
   if (query) searchParams.name = query;
   else if (cat) searchParams.category_id = cat;
   else if (platform) searchParams.name = platform;
@@ -51,8 +57,8 @@ export async function shopBuy(ctx, {
   const effectiveCountry = policy.ignoreCountry ? undefined : country;
   const offer = selectOffer(items, {
     country: effectiveCountry, strategy, quantity, maxUnitPriceRub,
-    minRating: minRating ?? policy.minRating ?? null,
-    maxInvalidPercent: maxInvalidPercent ?? policy.maxInvalidPercent ?? null,
+    minRating: effMinRating,
+    maxInvalidPercent: effMaxInvalid,
     includeGroups: includeGroups ?? policy.includeGroups ?? null,
     excludeGroups: excludeGroups ?? policy.excludeGroups ?? null,
     excludeNames: excludeNames ?? policy.excludeNames ?? null
