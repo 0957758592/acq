@@ -12,7 +12,7 @@ import {
 } from '@acq/engine-infra';
 import { reconcile } from '@acq/engine-domain';
 import { createShopRegistry, createShopHttpClient, compileShopAdapter, createLlmShopScanner, createShopSignup, createEncryptedCookieSessionStore } from '@acq/procurement';
-import { createBrowserProvider, listBrowserProviders, createBrowserbaseProvider, createAiActor } from '@acq/browser';
+import { createBrowserProvider, listBrowserProviders, createBrowserbaseProvider, createAiActor, createCookieSessionRestorer, puppeteerConnect } from '@acq/browser';
 import { createOpenRouterClient, createLlmClient, listLlmProviders, EmailCodeFetcher, createEmailCodeReader, createDarkShoppingClient } from '@acq/integrations';
 import { createVerificationResourceProvider, createHttpSmsVendor } from '@acq/account-gen';
 import { getPlatformCapabilities, listPlatforms } from '@acq/platform-registry';
@@ -91,6 +91,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     listBrowserProviders,
     createBrowserbaseProvider,
     createAiActor,
+    createCookieSessionRestorer,
+    puppeteerConnect,
     createDeviceProvider,
     reconcile,
     getPlatformCapabilities,
@@ -178,6 +180,16 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     }
     throw Object.assign(new Error(`BROWSER_PROVIDER_UNSUPPORTED: unknown browser provider '${provider}'`), { code: 'BROWSER_PROVIDER_UNSUPPORTED' });
   });
+  // Cookie/browser (desktop) login: restore a browser session from an account's
+  // vaulted cookies (the LinkedIn-class path that bypasses on-device anti-automation).
+  // Bound to the browserbase backend; absent a browser key -> account.browserLogin is
+  // an honest seam (BROWSER_LOGIN_UNAVAILABLE).
+  const cookieSessionRestore =
+    D.cookieSessionRestore ??
+    (browserKeys.browserbase
+      ? D.createCookieSessionRestorer({ browserProvider: browserBackendFor({ provider: 'browserbase' }), connect: D.puppeteerConnect })
+      : null);
+
   // Stagehand-style observe→act for logins, bound to a chosen browser backend +
   // LLM vendor at call time (survives DOM drift). Absent LLM key -> coded seam.
   const aiActorFor = D.aiActorFor ?? (({ provider, model, browserProvider: bp } = {}) =>
@@ -310,6 +322,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     defaultShopId,
     credentialVault,
     acquireDriver,
+    cookieSessionRestore,
     shopSignup,
     selectorStore,
     emailIdentityStore,

@@ -40,6 +40,7 @@ export const OPERATIONS = [
   { name: 'account.refreshSession', mutating: true, roles: R.ops },
   { name: 'account.probe', mutating: true, roles: R.ops },
   { name: 'account.action', mutating: true, roles: R.ops },
+  { name: 'account.browserLogin', mutating: true, roles: R.ops },
   { name: 'account.tag', mutating: true, roles: R.ops },
   { name: 'account.bulk', mutating: true, roles: R.staff },
   { name: 'proxy.status', mutating: false, roles: R.all },

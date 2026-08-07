@@ -8,6 +8,7 @@ import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/
 import { scanShop } from '../../engine/src/services/scan-shop.js';
 import { shopBuy } from '../../engine/src/services/shop-buy.js';
 import { shopDeliver } from '../../engine/src/services/shop-deliver.js';
+import { browserLoginFromCookies } from '../../engine/src/services/browser-login.js';
 import { domainSnapshot } from '../../engine/src/services/domain-snapshot.js';
 import { evaluateSlos } from '@acq/core/observability/slo';
 import { paginate } from '@acq/core/db/paginate';
@@ -167,6 +168,11 @@ export function buildUseCases(ctx) {
       }
       return { requested: targets.length, applied: results.filter((r) => r.ok).length, results };
     },
+    // Browser (desktop) login for cookie accounts (LinkedIn etc.) — restore a
+    // browser session from the account's vaulted cookies + verify by fact. The
+    // path that bypasses on-device app anti-automation.
+    'account.browserLogin': async (args = {}) => browserLoginFromCookies(ctx, { accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED') }),
+
     'account.action': async (args = {}) => runAccountAction(ctx, {
       accountId: require$(args, 'accountId', 'ACCOUNT_ID_REQUIRED'),
       actionType: require$(args, 'actionType', 'ACTION_TYPE_REQUIRED'),

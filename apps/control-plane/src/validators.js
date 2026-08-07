@@ -37,6 +37,7 @@ export const SCHEMAS = {
   'shop.approve': schema({ shopId: str.required(), approvedBy: str.nullable() }),
   'shop.signup': schema({ shopId: str.required(), address: str, emailRef: str, passwordRef: str, usernameRef: str, extraFields: obj }),
   'shop.signup.confirm': schema({ shopId: str.required(), address: str, emailRef: str, imapPasswordRef: str, extraFields: obj }),
+  'account.browserLogin': schema({ accountId: str.required() }),
   'shop.balance': schema({ shopId: str }),
   'shop.search': schema({ shopId: str, query: str, platform: str, country: str, onlyInStock: bool, priceFromRub: num.positive(), priceToRub: num.positive(), quantityFrom: num.integer().positive(), categoryId: num.integer(), groupId: num.integer(), limit: num.integer().positive() }),
   'shop.buy': schema({ shopId: str, platform: str, country: str, query: str, categoryId: num.integer().positive(), quantity: num.integer().positive(), strategy: str.oneOf(['cheapest', 'reliable']), maxUnitPriceRub: num.positive(), minRating: num.min(0), maxInvalidPercent: num.min(0), includeGroups: arr.of(str), excludeGroups: arr.of(str), includeNames: arr.of(str), excludeNames: arr.of(str), confirm: bool, idempotenceId: str }),
