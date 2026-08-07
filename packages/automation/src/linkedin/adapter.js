@@ -39,7 +39,10 @@ export const linkedinAdapter = {
     usernameHints: LINKEDIN_USERNAME_HINTS,
     passwordHints: LINKEDIN_PASSWORD_HINTS,
     submitTexts: LINKEDIN_SUBMIT_TEXTS,
-    submitKeyevent: LINKEDIN_SUBMIT_KEYEVENT
+    submitKeyevent: LINKEDIN_SUBMIT_KEYEVENT,
+    // LinkedIn's prereg->form transition + post-login are slow; give screens time
+    // to settle before reading/typing (verify-by-fact timing on the live app).
+    settleMs: 5000
   }),
 
   async healthCheck(controller, account, opts = {}) {

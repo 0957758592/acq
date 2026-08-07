@@ -24,7 +24,7 @@ export function parseUIDump(xml = '') {
       const contentDesc = readAttribute(attributes, 'content-desc');
       const resourceId = readAttribute(attributes, 'resource-id');
       const className = readAttribute(attributes, 'class');
-      const keepEmptyTarget = /(EditText|EditableText|Button|ImageButton|CheckBox|RadioButton)/i.test(className);
+      const keepEmptyTarget = /(EditText|EditableText|AutoCompleteTextView|Button|ImageButton|CheckBox|RadioButton)/i.test(className);
       if (text || contentDesc || resourceId || keepEmptyTarget) {
         elements.push({
           text: text || contentDesc || '',
