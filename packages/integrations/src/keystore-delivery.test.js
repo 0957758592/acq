@@ -44,6 +44,13 @@ test('an opaque single-token line keeps the whole token as identifier + raw', ()
   expect(acc.secrets.raw).toBe('SINGLETOKEN12345');
 });
 
+test('a URL delivery (e.g. Telegram TDATA/session link) is one field, not split at the scheme colon', () => {
+  const [acc] = parseDelivery('https://drive.example.com/file/abc123.zip');
+  expect(acc.fieldCount).toBe(1);
+  expect(acc.separator).toBeNull();
+  expect(acc.identifier).toBe('https://drive.example.com/file/abc123.zip');
+});
+
 test('empty blob yields no accounts', () => {
   expect(parseDelivery('')).toEqual([]);
   expect(parseDelivery(null)).toEqual([]);

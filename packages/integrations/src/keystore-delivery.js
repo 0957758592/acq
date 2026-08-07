@@ -42,7 +42,10 @@ export function parseDelivery(raw) {
   const text = String(raw ?? '');
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== '');
   return lines.map((line) => {
-    const separator = detectSeparator(line);
+    // A URL delivery (e.g. a link to a TDATA/session archive for Telegram) is a
+    // SINGLE opaque field — never split it at the scheme colon.
+    const isUrl = /^https?:\/\//i.test(line);
+    const separator = isUrl ? null : detectSeparator(line);
     const fields = separator ? line.split(separator) : [line];
     return {
       identifier: fields[0],
