@@ -63,3 +63,26 @@ test('dry plan honestly reports affordable:false when funds are short (no throw,
   expect(res.plan.affordable).toBe(false);
   expect(vendor.calls.createOrder).toHaveLength(0);
 });
+
+test('gmail policy ignores country (accounts are not geo-tagged) and drops .edu', async () => {
+  const gmailItems = [
+    { id: 80, name: 'Gmail.edu accounts . Domain - not @gmail.com', price: 1, quantity: 9, purchase_counter: 5, group: { name: 'Автореги Gmail' } },
+    { id: 81, name: 'Gmail.com | 2FA | Свежие', price: 43.5, quantity: 12, purchase_counter: 300, group: { name: 'Ручная регистрация Gmail' } }
+  ];
+  const vendor = makeVendor({ items: gmailItems });
+  // country=USA would exclude everything (no USA in gmail names) — policy ignores it.
+  const res = await shopBuy(ctxWith(vendor), { platform: 'gmail', country: 'USA', quantity: 1, confirm: false });
+  expect(res.plan.product.id).toBe(81); // .edu dropped -> real @gmail.com, country ignored
+});
+
+test('buy policy scopes telegram to ACCOUNT groups (excludes Stars) and by category id', async () => {
+  const telegramItems = [
+    { id: 90, name: 'Telegram Stars', price: 3.94, quantity: 9000, purchase_counter: 9, group: { name: 'Telegram Stars' } },
+    { id: 91, name: 'Аккаунт телеграм США 2FA', price: 40.6, quantity: 99, purchase_counter: 200, group: { name: 'Авторег Telegram' } }
+  ];
+  const vendor = makeVendor({ items: telegramItems });
+  const res = await shopBuy(ctxWith(vendor), { platform: 'telegram', quantity: 1, confirm: false });
+  expect(res.plan.product.id).toBe(91); // Stars excluded by policy -> the account
+  expect(res.plan.product.group).toBe('Авторег Telegram');
+  expect(vendor.calls.listProducts).toMatchObject({ category_id: 43 }); // scoped by vendor category
+});

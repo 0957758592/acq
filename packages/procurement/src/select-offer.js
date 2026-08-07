@@ -9,8 +9,19 @@
 //                 toward the more-sold (reliable) offer.
 //   'reliable'  — most-sold (purchase_counter) within the price cap; ties break
 //                 toward the cheaper offer (prod: proven supplier first).
-export function selectOffer(items, { country, strategy = 'cheapest', quantity = 1, maxUnitPriceRub = null, minPurchaseCounter = 0 } = {}) {
+export function selectOffer(items, {
+  country,
+  strategy = 'cheapest',
+  quantity = 1,
+  maxUnitPriceRub = null,
+  minPurchaseCounter = 0,
+  includeGroups = null,
+  excludeGroups = null,
+  excludeNames = null
+} = {}) {
   const wanted = String(country ?? '').trim().toLowerCase();
+  const lc = (v) => String(v ?? '').toLowerCase();
+  const anyIncluded = (hay, needles) => needles.some((n) => hay.includes(lc(n)));
   const candidates = (Array.isArray(items) ? items : []).filter((it) => {
     if (!it || typeof it !== 'object') return false;
     const stock = Number(it.quantity ?? 0);
@@ -19,7 +30,12 @@ export function selectOffer(items, { country, strategy = 'cheapest', quantity = 
     if (!Number.isFinite(price)) return false;
     if (maxUnitPriceRub != null && price > maxUnitPriceRub) return false;
     if ((Number(it.purchase_counter ?? 0)) < minPurchaseCounter) return false;
-    if (wanted && !String(it.name ?? '').toLowerCase().includes(wanted)) return false;
+    if (wanted && !lc(it.name).includes(wanted)) return false;
+    // Product-TYPE scoping via the vendor `group` + name (accounts, not Stars/edu).
+    const groupName = lc(it.group?.name);
+    if (includeGroups?.length && !anyIncluded(groupName, includeGroups)) return false;
+    if (excludeGroups?.length && anyIncluded(groupName, excludeGroups)) return false;
+    if (excludeNames?.length && anyIncluded(lc(it.name), excludeNames)) return false;
     return true;
   });
   if (!candidates.length) return null;

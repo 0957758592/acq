@@ -1,4 +1,4 @@
-import { selectOffer } from '@acq/procurement';
+import { selectOffer, buyPolicyFor } from '@acq/procurement';
 
 // Search-driven purchase orchestration for reseller (keystore-api) shops, e.g.
 // dark.shopping (TZ §6.5/§8.3). Flow: product/list SEARCH -> selectOffer (buy
@@ -15,9 +15,13 @@ export async function shopBuy(ctx, {
   platform,
   country,
   query,
+  categoryId,
   quantity = 1,
   strategy = 'cheapest',
   maxUnitPriceRub = null,
+  includeGroups,
+  excludeGroups,
+  excludeNames,
   confirm = false,
   idempotenceId = null
 } = {}) {
@@ -27,18 +31,28 @@ export async function shopBuy(ctx, {
   const vendor = ctx.shopVendorFor(shopId);
   const resolvedShopId = shopId ?? ctx.defaultShopId ?? 'dark.shopping';
 
-  // Search the real inventory (product/list) by PLATFORM (or an explicit query) —
-  // NOT platform+country as one phrase, which wouldn't match names like
-  // "LinkedIn.com | ... | USA IP". Country is applied client-side by selectOffer.
-  const name = query ?? platform ?? undefined;
-  const items = await vendor.listProducts({
-    name,
-    only_in_stock: 1,
-    price_to: maxUnitPriceRub ?? undefined,
-    quantity_from: quantity
-  });
+  // Buy policy (vendor taxonomy) scopes the search to real ACCOUNTS: a category id
+  // per platform + group/name filters (e.g. Telegram accounts not Stars; real
+  // @gmail.com not .edu). Every field is overridable per call.
+  const policy = buyPolicyFor(resolvedShopId, platform);
+  const cat = categoryId ?? policy.categoryId ?? null;
 
-  const offer = selectOffer(items, { country, strategy, quantity, maxUnitPriceRub });
+  // Prefer category scoping (precise); fall back to a name search by query/platform.
+  // Country is applied client-side by selectOffer (names embed it, e.g. "USA IP").
+  const searchParams = { only_in_stock: 1, price_to: maxUnitPriceRub ?? undefined, quantity_from: quantity };
+  if (query) searchParams.name = query;
+  else if (cat) searchParams.category_id = cat;
+  else if (platform) searchParams.name = platform;
+  const items = await vendor.listProducts(searchParams);
+
+  // Some platforms (e.g. Gmail) don't tag accounts by country — policy drops it.
+  const effectiveCountry = policy.ignoreCountry ? undefined : country;
+  const offer = selectOffer(items, {
+    country: effectiveCountry, strategy, quantity, maxUnitPriceRub,
+    includeGroups: includeGroups ?? policy.includeGroups ?? null,
+    excludeGroups: excludeGroups ?? policy.excludeGroups ?? null,
+    excludeNames: excludeNames ?? policy.excludeNames ?? null
+  });
   if (!offer) {
     throw seam('NO_MATCHING_OFFER', `no in-stock offer for ${platform ?? query ?? '(any)'} ${country ?? ''}`.trim());
   }
@@ -54,7 +68,7 @@ export async function shopBuy(ctx, {
     shopId: resolvedShopId,
     platform: platform ?? null,
     country: country ?? null,
-    product: { id: offer.id, name: offer.name, price: unitRub, stock: offer.quantity, minimum_order: offer.minimum_order },
+    product: { id: offer.id, name: offer.name, group: offer.group?.name ?? null, price: unitRub, stock: offer.quantity, minimum_order: offer.minimum_order },
     quantity,
     unitRub,
     totalRub,

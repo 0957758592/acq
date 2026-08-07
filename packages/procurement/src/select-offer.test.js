@@ -42,3 +42,28 @@ test('with no country filter, considers all in-stock offers', () => {
   const pick = selectOffer(offers, { strategy: 'cheapest', quantity: 1 });
   expect(pick.id).toBe(3); // 30.0 is the cheapest in-stock overall
 });
+
+// group/name filters — scope to the right PRODUCT TYPE (accounts, not Stars/edu).
+const typed = [
+  { id: 10, name: 'Telegram Stars', price: 3.94, quantity: 9000, purchase_counter: 50, group: { name: 'Telegram Stars' } },
+  { id: 11, name: 'Аккаунт телеграм США 2FA', price: 40.6, quantity: 99, purchase_counter: 200, group: { name: 'Авторег Telegram' } },
+  { id: 12, name: 'Gmail.edu accounts . Domain - not @gmail.com', price: 1, quantity: 9, purchase_counter: 5, group: { name: 'Автореги Gmail' } },
+  { id: 13, name: 'Gmail.com | 2FA', price: 43.5, quantity: 12, purchase_counter: 300, group: { name: 'Ручная регистрация Gmail' } }
+];
+
+test('excludeGroups drops non-account groups (Telegram Stars) so cheapest picks the account', () => {
+  // Telegram-only set (as scoped by category_id=43 in the real buy path).
+  const telegram = typed.filter((it) => /telegram/i.test(it.group.name));
+  const pick = selectOffer(telegram, { strategy: 'cheapest', quantity: 1, excludeGroups: ['stars', 'software', 'канал'] });
+  expect(pick.id).toBe(11); // Stars excluded -> the авторег account
+});
+
+test('includeGroups keeps only matching account groups', () => {
+  const pick = selectOffer(typed, { strategy: 'cheapest', quantity: 1, includeGroups: ['авторег', 'ручн', 'аккаунт'] });
+  expect([11, 12, 13]).toContain(pick.id); // Stars (id10) filtered out
+});
+
+test('excludeNames drops offers whose name matches (e.g. edu gmail)', () => {
+  const pick = selectOffer(typed, { strategy: 'cheapest', quantity: 1, includeGroups: ['gmail'], excludeNames: ['edu', 'not @gmail'] });
+  expect(pick.id).toBe(13); // the .edu (id12) dropped -> real @gmail.com
+});
