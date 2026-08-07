@@ -8,7 +8,12 @@ export const BUY_POLICY = {
   'dark.shopping': {
     linkedin: { categoryId: 69 },
     instagram: { categoryId: 30 },
-    tiktok: { categoryId: 33 },
+    // TikTok category mixes accounts with avatar packs/software/boosting services —
+    // scope to account groups by excluding the non-account group names.
+    tiktok: {
+      categoryId: 33,
+      excludeGroups: ['разное', 'software', 'аватар', 'пак', 'накрут', 'услуг', 'просмотр', 'подпис', 'лайк', 'коммент', 'бот', 'boost']
+    },
     facebook: { categoryId: 31 },
     discord: { categoryId: 68 },
     google: { categoryId: 32 },
@@ -22,7 +27,7 @@ export const BUY_POLICY = {
     },
     // Gmail category includes .edu / non-@gmail.com domains — keep real @gmail.com.
     // Gmail accounts are not country-tagged, so the country filter is ignored.
-    gmail: { categoryId: 129, excludeNames: ['edu', 'not @gmail'], ignoreCountry: true }
+    gmail: { categoryId: 129, excludeNames: ['edu', 'not @gmail', 'не @gmail', 'не gmail', 'не gmail.com'], ignoreCountry: true }
   }
 };
 
