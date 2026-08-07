@@ -45,19 +45,19 @@ export async function bringOnlineHandler(ctx, { accountId, deviceId, platform: p
     if (result?.banned) {
       account = transition(account, 'banned', { clock });
       await ctx.accountRepo.save(account);
-      await ctx.eventBus.publish(makeEvent('account.banned', { accountId, platform }, { clock }));
+      await ctx.eventBus?.publish?.(makeEvent('account.banned', { accountId, platform }, { clock }));
       return { ok: false, banned: true };
     }
     if (result?.checkpointed) {
       account = markCheckpoint(account, 'bring-online', { clock });
       await ctx.accountRepo.save(account);
-      await ctx.eventBus.publish(makeEvent('account.checkpointed', { accountId, platform }, { clock }));
+      await ctx.eventBus?.publish?.(makeEvent('account.checkpointed', { accountId, platform }, { clock }));
       return { ok: false, checkpointed: true };
     }
 
     account = transition(account, 'online', { clock });
     await ctx.accountRepo.save(account);
-    await ctx.eventBus.publish(makeEvent('account.online', { accountId, platform }, { clock }));
+    await ctx.eventBus?.publish?.(makeEvent('account.online', { accountId, platform }, { clock }));
     return { ok: true };
   } finally {
     await ctx.lease.release(deviceId, ctx.owner);
