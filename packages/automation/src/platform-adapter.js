@@ -6,6 +6,7 @@ import { telegramAdapter } from './telegram/adapter.js';
 import { discordAdapter } from './discord/adapter.js';
 import { facebookAdapter } from './facebook/adapter.js';
 import { gmailAdapter } from './gmail/adapter.js';
+import { linkedinAdapter } from './linkedin/adapter.js';
 
 const ADAPTERS = {
   instagram: instagramAdapter,
@@ -15,7 +16,8 @@ const ADAPTERS = {
   telegram: telegramAdapter,
   discord: discordAdapter,
   facebook: facebookAdapter,
-  gmail: gmailAdapter
+  gmail: gmailAdapter,
+  linkedin: linkedinAdapter
 };
 
 export function getPlatformAdapter(platform) {
