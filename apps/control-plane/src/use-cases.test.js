@@ -160,6 +160,22 @@ describe('control-plane use-cases through the facade', () => {
     expect(res.error.code).toBe('FORBIDDEN');
   });
 
+  it('shop.buy without confirm returns a dry PLAN and spends nothing, through the facade', async () => {
+    const { facade } = build();
+    const res = await facade.execute('shop.buy', { role: 'operator', args: { platform: 'linkedin', country: 'USA', quantity: 1 } });
+    expect(res.error).toBeNull();
+    expect(res.data.confirmed).toBe(false);
+    // only the USA offer matches country=USA; it is pricier than the 991.25 balance
+    expect(res.data.plan.product.id).toBe(166920);
+    expect(res.data.plan.affordable).toBe(false);
+  });
+
+  it('shop.buy is gated by RBAC (readonly forbidden)', async () => {
+    const { facade } = build();
+    const res = await facade.execute('shop.buy', { role: 'readonly', args: { platform: 'linkedin', confirm: true } });
+    expect(res.error.code).toBe('FORBIDDEN');
+  });
+
   it('device.enroll registers an operator-managed device', async () => {
     const { facade } = build();
     const res = await facade.execute('device.enroll', { role: 'operator', args: { provider: 'vmos', providerDeviceId: 'PAD-1', capacity: { maxAccounts: 3 } } });

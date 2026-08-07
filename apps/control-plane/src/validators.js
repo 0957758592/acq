@@ -39,6 +39,7 @@ export const SCHEMAS = {
   'shop.signup.confirm': schema({ shopId: str.required(), address: str, emailRef: str, imapPasswordRef: str, extraFields: obj }),
   'shop.balance': schema({ shopId: str }),
   'shop.search': schema({ shopId: str, query: str, platform: str, country: str, onlyInStock: bool, priceFromRub: num.positive(), priceToRub: num.positive(), quantityFrom: num.integer().positive(), categoryId: num.integer(), groupId: num.integer(), limit: num.integer().positive() }),
+  'shop.buy': schema({ shopId: str, platform: str, country: str, query: str, quantity: num.integer().positive(), strategy: str.oneOf(['cheapest', 'reliable']), maxUnitPriceRub: num.positive(), confirm: bool, idempotenceId: str }),
   'device.status': schema({ status: str, provider: str, cursor: str.nullable(), limit: num.integer().positive() }),
   'device.selectors': schema({ platform: str.required() }),
   'device.selectors.set': schema({ platform: str.required(), selectors: obj.required(), updatedBy: str.nullable() }),

@@ -6,6 +6,7 @@ import { probeAccount, runAccountAction } from '../../engine/src/services/accoun
 import { assertSupportedAction } from '../../engine/src/services/action-support.js';
 import { proxyStatus, assignDeviceProxy, rotateDeviceProxy } from '../../engine/src/services/proxy-ops.js';
 import { scanShop } from '../../engine/src/services/scan-shop.js';
+import { shopBuy } from '../../engine/src/services/shop-buy.js';
 import { domainSnapshot } from '../../engine/src/services/domain-snapshot.js';
 import { evaluateSlos } from '@acq/core/observability/slo';
 import { paginate } from '@acq/core/db/paginate';
@@ -220,6 +221,12 @@ export function buildUseCases(ctx) {
         items: capped.map((p) => ({ id: p.id, name: p.name, price: p.price, quantity: p.quantity, minimum_order: p.minimum_order }))
       };
     },
+
+    // Search-driven purchase (reseller shops). Without `confirm:true` it returns a
+    // dry PLAN (selected product + price + projected balance) and spends NOTHING —
+    // the approval surface for the brain/operator. `confirm:true` places the order
+    // by product id with an idempotence key. One op, every surface.
+    'shop.buy': async (args = {}) => shopBuy(ctx, args),
 
     // The AI backend is selectable per call: pass provider/model to scan with a
     // different vendor (openai | anthropic | google | openrouter | custom).

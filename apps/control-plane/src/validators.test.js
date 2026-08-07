@@ -9,8 +9,8 @@ function facadeWith(useCases = {}) {
 }
 
 describe('per-operation validators (REQUIREM §2.2, reject unknown)', () => {
-  it('covers every one of the 55 operations', () => {
-    expect(Object.keys(validators).length).toBe(55);
+  it('covers every one of the 56 operations', () => {
+    expect(Object.keys(validators).length).toBe(56);
   });
 
   it('rejects a missing required field with INVALID_ARGS', async () => {
