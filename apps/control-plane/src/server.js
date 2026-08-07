@@ -44,7 +44,8 @@ export async function main({ env } = {}) {
       llmKeys: env.llmKeys, llmProvider: env.llmProvider, llmModel: env.llmModel, llmBaseUrl: env.llmBaseUrl,
       browserProvider: env.browserProvider, browserbaseApiKey: env.browserbaseApiKey, browserbaseProjectId: env.browserbaseProjectId,
       darkShoppingApiKey: env.darkShoppingApiKey, darkShoppingBaseUrl: env.darkShoppingBaseUrl, rubPerUsd: env.rubPerUsd,
-      secretVaultKey: env.secretVaultKey
+      secretVaultKey: env.secretVaultKey,
+      deviceProvider: env.deviceProvider
     },
     deps: { dispatchScrape }
   });
@@ -153,6 +154,9 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
       darkShoppingBaseUrl: process.env.DARKSHOP_BASE_URL || process.env.DARK_SHOPPING_BASE_URL || undefined,
       rubPerUsd: process.env.RUB_PER_USD ? Number(process.env.RUB_PER_USD) : undefined,
       secretVaultKey: process.env.SECRET_VAULT_KEY || undefined,
+      deviceProvider: process.env.DUOPLUS_API_KEY
+        ? { type: 'duoplus', apiKey: process.env.DUOPLUS_API_KEY, baseUrl: process.env.DUOPLUS_API_BASE_URL || undefined }
+        : undefined,
       port: Number(process.env.CONTROL_PORT || 7500),
       grpcPort: Number(process.env.GRPC_PORT || 7550),
       tokens
