@@ -18,7 +18,11 @@ async function applyProxyToDevice(ctx, doc, deviceId) {
   const found = ctx.deviceModel.findById(deviceId);
   const device = typeof found?.lean === 'function' ? await found.lean() : await found;
   if (!device?.providerDeviceId) return null;
-  const raw = doc.secretRef ? await ctx.secretResolver.resolve(doc.secretRef) : '';
+  // A `vault:` endpoint is decrypted by the credential vault; other refs (env:…)
+  // by the injected secretResolver.
+  const isVaultRef = typeof doc.secretRef === 'string' && doc.secretRef.startsWith('vault:') && ctx.credentialVault;
+  const resolver = isVaultRef ? ctx.credentialVault : ctx.secretResolver;
+  const raw = doc.secretRef ? await resolver.resolve(doc.secretRef) : '';
   const [host, port, user = '', password = ''] = String(raw).split(':');
   if (!host || !port) throw Object.assign(new Error('PROXY_ENDPOINT_UNRESOLVED: proxy endpoint missing host/port'), { code: 'PROXY_ENDPOINT_UNRESOLVED' });
   await ctx.provider.setSmartIp(device.providerDeviceId, { host, port: Number(port), user, password });

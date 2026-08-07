@@ -351,7 +351,8 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       buyDefaults: {
         strategy: env.buyStrategy ?? 'reliable',
         minRating: env.buyMinRating ?? 4.5,
-        maxUnitPriceRub: env.buyMaxUnitPriceRub ?? null,
+        // Hard price cap per account (operator rule): never spend >100 RUB/account.
+        maxUnitPriceRub: env.buyMaxUnitPriceRub ?? 100,
         maxInvalidPercent: env.buyMaxInvalidPercent ?? null,
         country: env.buyCountry ?? null
       },
