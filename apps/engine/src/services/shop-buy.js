@@ -23,6 +23,7 @@ export async function shopBuy(ctx, {
   maxInvalidPercent = null,
   includeGroups,
   excludeGroups,
+  includeNames,
   excludeNames,
   confirm = false,
   idempotenceId = null
@@ -61,6 +62,7 @@ export async function shopBuy(ctx, {
     maxInvalidPercent: effMaxInvalid,
     includeGroups: includeGroups ?? policy.includeGroups ?? null,
     excludeGroups: excludeGroups ?? policy.excludeGroups ?? null,
+    includeNames: includeNames ?? policy.includeNames ?? null,
     excludeNames: excludeNames ?? policy.excludeNames ?? null
   });
   if (!offer) {

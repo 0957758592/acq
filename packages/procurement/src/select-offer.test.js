@@ -63,6 +63,15 @@ test('includeGroups keeps only matching account groups', () => {
   expect([11, 12, 13]).toContain(pick.id); // Stars (id10) filtered out
 });
 
+test('includeNames keeps only offers whose name matches a wanted format (e.g. cookie)', () => {
+  const withFmt = [
+    { id: 20, name: 'LinkedIn USA + user agent (cookies)', price: 43.5, quantity: 5, rating: 5.0, purchase_counter: 10 },
+    { id: 21, name: 'LinkedIn USA ManReg password', price: 30, quantity: 5, rating: 5.0, purchase_counter: 50 }
+  ];
+  const pick = selectOffer(withFmt, { strategy: 'cheapest', quantity: 1, includeNames: ['cookie', 'user agent'] });
+  expect(pick.id).toBe(20); // only the cookie/session format qualifies
+});
+
 test('excludeNames drops offers whose name matches (e.g. edu gmail)', () => {
   const pick = selectOffer(typed, { strategy: 'cheapest', quantity: 1, includeGroups: ['gmail'], excludeNames: ['edu', 'not @gmail'] });
   expect(pick.id).toBe(13); // the .edu (id12) dropped -> real @gmail.com

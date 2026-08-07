@@ -19,6 +19,7 @@ export function selectOffer(items, {
   maxInvalidPercent = null,
   includeGroups = null,
   excludeGroups = null,
+  includeNames = null,
   excludeNames = null
 } = {}) {
   const wanted = String(country ?? '').trim().toLowerCase();
@@ -43,6 +44,9 @@ export function selectOffer(items, {
     const groupName = lc(it.group?.name);
     if (includeGroups?.length && !anyIncluded(groupName, includeGroups)) return false;
     if (excludeGroups?.length && anyIncluded(groupName, excludeGroups)) return false;
+    // Format preference (§6.5): keep only offers whose NAME matches a wanted
+    // delivery format (e.g. "cookie"/"session"/"user agent" for browser login).
+    if (includeNames?.length && !anyIncluded(lc(it.name), includeNames)) return false;
     if (excludeNames?.length && anyIncluded(lc(it.name), excludeNames)) return false;
     return true;
   });
