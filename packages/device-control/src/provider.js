@@ -126,6 +126,16 @@ export class DuoplusCloudPhoneProvider {
     );
   }
 
+  // Current egress proxy of the cloud phone (null if none). Used to ENFORCE that an
+  // account only ever logs in behind a proxy (proxyMode:'required'). DuoPlus sets the
+  // proxy at device init; this reads it back.
+  async getDeviceProxy(providerDeviceId) {
+    const res = await this.client.getPhoneInfo(providerDeviceId);
+    const proxy = res?.data?.proxy ?? null;
+    if (!proxy || !(proxy.id || proxy.ip)) return null;
+    return { id: proxy.id ?? null, ip: proxy.ip ?? null, country: proxy.country ?? null, region: proxy.region ?? null };
+  }
+
   async startDevice(providerDeviceId) {
     const result = await this.client.powerOn([providerDeviceId]);
     assertDuoPlusPower(result, providerDeviceId, 'DEVICE_POWER_ON_FAILED', 'power on');

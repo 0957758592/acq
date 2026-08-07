@@ -11,7 +11,7 @@ function isOnlineSeam(code) {
   return code === 'ONLINE_METHOD_UNSUPPORTED' || /SESSION_IMPORT_UNVERIFIED$/.test(code || '');
 }
 
-export async function bringOnlineHandler(ctx, { accountId, deviceId, platform: platformArg }) {
+export async function bringOnlineHandler(ctx, { accountId, deviceId, platform: platformArg, proxyMode }) {
   const clock = () => ctx.clock.now();
   const claimed = await ctx.lease.claim(deviceId, ctx.owner);
   if (!claimed) {
@@ -27,6 +27,21 @@ export async function bringOnlineHandler(ctx, { accountId, deviceId, platform: p
     await ctx.accountRepo.save(account);
 
     const device = await ctx.deviceModel.findById(deviceId).lean();
+
+    // Proxy enforcement (operator rule): unless proxyMode is 'off', an account must
+    // only log in when the device egresses through a proxy — never on a bare IP.
+    // Default 'required' (from config). Applies to EVERY platform. Fail safe: revert
+    // to assigned and report blocked, never login unprotected.
+    const effProxyMode = proxyMode ?? ctx.config?.proxyMode ?? 'required';
+    if (effProxyMode === 'required' && typeof ctx.provider?.getDeviceProxy === 'function') {
+      const proxy = await ctx.provider.getDeviceProxy(device?.providerDeviceId).catch(() => null);
+      if (!proxy) {
+        account = transition(account, 'assigned', { clock });
+        await ctx.accountRepo.save(account);
+        return { ok: false, blocked: 'PROXY_REQUIRED' };
+      }
+    }
+
     const automation = ctx.automationFor(platform);
 
     let result;

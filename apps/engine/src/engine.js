@@ -87,6 +87,7 @@ export async function main({ env } = {}) {
       // Cloud-phone device provider (DuoPlus) so bring-online/probe/action run on a
       // real device; absent -> those handlers fail-safe (no device, no guessing).
       deviceProvider: env.deviceProvider,
+      proxyMode: env.proxyMode,
       pid: process.pid
     },
     deps: { jobDispatcher: createRabbitJobDispatcher() }
@@ -148,6 +149,7 @@ if (process.argv[1] && process.argv[1].endsWith('engine.js')) {
       buyMinRating: process.env.BUY_MIN_RATING ? Number(process.env.BUY_MIN_RATING) : undefined,
       buyMaxUnitPriceRub: process.env.BUY_MAX_UNIT_PRICE_RUB ? Number(process.env.BUY_MAX_UNIT_PRICE_RUB) : undefined,
       buyCountry: process.env.BUY_COUNTRY || undefined,
+      proxyMode: process.env.PROXY_MODE || undefined,
       deviceProvider: process.env.DUOPLUS_API_KEY
         ? { type: 'duoplus', apiKey: process.env.DUOPLUS_API_KEY, baseUrl: process.env.DUOPLUS_API_BASE_URL || undefined }
         : undefined

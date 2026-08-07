@@ -36,6 +36,29 @@ const account = (over = {}) => ({
 const payload = { accountId: 'a1', deviceId: 'd1', platform: 'telegram' };
 
 describe('generic bringOnlineHandler', () => {
+  it('proxyMode required (default): blocks login when the device has NO proxy — never a bare-IP login', async () => {
+    const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: true } });
+    ctx.provider = { getDeviceProxy: async () => null }; // device not behind a proxy
+    const res = await bringOnlineHandler(ctx, payload);
+    expect(res).toMatchObject({ ok: false, blocked: 'PROXY_REQUIRED' });
+    expect(ctx.saved.map((s) => s.status)).toEqual(['bringing_online', 'assigned']); // reverted, not online
+  });
+
+  it('proxyMode required: proceeds to login when the device IS behind a proxy', async () => {
+    const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: true } });
+    ctx.provider = { getDeviceProxy: async () => ({ id: 'yn5LN', ip: '9.142.42.60', country: 'us' }) };
+    const res = await bringOnlineHandler(ctx, payload);
+    expect(res.ok).toBe(true);
+    expect(ctx.events).toContain('account.online');
+  });
+
+  it('proxyMode "off" (per-job override): logs in even without a device proxy', async () => {
+    const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: true } });
+    ctx.provider = { getDeviceProxy: async () => null };
+    const res = await bringOnlineHandler(ctx, { ...payload, proxyMode: 'off' });
+    expect(res.ok).toBe(true);
+  });
+
   it('brings an account online across the state machine and emits account.online', async () => {
     const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: true } });
     const res = await bringOnlineHandler(ctx, payload);

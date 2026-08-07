@@ -363,6 +363,11 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       // reconciler from emitting warmup/proxy intents until an operator enables
       // them (and a proxy pool is populated).
       warmupTargetLevel: env.warmupTargetLevel ?? 0,
+      // Proxy enforcement for on-device login (operator rule): 'required' (default)
+      // blocks bring-online unless the device egresses through a proxy — accounts
+      // never log in on a bare IP; 'off' allows login without a proxy. Applies to
+      // ALL platforms/accounts; overridable per bring-online job.
+      proxyMode: env.proxyMode ?? 'required',
       proxyEnabled: Boolean(env.proxyEnabled),
       proxyPoolThreshold: env.proxyPoolThreshold ?? 0,
       proxyBatchSize: env.proxyBatchSize ?? 1,
