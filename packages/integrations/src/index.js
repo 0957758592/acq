@@ -1,7 +1,7 @@
 export { IntegrationHttpClient } from './http-client.js';
 export { DjekxaClient } from './djekxa-client.js';
 export { DarkShoppingClient, createDarkShoppingClient } from './dark-shopping-client.js';
-export { parseDelivery } from './keystore-delivery.js';
+export { parseDelivery, mapAccountFields } from './keystore-delivery.js';
 export { importDelivered, mapDeliveredAccount } from './dark-shopping-importer.js';
 export { DjekxaImporter, parseCredentialFile } from './djekxa-importer.js';
 export { LlmClient, createOpenRouterClient } from './llm-client.js';

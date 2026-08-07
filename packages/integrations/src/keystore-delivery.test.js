@@ -1,4 +1,10 @@
-import { parseDelivery } from './keystore-delivery.js';
+import { parseDelivery, mapAccountFields } from './keystore-delivery.js';
+
+test('mapAccountFields maps combolist fields: username=0, password=1, email=field with @', () => {
+  expect(mapAccountFields(['usr', 'pw', 'a@b.com', 'emailpw'])).toEqual({ username: 'usr', password: 'pw', email: 'a@b.com' });
+  expect(mapAccountFields(['usr', 'pw'])).toEqual({ username: 'usr', password: 'pw', email: undefined });
+  expect(mapAccountFields([])).toEqual({ username: undefined, password: undefined, email: undefined });
+});
 
 // Shapes verified by fact against three real dark.shopping deliveries (values here
 // are synthetic — never the real credentials).

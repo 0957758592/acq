@@ -23,6 +23,19 @@ function detectSeparator(line) {
   return best; // null when the line is a single opaque token
 }
 
+// Map split delivery fields to login credentials by the universal account-shop
+// combolist convention: field0 = login/username, field1 = password, and the field
+// containing '@' = email. Documented per product, overridable later; this is the
+// standard `login:password:email:…` shape confirmed across the real deliveries.
+export function mapAccountFields(fields = []) {
+  const arr = Array.isArray(fields) ? fields : [];
+  return {
+    username: arr[0],
+    password: arr[1],
+    email: arr.find((f) => typeof f === 'string' && f.includes('@'))
+  };
+}
+
 // Parse a raw delivery blob into account candidates: { identifier, secrets }.
 // `secrets.raw` is the full line (to be vaulted); `secrets.fields` is the split.
 export function parseDelivery(raw) {

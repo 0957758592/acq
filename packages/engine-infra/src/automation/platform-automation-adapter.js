@@ -106,9 +106,21 @@ export function createPlatformAutomationAdapter({
         throw onlineMethodError(platform);
       }
       const controller = controllerFor(ctx);
-      const sessionRef = ctx.account?.secretRefs?.session;
-      const session = sessionRef ? await secretResolver.resolve(sessionRef) : undefined;
-      const account = { ...ctx.account, secretRefs: { ...(ctx.account?.secretRefs ?? {}), session } };
+      const sr = ctx.account?.secretRefs ?? {};
+      // Dereference the vaulted secrets a login needs: session (session-import
+      // online) and username/password/email (credential login). Any DB-level
+      // credentials win; vaulted refs fill the rest. Generic across platforms.
+      const [session, username, password, email] = await Promise.all([
+        sr.session ? secretResolver.resolve(sr.session) : undefined,
+        sr.username ? secretResolver.resolve(sr.username) : undefined,
+        sr.password ? secretResolver.resolve(sr.password) : undefined,
+        sr.email ? secretResolver.resolve(sr.email) : undefined
+      ]);
+      const credentials = { ...(ctx.account?.credentials ?? {}) };
+      if (username && credentials.username == null) credentials.username = username;
+      if (email && credentials.email == null) credentials.email = email;
+      if (password && credentials.password == null) credentials.password = password;
+      const account = { ...ctx.account, credentials, secretRefs: { ...sr, session } };
       const result = await driver.login(controller, account, await optsWithSelectors({ ...ctx, account }));
       if (result?.banned) return { ok: false, banned: true };
       if (result?.checkpointed) return { ok: false, checkpointed: true };

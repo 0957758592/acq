@@ -23,9 +23,12 @@ test('fetches the order, parses, VAULTS credentials, and inserts into the pool',
   const { accs, opts } = ctx.inserted[0];
   expect(opts.orderId).toBe(123);
   expect(accs[0]).toMatchObject({ platform: 'instagram', source: 'purchase', shopId: 'dark.shopping', identifier: 'user1' });
-  // credential is vaulted (ciphertext ref), never plaintext
+  // structured login fields + the raw credential, all vaulted (ciphertext), never plaintext
+  expect(accs[0].secretRefs.username).toMatch(/^vault:/);
+  expect(accs[0].secretRefs.password).toMatch(/^vault:/);
+  expect(accs[0].secretRefs.email).toMatch(/^vault:/);
   expect(accs[0].secretRefs.credential).toMatch(/^vault:/);
-  expect(accs[0].secretRefs.credential).not.toContain('pass1');
+  expect(JSON.stringify(accs[0].secretRefs)).not.toContain('pass1');
   // delivery shape metadata is recorded for later per-product field mapping
   expect(accs[0].acquisition).toMatchObject({ separator: ':', fieldCount: 3 });
 });

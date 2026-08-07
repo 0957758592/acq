@@ -1,4 +1,4 @@
-import { parseDelivery } from '@acq/integrations';
+import { parseDelivery, mapAccountFields } from '@acq/integrations';
 
 // Deliver-and-import step for reseller (keystore-api) purchases (TZ §6/§8.3).
 // Given a COMPLETED order, fetch its delivery (order/download link), parse the
@@ -35,17 +35,23 @@ export async function buildDeliveredAccounts(ctx, { shopId, orderId, platform } 
   const raw = await vendor.fetchDelivered(link);
   const parsed = parseDelivery(raw);
 
+  const vault = (v) => (v == null ? undefined : ctx.credentialVault.put(v));
   const accounts = [];
   for (const acc of parsed) {
+    const creds = mapAccountFields(acc.secrets.fields);
+    // Structured, individually-vaulted login fields (so bring-online resolves
+    // username/password directly) PLUS the whole raw line (nothing lost, encrypted).
     accounts.push({
       platform,
       identifier: acc.identifier,
       source: 'purchase',
       shopId: resolvedShopId,
-      // The whole delivered line, encrypted at rest. Field semantics vary per
-      // product, so we keep the raw credential + its shape for per-product mapping
-      // at bring-online (never guess/mislabel here).
-      secretRefs: { credential: await ctx.credentialVault.put(acc.secrets.raw) },
+      secretRefs: {
+        username: await vault(creds.username),
+        password: await vault(creds.password),
+        email: await vault(creds.email),
+        credential: await vault(acc.secrets.raw)
+      },
       acquisition: { separator: acc.separator, fieldCount: acc.fieldCount }
     });
   }
