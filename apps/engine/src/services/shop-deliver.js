@@ -11,7 +11,12 @@ function seam(code, message) {
   return Object.assign(new Error(`${code}: ${message}`), { code });
 }
 
-export async function shopDeliver(ctx, { shopId, orderId, platform } = {}) {
+// Fetch a completed order's delivery, parse it, and VAULT each credential — WITHOUT
+// inserting. Returns pool-ready account objects. Shared by the shop.deliver op and
+// the autonomous keystore adapter (which lets acquireHandler do the insert). Calling
+// order/download here is the API equivalent of "opening order details" on the web —
+// on a not-ready order it raises a RETRYABLE seam so the job re-views on each retry.
+export async function buildDeliveredAccounts(ctx, { shopId, orderId, platform } = {}) {
   if (orderId === undefined || orderId === null || orderId === '') throw seam('ORDER_ID_REQUIRED', 'orderId is required');
   if (!platform) throw seam('PLATFORM_REQUIRED', 'platform is required');
   if (!ctx.credentialVault) throw seam('CREDENTIAL_VAULT_UNAVAILABLE', 'no credential vault wired — refusing to store plaintext credentials');
@@ -19,8 +24,14 @@ export async function shopDeliver(ctx, { shopId, orderId, platform } = {}) {
   const vendor = ctx.shopVendorFor(shopId);
   const resolvedShopId = shopId ?? ctx.defaultShopId ?? 'dark.shopping';
 
-  const { link } = await vendor.getOrderDownload(orderId);
-  if (!link) throw seam('DELIVERY_NOT_READY', `order ${orderId} has no delivery link yet`);
+  let link;
+  try {
+    ({ link } = await vendor.getOrderDownload(orderId));
+  } catch (err) {
+    // "not ready to download" -> retryable: the delivery is still being fulfilled.
+    throw Object.assign(seam('DELIVERY_NOT_READY', `order ${orderId} not ready: ${err.message}`), { retryable: true, cause: err });
+  }
+  if (!link) throw Object.assign(seam('DELIVERY_NOT_READY', `order ${orderId} has no delivery link yet`), { retryable: true });
   const raw = await vendor.fetchDelivered(link);
   const parsed = parseDelivery(raw);
 
@@ -38,8 +49,12 @@ export async function shopDeliver(ctx, { shopId, orderId, platform } = {}) {
       acquisition: { separator: acc.separator, fieldCount: acc.fieldCount }
     });
   }
-  if (accounts.length) await ctx.accountRepo.insertAcquired(accounts, { orderId });
+  return { accounts, shopId: resolvedShopId };
+}
 
+export async function shopDeliver(ctx, { shopId, orderId, platform } = {}) {
+  const { accounts, shopId: resolvedShopId } = await buildDeliveredAccounts(ctx, { shopId, orderId, platform });
+  if (accounts.length) await ctx.accountRepo.insertAcquired(accounts, { orderId });
   return {
     imported: accounts.length,
     platform,

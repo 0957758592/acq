@@ -1,5 +1,7 @@
 import { makeEvent } from '@acq/engine-domain';
 
+import { createKeystoreAdapter } from '../services/keystore-adapter.js';
+
 // Generic acquire consumer (TZ §8.3) — buys OR generates accounts for ANY
 // platform, from ANY shop. Reuses @acq/procurement (compileShopAdapter +
 // ShopRegistry) and @acq/account-gen (AccountGenerator) — no duplicated buy
@@ -20,26 +22,37 @@ export async function acquireHandler(ctx, { platform, source = 'purchase', quant
     return { acquired: accounts.length, source };
   }
 
-  // Purchase: select a VERIFIED shop and compile a deterministic PurchaseAdapter.
-  const shop = shopId ? await ctx.shopRegistry.get(shopId) : await ctx.shopRegistry.selectForPlatform(platform, {
-    maxUnitPriceUsdCents: ctx.config?.maxUnitPriceUsdCents ?? null
-  });
-  if (!shop || !shop.verified) {
-    throw seam('SHOP_SPEC_UNVERIFIED', `no verified shop for ${platform}`);
-  }
-
-  // The ShopRegistry doc-level `verified` (flipped by approve()) is the source of
-  // truth; the embedded spec.verified can be stale from registration. Compile
-  // with the authoritative flag so an approved shop actually executes.
-  const adapter = ctx.compileShopAdapter({ ...shop.spec, verified: true }, {
-    httpClient: ctx.httpClient,
-    secretResolver: ctx.secretResolver,
-    config: {
-      expectedUnitUsdCents: shop.unitPriceUsdCents ?? ctx.config?.expectedUnitUsdCents,
-      priceDriftTolerance: ctx.config?.priceDriftTolerance,
-      maxTotalUsdCents: ctx.config?.maxTotalUsdCents
+  // Purchase: pick the procurement adapter. Both implement { purchase(quantity),
+  // fetchDelivered({orderId}) } so everything below (ledger, insert, expense,
+  // events) is identical regardless of driver.
+  let adapter;
+  let procurementShopId;
+  if (ctx.acquireDriver === 'keystore' && ctx.shopVendorFor) {
+    // Keystore-api vendor (dark.shopping): search-driven buy + vaulted delivery.
+    procurementShopId = shopId ?? ctx.defaultShopId ?? 'dark.shopping';
+    adapter = createKeystoreAdapter(ctx, { platform, shopId: procurementShopId, idempotencyKey });
+  } else {
+    // Declarative spec shop: select a VERIFIED shop and compile a PurchaseAdapter.
+    const shop = shopId ? await ctx.shopRegistry.get(shopId) : await ctx.shopRegistry.selectForPlatform(platform, {
+      maxUnitPriceUsdCents: ctx.config?.maxUnitPriceUsdCents ?? null
+    });
+    if (!shop || !shop.verified) {
+      throw seam('SHOP_SPEC_UNVERIFIED', `no verified shop for ${platform}`);
     }
-  });
+    // The ShopRegistry doc-level `verified` (flipped by approve()) is the source of
+    // truth; the embedded spec.verified can be stale from registration. Compile
+    // with the authoritative flag so an approved shop actually executes.
+    adapter = ctx.compileShopAdapter({ ...shop.spec, verified: true }, {
+      httpClient: ctx.httpClient,
+      secretResolver: ctx.secretResolver,
+      config: {
+        expectedUnitUsdCents: shop.unitPriceUsdCents ?? ctx.config?.expectedUnitUsdCents,
+        priceDriftTolerance: ctx.config?.priceDriftTolerance,
+        maxTotalUsdCents: ctx.config?.maxTotalUsdCents
+      }
+    });
+    procurementShopId = shop.shopId;
+  }
 
   // Exactly-once on the MONEY path (REQUIREM §2.1/§3.4): claim the purchase by the
   // job's idempotency key BEFORE spending, and record the order the instant it is
@@ -64,9 +77,9 @@ export async function acquireHandler(ctx, { platform, source = 'purchase', quant
   }
   const delivered = await adapter.fetchDelivered({ orderId });
   await ctx.accountRepo.insertAcquired(delivered, { orderId });
-  await ctx.expenseRecorder?.record?.({ provider: shop.shopId, externalReference: orderId, amountUsdCents, platform });
+  await ctx.expenseRecorder?.record?.({ provider: procurementShopId, externalReference: orderId, amountUsdCents, platform });
   // Cost signal (TZ §15): cumulative spend + accounts bought, per shop.
-  ctx.domainMetrics?.recordPurchase?.({ platform, shopId: shop.shopId, amountUsdCents, count: delivered.length });
-  await ctx.eventBus?.publish?.(makeEvent('purchase.completed', { platform, shopId: shop.shopId, orderId, count: delivered.length }, { clock }));
+  ctx.domainMetrics?.recordPurchase?.({ platform, shopId: procurementShopId, amountUsdCents, count: delivered.length });
+  await ctx.eventBus?.publish?.(makeEvent('purchase.completed', { platform, shopId: procurementShopId, orderId, count: delivered.length }, { clock }));
   return { acquired: delivered.length, orderId, source: 'purchase' };
 }

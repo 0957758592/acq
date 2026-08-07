@@ -145,6 +145,11 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   // Present only when a 32-byte key is configured; absent -> shop.deliver refuses
   // to store plaintext (coded CREDENTIAL_VAULT_UNAVAILABLE seam).
   const credentialVault = D.credentialVault ?? (env.secretVaultKey ? D.createLocalVault({ key: env.secretVaultKey }) : null);
+  // Which procurement driver the autonomous acquire job uses: 'keystore' (real
+  // dark.shopping search-buy + vaulted delivery) when a vendor is wired, else the
+  // declarative 'spec' path. NOTE: this only chooses HOW to buy — WHETHER the
+  // reconciler buys at all is gated separately by config.autobuyEnabled (default off).
+  const acquireDriver = env.acquireDriver ?? (shopVendors[defaultShopId] ? 'keystore' : 'spec');
   const shopVendorFor = D.shopVendorFor ?? ((shopId = defaultShopId) => {
     const client = shopVendors[shopId];
     if (!client) throw Object.assign(new Error(`SHOP_VENDOR_UNAVAILABLE: no vendor client for '${shopId ?? defaultShopId}'`), { code: 'SHOP_VENDOR_UNAVAILABLE' });
@@ -304,6 +309,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     shopVendorFor,
     defaultShopId,
     credentialVault,
+    acquireDriver,
     shopSignup,
     selectorStore,
     emailIdentityStore,
@@ -340,6 +346,15 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       // FX for converting reseller-vendor balances/prices (RUB) to the USD-cents
       // the guards use. Configurable, never hardcoded; null -> no conversion.
       rubPerUsd: env.rubPerUsd ?? null,
+      // Defaults for AUTONOMOUS buys (keystore driver): prefer high-rated suppliers
+      // (rating >= 4.5) with the reliable ranking. Every field overridable via env.
+      buyDefaults: {
+        strategy: env.buyStrategy ?? 'reliable',
+        minRating: env.buyMinRating ?? 4.5,
+        maxUnitPriceRub: env.buyMaxUnitPriceRub ?? null,
+        maxInvalidPercent: env.buyMaxInvalidPercent ?? null,
+        country: env.buyCountry ?? null
+      },
       priceDriftTolerance: env.priceDriftTolerance ?? 0.2,
       maxTotalUsdCents: env.maxTotalUsdCents ?? null,
       deviceTargetDepth: env.deviceTargetDepth ?? 3,

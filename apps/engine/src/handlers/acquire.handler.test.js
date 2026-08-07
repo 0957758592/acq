@@ -51,6 +51,32 @@ describe('generic acquireHandler', () => {
     expect(compiledSpec.verified).toBe(true);
   });
 
+  it('keystore driver: autonomous search-buy + vaulted delivery, reusing ledger/insert/expense/events', async () => {
+    const ctx = fakeCtx({});
+    ctx.acquireDriver = 'keystore';
+    ctx.defaultShopId = 'dark.shopping';
+    ctx.config = { rubPerUsd: 90, buyDefaults: { strategy: 'reliable', minRating: 4.5 } };
+    ctx.credentialVault = { put: async (v) => 'vault:' + Buffer.from(String(v)).toString('base64') };
+    let orderParams;
+    ctx.shopVendorFor = () => ({
+      listProducts: async () => [
+        { id: 165452, name: 'USA HQ IG', price: 18.85, quantity: 13, rating: '5.0', invalid_items_percent: 0, purchase_counter: 51, group: { name: 'Ручная регистрация Instagram' } }
+      ],
+      getBalance: async () => ({ balance: '900', currency: 'RUB' }),
+      createOrder: async (a) => { orderParams = a; return { status: 'ok', id: 7770001, link: null }; },
+      getOrderDownload: async () => ({ link: 'https://x/o.txt' }),
+      fetchDelivered: async () => 'usr1:pass1:mail@x.com'
+    });
+    const res = await acquireHandler(ctx, { platform: 'instagram', source: 'purchase', quantity: 1 });
+    expect(res).toMatchObject({ acquired: 1, orderId: 7770001, source: 'purchase' });
+    expect(orderParams).toMatchObject({ product: 165452, quantity: 1 }); // bought the high-rated pick
+    const acct = ctx.inserted[0].accts[0];
+    expect(acct).toMatchObject({ platform: 'instagram', identifier: 'usr1', source: 'purchase' });
+    expect(acct.secretRefs.credential).toMatch(/^vault:/); // vaulted, not plaintext
+    expect(ctx.events).toContain('purchase.completed');
+    expect(ctx.expenses).toHaveLength(1);
+  });
+
   it('purchase path fails safe when no verified shop (never guesses)', async () => {
     const ctx = fakeCtx({ shop: null });
     await expect(acquireHandler(ctx, { platform: 'telegram', source: 'purchase', quantity: 2 })).rejects.toMatchObject({

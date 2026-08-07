@@ -74,6 +74,16 @@ export async function main({ env } = {}) {
       poolThreshold: env.poolThreshold,
       buyBatchSize: env.buyBatchSize,
       autobuyEnabled: env.autobuyEnabled,
+      // Reseller vendor + vault + FX so the AUTONOMOUS acquire job can actually buy
+      // and import (keystore driver). Whether it buys is still gated by autobuyEnabled.
+      darkShoppingApiKey: env.darkShoppingApiKey,
+      darkShoppingBaseUrl: env.darkShoppingBaseUrl,
+      rubPerUsd: env.rubPerUsd,
+      secretVaultKey: env.secretVaultKey,
+      buyStrategy: env.buyStrategy,
+      buyMinRating: env.buyMinRating,
+      buyMaxUnitPriceRub: env.buyMaxUnitPriceRub,
+      buyCountry: env.buyCountry,
       pid: process.pid
     },
     deps: { jobDispatcher: createRabbitJobDispatcher() }
@@ -126,7 +136,15 @@ if (process.argv[1] && process.argv[1].endsWith('engine.js')) {
       reconcileCron: process.env.ENGINE_RECONCILE_CRON,
       poolThreshold: Number(process.env.ENGINE_POOL_THRESHOLD || 10),
       buyBatchSize: Number(process.env.ENGINE_BUY_BATCH_SIZE || 5),
-      autobuyEnabled: process.env.ENGINE_AUTOBUY_ENABLED === 'true'
+      autobuyEnabled: process.env.ENGINE_AUTOBUY_ENABLED === 'true',
+      darkShoppingApiKey: process.env.DARKSHOP_API_KEY || process.env.DARK_SHOPPING_API_KEY || undefined,
+      darkShoppingBaseUrl: process.env.DARKSHOP_BASE_URL || process.env.DARK_SHOPPING_BASE_URL || undefined,
+      rubPerUsd: process.env.RUB_PER_USD ? Number(process.env.RUB_PER_USD) : undefined,
+      secretVaultKey: process.env.SECRET_VAULT_KEY || undefined,
+      buyStrategy: process.env.BUY_STRATEGY || undefined,
+      buyMinRating: process.env.BUY_MIN_RATING ? Number(process.env.BUY_MIN_RATING) : undefined,
+      buyMaxUnitPriceRub: process.env.BUY_MAX_UNIT_PRICE_RUB ? Number(process.env.BUY_MAX_UNIT_PRICE_RUB) : undefined,
+      buyCountry: process.env.BUY_COUNTRY || undefined
     }
   }).catch((err) => {
     console.error('engine failed to start', err);
