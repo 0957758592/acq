@@ -7,6 +7,7 @@ import {
   createTelegramBotApiEndpoints,
   createTelegramWebSelectors,
   createInstagramWebSelectors,
+  createInstagramDeviceSelectors,
   createBrowserSelectorRegistry,
   createTelegramMtprotoAdapter
 } from '@acq/scraping';
@@ -52,8 +53,16 @@ export function buildScrapeAdapters({
   if (httpSelectors?.resolveUrl && httpSelectors?.pickItems) {
     adapters.http = createHttpScrapeAdapter({ resolveUrl: httpSelectors.resolveUrl, pickItems: httpSelectors.pickItems });
   }
-  if (deviceScrape?.provider && deviceScrape?.extractRows) {
-    adapters.device = createDeviceScrapeAdapter({ provider: deviceScrape.provider, extractRows: deviceScrape.extractRows, keyOf: deviceScrape.keyOf });
+  // On-device (T2) tier — wired when a device provider is supplied. The row
+  // extractor defaults to the Instagram username-roster extractor (app-only
+  // follower/liker lists) and is overridable per platform (verify-by-fact).
+  if (deviceScrape?.provider) {
+    const igDevice = createInstagramDeviceSelectors();
+    adapters.device = createDeviceScrapeAdapter({
+      provider: deviceScrape.provider,
+      extractRows: deviceScrape.extractRows ?? igDevice.extractRows,
+      keyOf: deviceScrape.keyOf ?? igDevice.keyOf
+    });
   }
   // T3 api tier — wired when a per-platform endpoint registry (or resolver) is
   // supplied; otherwise absent (an api-routed scrape then surfaces the tier seam).

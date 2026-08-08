@@ -13,6 +13,7 @@ export { createApiScrapeAdapter } from './adapters/api-scrape-adapter.js';
 export { createTelegramBotApiEndpoints } from './adapters/telegram-bot-api.js';
 export { createTelegramWebSelectors, createBrowserSelectorRegistry } from './adapters/telegram-web-selectors.js';
 export { createInstagramWebSelectors } from './adapters/instagram-web-selectors.js';
+export { createInstagramDeviceSelectors } from './adapters/instagram-device-selectors.js';
 export { targetsFromEntities } from './targets-from-entities.js';
 export { createTelegramMtprotoAdapter } from './adapters/telegram-mtproto.js';
 export { createBrowserScrapeAdapter } from './adapters/browser-scrape-adapter.js';
