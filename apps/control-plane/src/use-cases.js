@@ -28,6 +28,17 @@ function seam(code, message) {
   return Object.assign(new Error(`${code}: ${message}`), { code });
 }
 
+// Target selector: an explicit `id`, else the natural (platform,targetType,
+// identifier) triple (all required in that case). Shared by the target.* ops.
+function targetSelector(args = {}, req) {
+  if (args.id) return { id: args.id };
+  return {
+    platform: req(args, 'platform', 'PLATFORM_REQUIRED'),
+    targetType: req(args, 'targetType', 'TARGET_TYPE_REQUIRED'),
+    identifier: req(args, 'identifier', 'IDENTIFIER_REQUIRED')
+  };
+}
+
 // Wires facade operations to real application logic over the engine context
 // (TZ §11.1). ONE definition per operation, exposed identically across every
 // surface (MCP/REST/CLI/SSE/webhooks) via the facade. Generic across platforms —
@@ -410,6 +421,60 @@ export function buildUseCases(ctx) {
     'reconcile.now': async (args = {}) => {
       const intents = await planForPlatform(ctx, { platform: args.platform, source: args.source });
       return { platform: args.platform, intents };
+    },
+
+    // ---- Targets (callable targets database, TZ §3.5/§10.5) ----------------
+    // Selector: an explicit id, else the natural (platform,targetType,identifier).
+    'target.add': async (args = {}) => {
+      const platform = require$(args, 'platform', 'PLATFORM_REQUIRED');
+      const targetType = require$(args, 'targetType', 'TARGET_TYPE_REQUIRED');
+      const identifier = require$(args, 'identifier', 'IDENTIFIER_REQUIRED');
+      const { upserted } = await ctx.targetRepo.upsertMany([
+        { platform, targetType, identifier, source: args.source ?? 'manual', status: args.status, score: args.score, metadata: args.metadata }
+      ]);
+      return { upserted, platform, targetType, identifier };
+    },
+    'target.import': async (args = {}) => {
+      const items = Array.isArray(args.items) ? args.items : [];
+      if (!items.length) throw seam('ITEMS_REQUIRED', 'items[] is required');
+      const norm = items.map((t, i) => {
+        const platform = t.platform ?? args.platform;
+        const targetType = t.targetType ?? args.targetType;
+        if (!platform || !targetType || !t.identifier) throw seam('INVALID_TARGET_ITEM', `item ${i} needs platform, targetType and identifier`);
+        return { platform, targetType, identifier: t.identifier, source: t.source ?? args.source ?? 'import', metadata: t.metadata, score: t.score, status: t.status };
+      });
+      const { upserted } = await ctx.targetRepo.upsertMany(norm);
+      return { imported: norm.length, upserted };
+    },
+    'target.list': async (args = {}) => {
+      const limit = args.limit ?? 100;
+      const items = await ctx.targetRepo.page(
+        { platform: args.platform, targetType: args.targetType, status: args.status, source: args.source, minScore: args.minScore, tag: args.tag },
+        { cursor: args.cursor ?? null, limit }
+      );
+      return { items, nextCursor: items.length === limit ? items[items.length - 1]._id : null };
+    },
+    'target.get': async (args = {}) => {
+      const target = await ctx.targetRepo.get(targetSelector(args, require$));
+      if (!target) throw seam('TARGET_NOT_FOUND', 'no such target');
+      return { target };
+    },
+    'target.score': async (args = {}) => {
+      const { score, ...rest } = scoreTarget(args.features ?? {});
+      const target = await ctx.targetRepo.patch(targetSelector(args, require$), { score, status: 'enriched' });
+      if (!target) throw seam('TARGET_NOT_FOUND', 'no such target');
+      return { score, ...rest, target };
+    },
+    'target.tag': async (args = {}) => {
+      const target = await ctx.targetRepo.patch(targetSelector(args, require$), { addTags: args.add ?? [], removeTags: args.remove ?? [] });
+      if (!target) throw seam('TARGET_NOT_FOUND', 'no such target');
+      return { target };
+    },
+    'target.status': async (args = {}) => {
+      const status = require$(args, 'status', 'STATUS_REQUIRED');
+      const target = await ctx.targetRepo.patch(targetSelector(args, require$), { status });
+      if (!target) throw seam('TARGET_NOT_FOUND', 'no such target');
+      return { target };
     },
 
     // ---- Observability (domain metrics read-model, TZ §15) ----------------

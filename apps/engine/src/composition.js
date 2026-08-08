@@ -4,6 +4,7 @@ import {
   createMongoDeviceQueueRepo,
   createMongoCampaignRepo,
   createMongoScrapeResultRepo,
+  createMongoTargetRepo,
   createMongoProxyRepo,
   createPlatformAutomationAdapter,
   createExpenseRecorder,
@@ -24,6 +25,7 @@ import { EngineDevice } from '@acq/core/models/engine-device';
 import { EngineCampaign } from '@acq/core/models/engine-campaign';
 import { EngineShopSpec } from '@acq/core/models/engine-shop-spec';
 import { EngineScrapeResult } from '@acq/core/models/engine-scrape-result';
+import { EngineTarget } from '@acq/core/models/engine-target';
 import { EngineProxy } from '@acq/core/models/engine-proxy';
 import { EngineSelectorOverride } from '@acq/core/models/engine-selector-override';
 import { EngineEmailIdentity } from '@acq/core/models/engine-email-identity';
@@ -66,6 +68,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     createMongoDeviceQueueRepo,
     createMongoCampaignRepo,
     createMongoScrapeResultRepo,
+    createMongoTargetRepo,
     createMongoProxyRepo,
     createProxyHealthChecker,
     createPlatformAutomationAdapter,
@@ -104,6 +107,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     EngineCampaign,
     EngineShopSpec,
     EngineScrapeResult,
+    EngineTarget,
     EngineProxy,
     EngineSelectorOverride,
     EngineEmailIdentity,
@@ -124,6 +128,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
   const deviceQueueRepo = D.createMongoDeviceQueueRepo({ model: D.EngineDeviceQueue });
   const campaignRepo = D.createMongoCampaignRepo({ model: D.EngineCampaign });
   const scrapeResultRepo = D.createMongoScrapeResultRepo({ model: D.EngineScrapeResult });
+  const targetRepo = D.createMongoTargetRepo({ model: D.EngineTarget, clock: D.clock });
   const proxyRepo = D.createMongoProxyRepo({ model: D.EngineProxy });
   const secretResolver = D.secretResolver ?? createEnvSecretResolver();
   // Real proxy health check (verify-by-fact: routes a request through the proxy).
@@ -307,6 +312,7 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     deviceQueueRepo,
     campaignRepo,
     scrapeResultRepo,
+    targetRepo,
     proxyRepo,
     proxyHealthChecker,
     verificationProvider,

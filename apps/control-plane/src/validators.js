@@ -95,7 +95,15 @@ export const SCHEMAS = {
   'scrape.run': schema({ platform: str.required(), targetType: str.required(), target: str.required(), params: obj }),
   'scrape.results': schema({ platform: str, type: str, cursor: str.nullable(), limit: num.integer().positive() }),
   // Reconciliation
-  'reconcile.now': schema({ platform: str, source: str })
+  'reconcile.now': schema({ platform: str, source: str }),
+  // Callable targets database
+  'target.add': schema({ platform: str.required(), targetType: str.required(), identifier: str.required(), source: str, status: str, score: num.min(0), tags: arr.of(str), metadata: obj }),
+  'target.import': schema({ platform: str, targetType: str, source: str, items: arr.of(obj).required() }),
+  'target.list': schema({ platform: str, targetType: str, status: str, source: str, minScore: num.min(0), tag: str, cursor: str.nullable(), limit: num.integer().positive() }),
+  'target.get': schema({ id: str, platform: str, targetType: str, identifier: str }),
+  'target.score': schema({ id: str, platform: str, targetType: str, identifier: str, features: obj }),
+  'target.tag': schema({ id: str, platform: str, targetType: str, identifier: str, add: arr.of(str), remove: arr.of(str) }),
+  'target.status': schema({ id: str, platform: str, targetType: str, identifier: str, status: str.required() })
 };
 
 export function buildValidators() {
