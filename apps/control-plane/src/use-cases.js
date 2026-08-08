@@ -511,13 +511,19 @@ export function buildUseCases(ctx) {
         if (!target) throw seam('TARGET_NOT_FOUND', 'no such target');
       }
       if (!ctx.llmFor) throw seam('LLM_UNAVAILABLE', 'no LLM registry wired');
+      // Comments use a CHAT model (default gpt-4o-mini), deliberately separate
+      // from the system-control/brain LLM (codex): codex drives the platform over
+      // the surfaces, comments want a natural-language chat model. Overridable per
+      // call (args) or centrally (config.commentProvider/commentModel).
+      const provider = args.provider ?? ctx.config?.commentProvider;
+      const model = args.model ?? ctx.config?.commentModel ?? 'gpt-4o-mini';
       const messages = buildCommentPrompt({ target, tone: args.tone, locale: args.locale, persona: args.persona });
-      const res = await ctx.llmFor({ provider: args.provider, model: args.model }).complete({
+      const res = await ctx.llmFor({ provider, model }).complete({
         messages, temperature: args.temperature ?? 0.8, maxTokens: args.maxTokens ?? 120
       });
       const comment = extractCompletionText(res);
       if (!comment) throw seam('COMMENT_EMPTY', 'LLM returned no comment text');
-      return { comment, target: { platform: target.platform, targetType: target.targetType, identifier: target.identifier }, model: args.model ?? null };
+      return { comment, target: { platform: target.platform, targetType: target.targetType, identifier: target.identifier }, model };
     },
 
     // ---- Observability (domain metrics read-model, TZ §15) ----------------

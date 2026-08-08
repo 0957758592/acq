@@ -144,6 +144,9 @@ if (process.argv[1] && process.argv[1].endsWith('server.js')) {
       ),
       llmProvider: process.env.LLM_PROVIDER || undefined,
       llmModel: process.env.LLM_MODEL || undefined,
+      // AI comments use a chat model, separate from the control/brain LLM (codex).
+      commentProvider: process.env.COMMENT_PROVIDER || undefined,
+      commentModel: process.env.COMMENT_MODEL || undefined,
       llmBaseUrl: process.env.LLM_BASE_URL || undefined,
       // Pluggable browser backend (own pool default; Browserbase cloud when keyed).
       browserProvider: process.env.BROWSER_PROVIDER || undefined,

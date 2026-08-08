@@ -377,6 +377,11 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
       // FX for converting reseller-vendor balances/prices (RUB) to the USD-cents
       // the guards use. Configurable, never hardcoded; null -> no conversion.
       rubPerUsd: env.rubPerUsd ?? null,
+      // AI COMMENT model — deliberately separate from the system-control/brain LLM
+      // (codex, which drives the platform over the surfaces). Comments want a chat
+      // model; default gpt-4o-mini, overridable via env (COMMENT_PROVIDER/MODEL).
+      commentProvider: env.commentProvider ?? null,
+      commentModel: env.commentModel ?? 'gpt-4o-mini',
       // Defaults for AUTONOMOUS buys (keystore driver): prefer high-rated suppliers
       // (rating >= 4.5) with the reliable ranking. Every field overridable via env.
       buyDefaults: {

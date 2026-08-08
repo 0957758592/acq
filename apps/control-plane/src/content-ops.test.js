@@ -23,6 +23,15 @@ describe('content.comment (AI comment generation) through the facade', () => {
     expect(ok.data.target).toEqual({ platform: 'instagram', targetType: 'profile', identifier: '@nike' });
     // the prompt embedded the target context
     expect(JSON.stringify(llmCalls[0].messages)).toMatch(/Just do it/);
+    // comments default to the chat model gpt-4o-mini — NOT the system-control
+    // (codex) default; an explicit model still wins.
+    expect(llmCalls[0].model).toBe('gpt-4o-mini');
+  });
+
+  it('an explicit model/provider override the comment default', async () => {
+    const { facade, llmCalls } = build();
+    await facade.execute('content.comment', { role: 'operator', args: { target: { platform: 'ig', identifier: '@n' }, provider: 'openrouter', model: 'openai/gpt-4o-mini' } });
+    expect(llmCalls[0]).toMatchObject({ provider: 'openrouter', model: 'openai/gpt-4o-mini' });
   });
 
   it('resolves the target from the callable targets DB by natural key', async () => {
