@@ -1,4 +1,10 @@
+import Link from 'next/link';
 import { Target } from '@/shared/api/types';
+
+function detailHref(t: Target) {
+  const q = new URLSearchParams({ platform: t.platform, targetType: t.targetType, identifier: t.identifier });
+  return `/targets/detail?${q.toString()}`;
+}
 
 function scoreBadge(score: number | null) {
   if (score == null) return <span className="badge">unscored</span>;
@@ -27,7 +33,7 @@ export function TargetsTable({ targets }: { targets: Target[] }) {
         <tbody>
           {targets.map((t) => (
             <tr key={t._id ?? `${t.platform}:${t.targetType}:${t.identifier}`}>
-              <td className="mono">{t.identifier}</td>
+              <td className="mono"><Link href={detailHref(t)}>{t.identifier}</Link></td>
               <td>{t.platform}</td>
               <td>{t.targetType}</td>
               <td>{t.status}</td>

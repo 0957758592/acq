@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { postOp } from '@/shared/api/browser';
 import type { CommentResult } from '@/shared/api/types';
 
 const TONES = ['friendly', 'enthusiastic', 'supportive', 'witty', 'professional'];
@@ -20,20 +21,10 @@ export function CommentGenerator() {
     setLoading(true);
     setComment(null);
     setError(null);
-    try {
-      const res = await fetch('/api/op/content.comment', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target: { platform, targetType: 'profile', identifier }, tone })
-      });
-      const envelope = (await res.json()) as { data: CommentResult | null; error: { code: string; message: string } | null };
-      if (envelope.error) setError(`${envelope.error.code}: ${envelope.error.message}`);
-      else setComment(envelope.data?.comment ?? '');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'request failed');
-    } finally {
-      setLoading(false);
-    }
+    const { data, error: opErr } = await postOp<CommentResult>('content.comment', { target: { platform, targetType: 'profile', identifier }, tone });
+    if (opErr) setError(`${opErr.code}: ${opErr.message}`);
+    else setComment(data?.comment ?? '');
+    setLoading(false);
   }
 
   return (

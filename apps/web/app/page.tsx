@@ -1,6 +1,7 @@
 import { serverApi } from '@/shared/api/server';
 import { ops } from '@/shared/api/ops';
 import { OutputSummary } from '@/features/telemetry/OutputSummary';
+import { LiveEvents } from '@/features/events/LiveEvents';
 import { ErrorNotice } from '@/features/shared/ErrorNotice';
 import type { TelemetrySummary } from '@/shared/api/types';
 
@@ -36,6 +37,7 @@ export default async function OverviewPage() {
           {instagram ? <OutputSummary summary={instagram} /> : null}
         </>
       )}
+      <LiveEvents />
     </>
   );
 }
