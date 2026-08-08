@@ -44,6 +44,15 @@ describe('generic bringOnlineHandler', () => {
     expect(ctx.saved.map((s) => s.status)).toEqual(['bringing_online', 'assigned']); // reverted, not online
   });
 
+  it('no device automation wired (no device provider) -> honest coded seam, reverts to assigned, never a raw crash', async () => {
+    const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: true } });
+    ctx.provider = { getDeviceProxy: async () => ({ id: 'p', ip: '1.2.3.4', country: 'us' }) }; // pass the proxy gate
+    ctx.automationFor = null; // no device provider -> automationFor is null
+    const res = await bringOnlineHandler(ctx, payload);
+    expect(res).toMatchObject({ ok: false, blocked: 'AUTOMATION_UNAVAILABLE' });
+    expect(ctx.saved.map((s) => s.status)).toContain('assigned'); // reverted, not faked online
+  });
+
   it('proxyMode required: proceeds to login when the device IS behind a proxy', async () => {
     const ctx = fakeCtx({ account: account(), bringOnlineResult: { ok: true } });
     ctx.provider = { getDeviceProxy: async () => ({ id: 'yn5LN', ip: '9.142.42.60', country: 'us' }) };

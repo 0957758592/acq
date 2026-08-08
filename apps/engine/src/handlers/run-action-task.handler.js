@@ -12,7 +12,10 @@ async function runPlatformAction(ctx, payload) {
     const automation = ctx.automationFor(platform);
     return automation.runAction({ providerDeviceId: device?.providerDeviceId, account: doc }, action);
   }
-  return ctx.automation.runAction({ accountId: payload.accountId }, action);
+  if (ctx.automation?.runAction) return ctx.automation.runAction({ accountId: payload.accountId }, action);
+  // No device automation wired -> honest non-confirmed seam (task -> failed),
+  // never a raw crash. verify-by-fact: no device, no faked action.
+  return { ok: false, reason: 'AUTOMATION_UNAVAILABLE' };
 }
 
 // run-action-task consumer (TZ §8.3). Exactly-once via upsertTask on the natural

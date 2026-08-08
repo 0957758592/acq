@@ -48,6 +48,13 @@ export async function bringOnlineHandler(ctx, { accountId, deviceId, platform: p
       }
     }
 
+    // No device provider wired -> automationFor is null. Fail SAFE (revert to
+    // assigned, report the seam) instead of crashing — verify-by-fact, never fake.
+    if (typeof ctx.automationFor !== 'function') {
+      account = transition(account, 'assigned', { clock });
+      await ctx.accountRepo.save(account);
+      return { ok: false, blocked: 'AUTOMATION_UNAVAILABLE' };
+    }
     const automation = ctx.automationFor(platform);
 
     let result;

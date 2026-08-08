@@ -24,6 +24,17 @@ function fakeCtx({ actionResult = { ok: true }, openAfter = false } = {}) {
 
 const payload = { campaignId: 'c1', accountId: 'a1', target: 't1', actionType: 'follow' };
 
+describe('runActionTaskHandler — no automation wired', () => {
+  it('surfaces an honest coded seam (task -> failed), never a raw crash', async () => {
+    const ctx = fakeCtx();
+    delete ctx.automation; // neither ctx.automationFor nor ctx.automation available
+    const res = await runActionTaskHandler(ctx, payload);
+    expect(res).toEqual({ ok: false });
+    const failed = ctx.calls.mark.find((m) => m.s === 'failed');
+    expect(failed.k.lastError).toBe('AUTOMATION_UNAVAILABLE');
+  });
+});
+
 describe('runActionTaskHandler', () => {
   it('upserts (exactly-once), runs the action, marks done and emits action.done', async () => {
     const ctx = fakeCtx({ actionResult: { ok: true }, openAfter: true });
