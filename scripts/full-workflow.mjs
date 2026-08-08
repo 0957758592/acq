@@ -19,6 +19,8 @@ import { EngineDeviceQueue } from '@acq/core/models/engine-device-queue';
 import { EngineCampaign } from '@acq/core/models/engine-campaign';
 import { EngineActionTask } from '@acq/core/models/engine-action-task';
 import { EngineShopSpec } from '@acq/core/models/engine-shop-spec';
+import { EngineTarget } from '@acq/core/models/engine-target';
+import { EngineTelemetry } from '@acq/core/models/engine-telemetry';
 import { EngineExpense } from '@acq/core/models/engine-finance';
 import { createShopRegistry } from '@acq/procurement';
 import { createScrapeProvider, createBrowserScrapeAdapter, createPuppeteerBrowserProvider } from '@acq/scraping';
@@ -202,12 +204,26 @@ async function main() {
 
   // ── STAGE 9 — CONTROL FACADE (single entry point) ──
   console.log('\n[9] CONTROL FACADE (single entry point, RBAC + envelope)');
+  const facade = createFacade({ useCases: buildUseCases(ctx), audit: { record: async () => {} } });
   try {
-    const facade = createFacade({ useCases: buildUseCases(ctx), audit: { record: async () => {} } });
     const cs = await facade.execute('campaign.status', { role: 'readonly', args: { platform: PLATFORM } });
     const as = await facade.execute('account.status', { role: 'readonly', args: { platform: PLATFORM } });
     pass(`facade campaign.status → ${cs.data.campaigns.length} active; account.status → ${as.data.accounts.length} accounts`);
   } catch (e) { fail('facade', `${e.code || ''} ${e.message}`); }
+
+  // ── STAGE 10 — MAXIMIZE-OUTPUT LOOP (targets → telemetry → AI comment) ──
+  console.log('\n[10] MAXIMIZE-OUTPUT LOOP (callable targets DB · output telemetry · AI comment)');
+  const wfId = `@wf_out_${Date.now()}`;
+  try {
+    const add = await facade.execute('target.add', { role: 'operator', args: { platform: 'tiktok', targetType: 'video', identifier: wfId, source: 'scrape', metadata: { views: 8000 } } });
+    const rec = await facade.execute('telemetry.record', { role: 'operator', args: { events: [{ platform: 'tiktok', kind: 'action.comment', target: wfId, metrics: { impressions: 900, likes: 15 }, metadata: { run: wfId } }] } });
+    const sum = await facade.execute('telemetry.summary', { role: 'readonly', args: { platform: 'tiktok' } });
+    const cmt = await facade.execute('content.comment', { role: 'operator', args: { platform: 'tiktok', targetType: 'video', identifier: wfId, tone: 'friendly' } });
+    pass(`targets+telemetry live`, `target.add upserted=${add.data?.upserted}, telemetry ${rec.data?.recorded} rec, summary outputMax=${sum.data?.outputMax} outputScore=${sum.data?.outputScore}`);
+    if (cmt.error) seam('content.comment', cmt.error.code); else pass('content.comment', JSON.stringify(cmt.data.comment).slice(0, 50));
+  } catch (e) { fail('output-loop', `${e.code || ''} ${e.message}`); }
+  await EngineTarget.deleteMany({ identifier: wfId });
+  await EngineTelemetry.deleteMany({ 'metadata.run': wfId });
 
   console.log(`\nEVENTS emitted across workflow: ${events.join(', ') || '(none)'}`);
   await cleanup();
