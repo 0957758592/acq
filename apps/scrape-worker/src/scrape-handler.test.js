@@ -7,15 +7,18 @@ function fakeCtx({ entities = [], proxies = null, scrapeError = null } = {}) {
   const events = [];
   const scraped = [];
   const telemetry = [];
+  const upsertedTargets = [];
   const ctx = {
     upserted,
     events,
     scraped,
     telemetry,
+    upsertedTargets,
     clock,
     scrapeProvider: { scrape: async (payload) => { scraped.push(payload); if (scrapeError) throw scrapeError; return { tier: 'browser', entities }; } },
     scrapeResultRepo: { upsertResults: async (e) => upserted.push(...e) },
     telemetryRepo: { recordMany: async (evs) => { telemetry.push(...evs); return { inserted: evs.length }; } },
+    targetRepo: { upsertMany: async (ts) => { upsertedTargets.push(...ts); return { upserted: ts.length }; } },
     domainMetrics: { recordCaptcha: () => {} },
     eventBus: { publish: async (ev) => events.push(ev.type) }
   };
@@ -57,6 +60,17 @@ describe('scrapeTaskHandler', () => {
     expect(ctx.telemetry).toHaveLength(1);
     expect(ctx.telemetry[0]).toMatchObject({ platform: 'tiktok', kind: 'scrape.messages', outcome: 'failed' });
     expect(ctx.telemetry[0].metrics).toMatchObject({ captchas: 1, errors: 1 });
+  });
+
+  it('feeds discovered actors into the callable targets DB (parser -> targets)', async () => {
+    const entities = [
+      { platform: 'instagram', type: 'follower', key: 'k1', data: { of: '@nike', handle: '@alice' } },
+      { platform: 'instagram', type: 'follower', key: 'k2', data: { of: '@nike', handle: '@bob' } }
+    ];
+    const ctx = fakeCtx({ entities });
+    await scrapeTaskHandler(ctx, { platform: 'instagram', targetType: 'followers', target: '@nike' });
+    expect(ctx.upsertedTargets.map((t) => t.identifier)).toEqual(['@alice', '@bob']);
+    expect(ctx.upsertedTargets.every((t) => t.targetType === 'user' && t.source === 'scrape')).toBe(true);
   });
 
   it('handles an empty scrape result (still emits done, upserts nothing)', async () => {

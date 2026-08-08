@@ -1,4 +1,5 @@
 import { makeEvent } from '@acq/engine-domain';
+import { targetsFromEntities } from '@acq/scraping';
 import { normalizeTelemetryEvent } from '@acq/core/observability/telemetry';
 
 import { resolveResidentialProxy } from './services/resolve-residential-proxy.js';
@@ -43,6 +44,12 @@ export async function scrapeTaskHandler(ctx, payload) {
     throw err;
   }
   const { upserted } = await ctx.scrapeResultRepo.upsertResults(entities);
+  // Feed the callable targets DB (§3.5/§10.5): discovered actors/posts become
+  // targets the AI/campaigns can act on. Best-effort — never breaks the scrape.
+  try {
+    const targets = targetsFromEntities(entities);
+    if (targets.length && ctx.targetRepo?.upsertMany) await ctx.targetRepo.upsertMany(targets);
+  } catch { /* targets enrichment is best-effort */ }
   // Parser telemetry: what this scrape PRODUCED (§10/§15) — itemsOut + tier + latency.
   await emitTelemetry(ctx, {
     platform: payload.platform, kind: `scrape.${payload.targetType}`, source: 'scrape', target: payload.target, tier, outcome: 'ok',

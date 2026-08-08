@@ -6,17 +6,22 @@ import {
   createApiScrapeAdapter,
   createTelegramBotApiEndpoints,
   createTelegramWebSelectors,
+  createInstagramWebSelectors,
   createBrowserSelectorRegistry,
   createTelegramMtprotoAdapter
 } from '@acq/scraping';
 
-// Default browser selector registry: Telegram web (web.telegram.org) selectors
-// are wired so the DEFAULT web scraper extracts group content out of the box;
-// every OTHER platform stays an honest SCRAPE_SELECTORS_UNVERIFIED seam until an
-// operator registers its real URL + in-page extractor. Telegram's selectors are
-// verify-by-fact/overridable (see createTelegramWebSelectors) — a mismatch
-// yields empty rows, never fabricated data.
-const DEFAULT_BROWSER_SELECTORS = createBrowserSelectorRegistry({ telegram: createTelegramWebSelectors() });
+// Default browser selector registry: Telegram web (web.telegram.org) AND
+// Instagram (instagram.com) selectors are wired so the DEFAULT web scraper
+// extracts content out of the box; every OTHER platform stays an honest
+// SCRAPE_SELECTORS_UNVERIFIED seam until an operator registers its real URL +
+// in-page extractor. Both selector sets are verify-by-fact/overridable — a
+// mismatch yields empty rows, never fabricated data. Live IG reads still need an
+// authenticated session + residential proxy (the anti-detect stack, §10).
+const DEFAULT_BROWSER_SELECTORS = createBrowserSelectorRegistry({
+  telegram: createTelegramWebSelectors(),
+  instagram: createInstagramWebSelectors()
+});
 
 // Scrape-worker tier composition (TZ §10.1). Assembles the hybrid tier adapters
 // for the ScrapeProvider. The BROWSER tier (primary) is always wired over a real
