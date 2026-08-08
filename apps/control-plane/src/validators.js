@@ -107,7 +107,9 @@ export const SCHEMAS = {
   // Parser/action telemetry
   'telemetry.record': schema({ events: arr.of(obj), event: obj }),
   'telemetry.query': schema({ platform: str, kind: str, source: str, accountId: str, outcome: str, target: str, since: str, limit: num.integer().positive() }),
-  'telemetry.summary': schema({ platform: str, kind: str, accountId: str, since: str, limit: num.integer().positive() })
+  'telemetry.summary': schema({ platform: str, kind: str, accountId: str, since: str, limit: num.integer().positive() }),
+  // AI comment generation
+  'content.comment': schema({ id: str, platform: str, targetType: str, identifier: str, target: obj, tone: str, locale: str, persona: obj, provider: str, model: str, temperature: num, maxTokens: num.integer().positive() })
 };
 
 export function buildValidators() {

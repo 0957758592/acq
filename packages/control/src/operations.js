@@ -69,6 +69,8 @@ export const OPERATIONS = [
   { name: 'telemetry.record', mutating: true, roles: R.ops },
   { name: 'telemetry.query', mutating: false, roles: R.all },
   { name: 'telemetry.summary', mutating: false, roles: R.all },
+  // AI content generation (TZ §9.8) — LLM comment for a target
+  { name: 'content.comment', mutating: false, roles: R.ops },
   { name: 'email.providers', mutating: false, roles: R.all },
   { name: 'email.identity.register', mutating: true, roles: R.staff },
   { name: 'email.identity.list', mutating: false, roles: R.all },

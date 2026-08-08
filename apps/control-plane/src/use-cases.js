@@ -14,7 +14,7 @@ import { evaluateSlos } from '@acq/core/observability/slo';
 import { normalizeTelemetryEvent, summarizeTelemetry } from '@acq/core/observability/telemetry';
 import { paginate } from '@acq/core/db/paginate';
 import { listMailProviders } from '@acq/integrations';
-import { scoreAccount, scoreTarget } from '@acq/intelligence';
+import { scoreAccount, scoreTarget, buildCommentPrompt, extractCompletionText } from '@acq/intelligence';
 import { generatePersona } from '@acq/account-gen';
 
 function require$(args, field, code) {
@@ -499,6 +499,25 @@ export function buildUseCases(ctx) {
         { limit: args.limit ?? 1000 }
       );
       return summarizeTelemetry(events, { platform: args.platform });
+    },
+
+    // ---- AI content (comment generation, TZ §9.8) --------------------------
+    'content.comment': async (args = {}) => {
+      // Target: an inline object, else resolved from the callable targets DB.
+      let target = args.target;
+      if (!target) {
+        if (!ctx.targetRepo) throw seam('TARGET_REPO_UNAVAILABLE', 'no targets DB wired');
+        target = await ctx.targetRepo.get(targetSelector(args, require$));
+        if (!target) throw seam('TARGET_NOT_FOUND', 'no such target');
+      }
+      if (!ctx.llmFor) throw seam('LLM_UNAVAILABLE', 'no LLM registry wired');
+      const messages = buildCommentPrompt({ target, tone: args.tone, locale: args.locale, persona: args.persona });
+      const res = await ctx.llmFor({ provider: args.provider, model: args.model }).complete({
+        messages, temperature: args.temperature ?? 0.8, maxTokens: args.maxTokens ?? 120
+      });
+      const comment = extractCompletionText(res);
+      if (!comment) throw seam('COMMENT_EMPTY', 'LLM returned no comment text');
+      return { comment, target: { platform: target.platform, targetType: target.targetType, identifier: target.identifier }, model: args.model ?? null };
     },
 
     // ---- Observability (domain metrics read-model, TZ §15) ----------------

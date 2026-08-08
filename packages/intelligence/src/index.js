@@ -4,3 +4,4 @@
  * @property {(input: { subjectType: 'account'|'target', subjectId: string, features: Object }) => Promise<{ score: number, reasons: Object[] }>} score
  */
 export { scoreAccount, scoreTarget, selectTopN } from './scoring.js';
+export { buildCommentPrompt, extractCompletionText } from './comment.js';
