@@ -15,6 +15,22 @@ import { createStructuredLogger } from '@acq/logger';
 
 import { scrapeTaskHandler } from './scrape-handler.js';
 import { buildScrapeAdapters } from './composition.js';
+import { buildMtprotoClientFromEnv } from './mtproto-client.js';
+
+// Lazily load the real GramJS binding and build the MTProto user-session client
+// only when a session is configured — GramJS pulls a heavy socket stack we don't
+// want at import when the mtproto tier is unused. A resolved `env:`/vault secret
+// carries the session string (never hardcoded). Absent config -> null (tier off).
+async function resolveMtprotoClient({ env, secretResolver }) {
+  const sessionString = await secretResolver.resolve(env.mtprotoSession);
+  const apiHash = await secretResolver.resolve(env.mtprotoApiHash);
+  if (!sessionString || !env.mtprotoApiId || !apiHash) return null;
+  const [{ TelegramClient }, { StringSession }] = await Promise.all([
+    import('telegram'),
+    import('telegram/sessions/index.js')
+  ]);
+  return buildMtprotoClientFromEnv({ apiId: Number(env.mtprotoApiId), apiHash, sessionString, gramjs: { TelegramClient, StringSession } });
+}
 
 const QUEUE = 'engine.scrape';
 
@@ -63,6 +79,13 @@ export async function main({ env, deps = {} } = {}) {
   const redis = getRedis(env.redisUrl);
   const logger = createStructuredLogger({ level: env.logLevel || 'info', base: { service: 'scrape-worker' } });
 
+  const secretResolver = deps.secretResolver ?? createEnvSecretResolver();
+
+  // MTProto (Telegram full-history/roster) tier — wired from a configured user
+  // session (api_id/api_hash + Telethon session string). Tests still override
+  // via deps.mtprotoClient; the running worker resolves it from vaulted env.
+  const mtprotoClient = deps.mtprotoClient ?? (await resolveMtprotoClient({ env, secretResolver }));
+
   // Real hybrid tiers by default (browser primary via Puppeteer + optional
   // http/device), assembled by the composition. deps.scrapeAdapters still
   // overrides for tests. Per-platform selectors are the verify-by-fact seam.
@@ -74,7 +97,7 @@ export async function main({ env, deps = {} } = {}) {
         deviceScrape: deps.deviceScrape,
         apiEndpoints: deps.apiEndpoints,
         telegramBotToken: env.telegramBotToken,
-        mtprotoClient: deps.mtprotoClient,
+        mtprotoClient,
         maxConcurrency: env.browserConcurrency
       });
 
@@ -87,7 +110,7 @@ export async function main({ env, deps = {} } = {}) {
     // proxy (`params.useResidential`). Endpoints are vaulted (env: refs may hold a
     // JSON endpoint object); absent one, the pick fails safe with a coded seam.
     proxyRepo: deps.proxyRepo ?? createMongoProxyRepo({ model: EngineProxy }),
-    secretResolver: deps.secretResolver ?? createEnvSecretResolver(),
+    secretResolver,
     eventBus: deps.eventBus ?? makeEventBus(redis)
   };
 
@@ -123,7 +146,12 @@ if (process.argv[1] && process.argv[1].endsWith('worker.js')) {
       redisUrl: process.env.REDIS_URL,
       healthPort: Number(process.env.SCRAPE_HEALTH_PORT || 7700),
       // Opt-in Telegram Bot API tier — absent by default (web scraper remains primary).
-      telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || null
+      telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || null,
+      // Opt-in MTProto tier (full history + roster) — a vaulted user session.
+      // The session string is a secret ref (env:/vault), never a literal here.
+      mtprotoApiId: process.env.TELEGRAM_MTPROTO_API_ID || null,
+      mtprotoApiHash: process.env.TELEGRAM_MTPROTO_API_HASH || null,
+      mtprotoSession: process.env.TELEGRAM_MTPROTO_SESSION || null
     }
   }).catch((err) => {
     console.error('scrape-worker failed to start', err);
