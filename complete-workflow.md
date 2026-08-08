@@ -18,7 +18,7 @@ Supported platforms / Поддерживаемые платформы: **WhatsAp
 5. [The end-to-end account workflow (worked example)](#5-the-end-to-end-account-workflow)
 6. [Per-account-type playbooks (all 8)](#6-per-account-type-playbooks)
 7. [Management surfaces (10 contours)](#7-management-surfaces)
-8. [Operation catalog (34)](#8-operation-catalog)
+8. [Operation catalog (69)](#8-operation-catalog)
 9. [Devices: connect / disconnect / control](#9-devices)
 10. [Proxy subsystem](#10-proxy-subsystem)
 11. [Browser parsing / scraping](#11-browser-parsing--scraping)
@@ -37,7 +37,7 @@ Supported platforms / Поддерживаемые платформы: **WhatsAp
 
 **Design guarantees.**
 - **Generic, not per-platform.** Every platform is a *descriptor* (`appPackage`, `onlineMethod`, `supportedActions`, `scrapeTargets`, `maxAccountsPerDevice`). Adding a platform = adding a descriptor + a thin driver, never forking the engine.
-- **One brain, many mouths.** A single **command facade** (53 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
+- **One brain, many mouths.** A single **command facade** (69 operations) is exposed through **10 control surfaces** (REST, MCP, WebSocket, GraphQL, A2A, gRPC, CLI, SSE, inbound webhooks, RAG). Same RBAC, same validation, same audit everywhere.
 - **Verify-by-fact.** The system never *pretends* an action worked. It reads the device/network to confirm (e.g. app in foreground, proxy actually routes). If it can't confirm, it returns a **coded seam** (`TELEGRAM_SESSION_IMPORT_UNVERIFIED`) and reverts state — no fabricated success.
 - **Exactly-once & self-healing.** Idempotent jobs (unique keys + `$setOnInsert`), optimistic locking (version), a pure `reconcile(snapshot) → intents` planner, and automatic ban→replace.
 
@@ -56,7 +56,7 @@ Clean/Hexagonal/DDD monorepo (yarn workspaces, Node 20 ESM). A **pure zero-depen
   (1 entry point)      │  RBAC · assertSafeArgs · {data,error,meta}  │
                        └───────────────────┬────────────────────────┘
                                            ▼
-  Use-cases (34)  pool.* shop.* device.* campaign.* account.* proxy.* scoring persona verification browser.* scrape.* reconcile
+  Use-cases (69)  pool.* shop.* device.* campaign.* account.* proxy.* target.* telemetry.* content.comment scoring persona verification browser.* scrape.* reconcile
                                            ▼
   Engine (workers)   RabbitMQ + DLQ consumers · node-cron reconciler · exactly-once · optimistic lock
                                            ▼
@@ -269,7 +269,7 @@ curl -XPOST localhost:7500/v1/op/scoring.score \
   -d '{"subjectType":"account","features":{"ageDays":90,"warmupLevel":1}}'
 ```
 
-**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 53 operations; resources = RAG read-models:
+**MCP** (for LLM agents / "the brain") — StreamableHTTP at `/mcp`, session-managed. Tools = the 69 operations; resources = RAG read-models:
 ```js
 const mcp = new Client({name:'agent',version:'1'},{capabilities:{}});
 await mcp.connect(new StreamableHTTPClientTransport(new URL('http://localhost:7500/mcp'),
@@ -316,7 +316,7 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 
 ## 8. Operation catalog
 
-53 operations, RBAC per op (`readonly` < `operator` < `admin`).
+69 operations, RBAC per op (`readonly` < `operator` < `admin`).
 
 > **Cursor pagination (REQUIREM §2.5).** Every inventory list — `account.status`, `device.status`, `email.identity.list`, `scrape.results` — is **cursor-paginated**: pass `{cursor?, limit?}` and get back the rows plus a `nextCursor` (null on the last page). One centralized `paginate()` helper does an index-friendly `_id > cursor` range scan (O(log n)), clamps `limit` to ≤200, and **never loads a whole collection** — so the reads stay bounded under high account/device counts.
 
@@ -328,9 +328,12 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Actions:** `action.retry`
 - **Proxy:** `proxy.status`, `proxy.assign`, `proxy.rotate`
 - **Intelligence:** `scoring.score`, `persona.generate`
+- **Targets (callable DB):** `target.add`, `target.import`, `target.list`, `target.get`, `target.score`, `target.tag`, `target.status`
+- **AI content:** `content.comment`
 - **Verification:** `verification.rent`
 - **Browser:** `browser.providers`, `browser.session.open`, `browser.session.liveView`, `browser.observe`, `browser.act`
 - **Scraping:** `scrape.run`, `scrape.results`
+- **Telemetry (parser/action output):** `telemetry.record`, `telemetry.query`, `telemetry.summary`
 - **Control:** `reconcile.now`
 - **AI backends:** `llm.providers`, `llm.complete`
 - **Email identities:** `email.providers`, `email.identity.register`, `email.identity.list`, `email.identity.disable`
@@ -428,13 +431,25 @@ scrape.run {platform:"instagram", targetType:"followers", target:"@nike", params
   curl -XPOST localhost:7500/v1/op/scrape.run \
     -d '{"platform":"telegram","targetType":"messages","target":"<group>","params":{"via":"bot-api"}}' ...
   ```
-- **Telegram MTProto (mtproto tier) — OPT-IN, built.** Pass `params.via:'mtproto'` against a worker wired with a GramJS/telethon-class **client** (`api_id`/`api_hash` + a user session). Goes **beyond the Bot API**: `getMessages → the FULL message history`, `getParticipants → the FULL member roster` (not just admins). The map→normalize→persist path is real; the MTProto session is the verify-by-fact input (absent → `MTPROTO_CLIENT_UNAVAILABLE`/`SCRAPE_TIER_UNAVAILABLE`). Verified live end-to-end (`scripts/scrape-telegram-mtproto-live.mjs`).
+- **Telegram MTProto (mtproto tier) — OPT-IN, REAL client built.** Pass `params.via:'mtproto'`. A real **GramJS** client (`createTelegramGramjsClient`, the `telegram` npm pkg) implements the tier's `client` port: it opens a **Telethon StringSession** with the `api_id`/`api_hash` it was minted with (lazy single socket) and goes **beyond the Bot API** — `getMessages → the FULL message history`, `getParticipants → the FULL member roster` (broadcast-channel rosters return `CHAT_ADMIN_REQUIRED`, a real Telegram limit, not a bug). The session comes from the reseller delivery: Telegram accounts ship as a Google Drive folder whose `.json` carries the `session_string` + creds — `shop.deliver` downloads it, extracts the session, **vaults it**, and imports the account (`profile.apiId`, `mtproto:true`). The worker builds the tier from `TELEGRAM_MTPROTO_API_ID/API_HASH/SESSION`. Absent config → `SCRAPE_TIER_UNAVAILABLE`. **Verified live** end-to-end this session: connected with a purchased account's session and read the real `@telegram` channel through the full scrape pipeline (`tier:mtproto`).
   ```bash
   scrape.run {platform:'telegram', targetType:'messages', target:'<group>', params:{via:'mtproto', limit:1000}}
   ```
 - **On-device UI-dump — seam.** Reading the Telegram app on a real device remains a verify-by-fact seam you plug in the same way.
 
 The default stays the web scraper; Bot API and MTProto are parameter-selected tiers (`params.via`); the intelligence side downstream is done in all cases.
+
+### 11.1 The maximize-output loop: targets · telemetry · AI comments · Next.js console
+
+**Callable targets database (`target.*`).** A first-class `EngineTarget` registry — the accounts/channels/posts the AI acts on. Deduped by `(platform, targetType, identifier)`; carries `status` (new→enriched→queued→acted→excluded), `score`, `tags`, and a Mixed `metadata` bag (followers/engagement/views). Seven ops on **every surface**: `target.add`, `target.import`, `target.list` (filter platform/status/minScore/tag, cursor-paged), `target.get`, `target.score` (via the intelligence scorer), `target.tag`, `target.status`. **Every scrape feeds it** — discovered followers/members/participants/message-authors become `user` targets, profiles become `profile` targets (+reach), posts become `post` targets (+engagement) via `targetsFromEntities` (best-effort, dedup). Live-verified: `target.add → target.score → target.list` on real Mongo.
+
+**Parser/action telemetry (`telemetry.*`).** A distinct stream recording WHAT each parser/account PRODUCED (≠ the behavioural `EngineTelemetryBaseline`, ≠ the domain `metrics.domain` snapshot). `telemetry.record` (batch), `telemetry.query` (filtered), `telemetry.summary` (rollup). For **tiktok/instagram the summary is OUTPUT-oriented** — `outputScore` = sum of produced reach/engagement (impressions/reach/views/likes/comments/shares/saves/follows); other platforms roll up throughput. Every scrape auto-emits an event (`itemsOut`/latency/`ok`, or `failed`+`captchas`). Live-verified: `record → summary` with a real `outputScore`.
+
+**AI comments (`content.comment`).** Generates a short, human-sounding comment for a target via the **pluggable LLM** (`openai`/`anthropic`/`gemini`/`openrouter`/custom — takes `provider`+`model`; use a **chat** model, not a code model). Resolves the target inline or from the targets DB, builds a context-aware prompt from its handle/bio/recent post, returns the text. Posting is the existing `account.action(comment)`/campaign path (exactly-once). A live call needs an LLM API key.
+
+**The loop:** parser → telemetry (produced) + targets (discovered) → `target.score` → `content.comment` → `account.action(comment)` posts → telemetry measures output → dashboards.
+
+**Custom Next.js console (`apps/web`).** A separate, custom **Next.js 14** app (App Router, TypeScript, SSR) — distinct from the legacy `apps/dashboard` SPA. A typed API client over `POST /v1/op/:op`; pages: Overview (output summaries), Targets, Telemetry (output dashboards), AI Comments. The bearer token stays **server-side** (Server Components + a same-origin `/api/op/*` proxy with an op allow-list); strict **CSP** + security headers; theme-aware, a11y. `tsc --noEmit` clean, `next build` green. Run: `ACQ_API_URL=<control-plane> ACQ_API_TOKEN=<bearer> yarn workspace @acq/web dev`.
 
 ## 12. Procurement, generation, verification, personas, scoring
 
@@ -574,7 +589,7 @@ Each seam is the system **refusing to fake success** — supply the input and th
 5. [Полный воркфлоу аккаунта (разобранный пример)](#5-полный-воркфлоу-аккаунта)
 6. [Плейбуки по каждому типу (все 8)](#6-плейбуки-по-каждому-типу)
 7. [Контуры управления (10)](#7-контуры-управления)
-8. [Каталог операций (34)](#8-каталог-операций)
+8. [Каталог операций (69)](#8-каталог-операций)
 9. [Устройства: подключение / отключение / управление](#9-устройства)
 10. [Подсистема прокси](#10-подсистема-прокси)
 11. [Браузерный парсинг / скрапинг](#11-браузерный-парсинг--скрапинг)
@@ -612,7 +627,7 @@ Each seam is the system **refusing to fake success** — supply the input and th
   (1 точка входа)      │  RBAC · assertSafeArgs · {data,error,meta}  │
                        └───────────────────┬────────────────────────┘
                                            ▼
-  Use-cases (34)  pool.* shop.* device.* campaign.* account.* proxy.* scoring persona verification browser.* scrape.* reconcile
+  Use-cases (69)  pool.* shop.* device.* campaign.* account.* proxy.* target.* telemetry.* content.comment scoring persona verification browser.* scrape.* reconcile
                                            ▼
   Движок (воркеры)   RabbitMQ + DLQ · node-cron реконсайлер · exactly-once · оптимистичные блокировки
                                            ▼
@@ -884,9 +899,12 @@ acq scoring.score subjectType=target 'features={"followers":50000}'
 - **Действия:** `action.retry`
 - **Прокси:** `proxy.status`, `proxy.assign`, `proxy.rotate`
 - **Интеллект:** `scoring.score`, `persona.generate`
+- **Таргеты (callable-база):** `target.add`, `target.import`, `target.list`, `target.get`, `target.score`, `target.tag`, `target.status`
+- **AI-контент:** `content.comment`
 - **Верификация:** `verification.rent`
 - **Браузер:** `browser.providers`, `browser.session.open`, `browser.session.liveView`, `browser.observe`, `browser.act`
 - **Скрапинг:** `scrape.run`, `scrape.results`
+- **Телеметрия (output парсеров/действий):** `telemetry.record`, `telemetry.query`, `telemetry.summary`
 - **Управление:** `reconcile.now`
 - **AI backends:** `llm.providers`, `llm.complete`
 - **Email identities:** `email.providers`, `email.identity.register`, `email.identity.list`, `email.identity.disable`
@@ -1119,4 +1137,4 @@ scrape.run {platform:"instagram", targetType:"followers", target:"@nike", params
 
 ---
 
-*Generated for the `@acq` platform. Single facade · 53 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*
+*Generated for the `@acq` platform. Single facade · 69 operations · 10 surfaces · 8 platforms · verify-by-fact throughout.*
