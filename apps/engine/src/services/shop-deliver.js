@@ -1,5 +1,7 @@
 import { parseDelivery, mapAccountFields } from '@acq/integrations';
 
+import { buildTelegramDeliveredAccounts } from './telegram-deliver.js';
+
 // Deliver-and-import step for reseller (keystore-api) purchases (TZ §6/§8.3).
 // Given a COMPLETED order, fetch its delivery (order/download link), parse the
 // blob into account candidates, VAULT each credential (encrypted at rest — never
@@ -16,14 +18,12 @@ function seam(code, message) {
 // the autonomous keystore adapter (which lets acquireHandler do the insert). Calling
 // order/download here is the API equivalent of "opening order details" on the web —
 // on a not-ready order it raises a RETRYABLE seam so the job re-views on each retry.
-export async function buildDeliveredAccounts(ctx, { shopId, orderId, platform } = {}) {
-  if (orderId === undefined || orderId === null || orderId === '') throw seam('ORDER_ID_REQUIRED', 'orderId is required');
-  if (!platform) throw seam('PLATFORM_REQUIRED', 'platform is required');
-  if (!ctx.credentialVault) throw seam('CREDENTIAL_VAULT_UNAVAILABLE', 'no credential vault wired — refusing to store plaintext credentials');
-
+// Fetch a completed order's raw delivery blob (the API equivalent of "opening
+// order details"). Shared by every platform's import path; a not-ready order
+// raises a RETRYABLE seam so the job re-views on each retry.
+export async function fetchOrderRaw(ctx, { shopId, orderId } = {}) {
   const vendor = ctx.shopVendorFor(shopId);
   const resolvedShopId = shopId ?? ctx.defaultShopId ?? 'dark.shopping';
-
   let link;
   try {
     ({ link } = await vendor.getOrderDownload(orderId));
@@ -33,6 +33,15 @@ export async function buildDeliveredAccounts(ctx, { shopId, orderId, platform } 
   }
   if (!link) throw Object.assign(seam('DELIVERY_NOT_READY', `order ${orderId} has no delivery link yet`), { retryable: true });
   const raw = await vendor.fetchDelivered(link);
+  return { raw, shopId: resolvedShopId };
+}
+
+export async function buildDeliveredAccounts(ctx, { shopId, orderId, platform } = {}) {
+  if (orderId === undefined || orderId === null || orderId === '') throw seam('ORDER_ID_REQUIRED', 'orderId is required');
+  if (!platform) throw seam('PLATFORM_REQUIRED', 'platform is required');
+  if (!ctx.credentialVault) throw seam('CREDENTIAL_VAULT_UNAVAILABLE', 'no credential vault wired — refusing to store plaintext credentials');
+
+  const { raw, shopId: resolvedShopId } = await fetchOrderRaw(ctx, { shopId, orderId });
   const parsed = parseDelivery(raw);
 
   const vault = (v) => (v == null ? undefined : ctx.credentialVault.put(v));
@@ -58,8 +67,22 @@ export async function buildDeliveredAccounts(ctx, { shopId, orderId, platform } 
   return { accounts, shopId: resolvedShopId };
 }
 
+// Platform-dispatched delivery builder. Telegram ships as a Google Drive folder
+// (tdata + session .json), every keystore platform ships a login/pass text blob;
+// each yields the same pool-ready account shape so the insert path is uniform.
+async function buildAccountsForPlatform(ctx, { shopId, orderId, platform } = {}) {
+  if (orderId === undefined || orderId === null || orderId === '') throw seam('ORDER_ID_REQUIRED', 'orderId is required');
+  if (!platform) throw seam('PLATFORM_REQUIRED', 'platform is required');
+  if (platform === 'telegram') {
+    if (!ctx.credentialVault) throw seam('CREDENTIAL_VAULT_UNAVAILABLE', 'no credential vault wired — refusing to store plaintext session');
+    const { raw, shopId: resolvedShopId } = await fetchOrderRaw(ctx, { shopId, orderId });
+    return buildTelegramDeliveredAccounts(ctx, { shopId: resolvedShopId, orderId, platform, raw });
+  }
+  return buildDeliveredAccounts(ctx, { shopId, orderId, platform });
+}
+
 export async function shopDeliver(ctx, { shopId, orderId, platform } = {}) {
-  const { accounts, shopId: resolvedShopId } = await buildDeliveredAccounts(ctx, { shopId, orderId, platform });
+  const { accounts, shopId: resolvedShopId } = await buildAccountsForPlatform(ctx, { shopId, orderId, platform });
   if (accounts.length) await ctx.accountRepo.insertAcquired(accounts, { orderId });
   return {
     imported: accounts.length,

@@ -120,4 +120,17 @@ describe('generic MongoAccountRepo.insertAcquired', () => {
     expect(insertMany[0]).toMatchObject({ tenantId: 'default', status: 'acquired', version: 0, identifier: '@x' });
     expect(insertMany[0].acquisition.externalOrderId).toBe('ORD-1');
   });
+
+  it('carries non-secret profile metadata and the session ref (e.g. telegram mtproto)', async () => {
+    const model = fakeModel();
+    const repo = createMongoAccountRepo({ model });
+    await repo.insertAcquired([{
+      platform: 'telegram', identifier: '+1450', source: 'purchase', secretRefs: { session: 'vault:s' },
+      session: { secretRef: 'vault:s' }, profile: { apiId: 2040, mtproto: true, country: 'CA' }
+    }], { orderId: 'ORD-2' });
+    const doc = model.calls[0].insertMany[0];
+    expect(doc.profile).toEqual({ apiId: 2040, mtproto: true, country: 'CA' });
+    expect(doc.session).toEqual({ secretRef: 'vault:s' });
+    expect(doc.secretRefs.session).toBe('vault:s');
+  });
 });

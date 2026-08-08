@@ -322,6 +322,12 @@ export function buildEngineContext({ env = {}, deps = {} } = {}) {
     defaultShopId,
     credentialVault,
     acquireDriver,
+    // Plain URL→text fetcher (Telegram Drive delivery download; overridable).
+    fetchText: D.fetchText ?? (async (url) => {
+      const res = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } });
+      if (!res.ok) throw Object.assign(new Error(`FETCH_FAILED: ${res.status} for ${url}`), { code: 'FETCH_FAILED' });
+      return res.text();
+    }),
     cookieSessionRestore,
     shopSignup,
     selectorStore,

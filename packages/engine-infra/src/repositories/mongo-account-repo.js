@@ -82,6 +82,10 @@ export function createMongoAccountRepo({ model, tenantId = 'default' } = {}) {
         source: a.source ?? 'purchase',
         shopId: a.shopId ?? null,
         secretRefs: a.secretRefs ?? {},
+        // Non-secret metadata + session-import ref carried through when present
+        // (e.g. Telegram mtproto: profile.apiId/phone/country, session.secretRef).
+        ...(a.profile ? { profile: a.profile } : {}),
+        ...(a.session ? { session: a.session } : {}),
         status: 'acquired',
         assignedDeviceId: null,
         version: 0,

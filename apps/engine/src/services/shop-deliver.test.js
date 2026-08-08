@@ -51,3 +51,18 @@ test('requires orderId and platform', async () => {
   await expect(shopDeliver(ctx, { platform: 'instagram' })).rejects.toMatchObject({ code: 'ORDER_ID_REQUIRED' });
   await expect(shopDeliver(ctx, { orderId: 1 })).rejects.toMatchObject({ code: 'PLATFORM_REQUIRED' });
 });
+
+test('routes a telegram order to the Drive-session path and inserts the mtproto account', async () => {
+  const DRIVE_HTML = `<script>window['_DRIVE_ivd'] = '\\x5b\\x5b\\x5b\\x22FID_JSON\\x22,\\x5b\\x22P\\x22\\x5d,\\x22+14504891347.json\\x22,\\x22application\\/json\\x22\\x5d\\x5d\\x5d';</script>`;
+  const SESSION_JSON = JSON.stringify({ phone: '+14504891347', user_id: '84879', api_id: 2040, api_hash: 'hh', password: 'Ra821', alpha_2: 'CA', session_string: '1AZ' });
+  const ctx = ctxWith({ raw: 'https://drive.google.com/drive/folders/FLD?usp=sharing,' });
+  ctx.fetchText = async (url) => (url.includes('/drive/folders/FLD') ? DRIVE_HTML : url.includes('id=FID_JSON') ? SESSION_JSON : (() => { throw new Error('x'); })());
+
+  const res = await shopDeliver(ctx, { orderId: 7961005, platform: 'telegram' });
+  expect(res.imported).toBe(1);
+  const { accs, opts } = ctx.inserted[0];
+  expect(opts.orderId).toBe(7961005);
+  expect(accs[0]).toMatchObject({ platform: 'telegram', identifier: '+14504891347', profile: { apiId: 2040, mtproto: true } });
+  expect(accs[0].secretRefs.session).toMatch(/^vault:/);
+  expect(JSON.stringify(accs[0])).not.toContain('1AZ'); // session vaulted, never plaintext
+});
