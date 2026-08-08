@@ -2,17 +2,21 @@ import { scrapeTaskHandler } from './scrape-handler.js';
 
 const clock = { now: () => new Date('2026-07-22T15:00:00.000Z') };
 
-function fakeCtx({ entities = [], proxies = null } = {}) {
+function fakeCtx({ entities = [], proxies = null, scrapeError = null } = {}) {
   const upserted = [];
   const events = [];
   const scraped = [];
+  const telemetry = [];
   const ctx = {
     upserted,
     events,
     scraped,
+    telemetry,
     clock,
-    scrapeProvider: { scrape: async (payload) => { scraped.push(payload); return { tier: 'browser', entities }; } },
+    scrapeProvider: { scrape: async (payload) => { scraped.push(payload); if (scrapeError) throw scrapeError; return { tier: 'browser', entities }; } },
     scrapeResultRepo: { upsertResults: async (e) => upserted.push(...e) },
+    telemetryRepo: { recordMany: async (evs) => { telemetry.push(...evs); return { inserted: evs.length }; } },
+    domainMetrics: { recordCaptcha: () => {} },
     eventBus: { publish: async (ev) => events.push(ev.type) }
   };
   if (proxies) {
@@ -35,6 +39,24 @@ describe('scrapeTaskHandler', () => {
     expect(res).toMatchObject({ tier: 'browser', upserted: 1 });
     expect(ctx.upserted).toHaveLength(1);
     expect(ctx.events).toContain('scrape.done');
+  });
+
+  it('emits a parser telemetry event on success (itemsOut + tier + ok outcome)', async () => {
+    const entities = [{ platform: 'ig', type: 'follower', key: 'k1', data: {} }, { platform: 'ig', type: 'follower', key: 'k2', data: {} }];
+    const ctx = fakeCtx({ entities });
+    await scrapeTaskHandler(ctx, { platform: 'instagram', targetType: 'followers', target: '@nike' });
+    expect(ctx.telemetry).toHaveLength(1);
+    expect(ctx.telemetry[0]).toMatchObject({ platform: 'instagram', source: 'scrape', kind: 'scrape.followers', target: '@nike', tier: 'browser', outcome: 'ok' });
+    expect(ctx.telemetry[0].metrics.itemsOut).toBe(2);
+  });
+
+  it('records a FAILED telemetry event when a captcha wall is hit, then re-throws', async () => {
+    const ctx = fakeCtx({ scrapeError: Object.assign(new Error('SCRAPE_CAPTCHA'), { code: 'SCRAPE_CAPTCHA' }) });
+    await expect(scrapeTaskHandler(ctx, { platform: 'tiktok', targetType: 'messages', target: '@x', params: { via: 'mtproto' } }))
+      .rejects.toMatchObject({ code: 'SCRAPE_CAPTCHA' });
+    expect(ctx.telemetry).toHaveLength(1);
+    expect(ctx.telemetry[0]).toMatchObject({ platform: 'tiktok', kind: 'scrape.messages', outcome: 'failed' });
+    expect(ctx.telemetry[0].metrics).toMatchObject({ captchas: 1, errors: 1 });
   });
 
   it('handles an empty scrape result (still emits done, upserts nothing)', async () => {

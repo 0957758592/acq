@@ -103,7 +103,11 @@ export const SCHEMAS = {
   'target.get': schema({ id: str, platform: str, targetType: str, identifier: str }),
   'target.score': schema({ id: str, platform: str, targetType: str, identifier: str, features: obj }),
   'target.tag': schema({ id: str, platform: str, targetType: str, identifier: str, add: arr.of(str), remove: arr.of(str) }),
-  'target.status': schema({ id: str, platform: str, targetType: str, identifier: str, status: str.required() })
+  'target.status': schema({ id: str, platform: str, targetType: str, identifier: str, status: str.required() }),
+  // Parser/action telemetry
+  'telemetry.record': schema({ events: arr.of(obj), event: obj }),
+  'telemetry.query': schema({ platform: str, kind: str, source: str, accountId: str, outcome: str, target: str, since: str, limit: num.integer().positive() }),
+  'telemetry.summary': schema({ platform: str, kind: str, accountId: str, since: str, limit: num.integer().positive() })
 };
 
 export function buildValidators() {

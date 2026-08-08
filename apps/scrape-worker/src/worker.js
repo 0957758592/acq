@@ -5,7 +5,8 @@ import http from 'node:http';
 
 import { createScrapeProvider } from '@acq/scraping';
 
-import { consumeJsonWithDlq, createMongoScrapeResultRepo, createMongoProxyRepo } from '@acq/engine-infra';
+import { consumeJsonWithDlq, createMongoScrapeResultRepo, createMongoProxyRepo, createMongoTelemetryRepo } from '@acq/engine-infra';
+import { EngineTelemetry } from '@acq/core/models/engine-telemetry';
 import { connectMongo, disconnectMongo } from '@acq/core/db/mongo';
 import { connectRabbitmq, disconnectRabbitmq, consumeJson, publishJson } from '@acq/core/queue/rabbitmq';
 import { getRedis, disconnectRedis } from '@acq/core/db/redis';
@@ -106,6 +107,8 @@ export async function main({ env, deps = {} } = {}) {
     logger,
     scrapeProvider: createScrapeProvider({ adapters: wired.adapters }),
     scrapeResultRepo: createMongoScrapeResultRepo({ model: EngineScrapeResult }),
+    // Parser telemetry sink (§10/§15) — every scrape records what it produced.
+    telemetryRepo: deps.telemetryRepo ?? createMongoTelemetryRepo({ model: EngineTelemetry }),
     // Proxy pool + secret resolution so a scrape can auto-pick a residential
     // proxy (`params.useResidential`). Endpoints are vaulted (env: refs may hold a
     // JSON endpoint object); absent one, the pick fails safe with a coded seam.

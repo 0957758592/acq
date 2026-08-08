@@ -11,6 +11,7 @@ import { shopDeliver } from '../../engine/src/services/shop-deliver.js';
 import { browserLoginFromCookies } from '../../engine/src/services/browser-login.js';
 import { domainSnapshot } from '../../engine/src/services/domain-snapshot.js';
 import { evaluateSlos } from '@acq/core/observability/slo';
+import { normalizeTelemetryEvent, summarizeTelemetry } from '@acq/core/observability/telemetry';
 import { paginate } from '@acq/core/db/paginate';
 import { listMailProviders } from '@acq/integrations';
 import { scoreAccount, scoreTarget } from '@acq/intelligence';
@@ -475,6 +476,29 @@ export function buildUseCases(ctx) {
       const target = await ctx.targetRepo.patch(targetSelector(args, require$), { status });
       if (!target) throw seam('TARGET_NOT_FOUND', 'no such target');
       return { target };
+    },
+
+    // ---- Telemetry (parser/action output stream, TZ §15) -------------------
+    'telemetry.record': async (args = {}) => {
+      const raw = Array.isArray(args.events) ? args.events : (args.event ? [args.event] : []);
+      if (!raw.length) throw seam('EVENTS_REQUIRED', 'events[] or event is required');
+      const events = raw.map((e) => normalizeTelemetryEvent(e, { clock: ctx.clock }));
+      const { inserted } = await ctx.telemetryRepo.recordMany(events);
+      return { recorded: inserted };
+    },
+    'telemetry.query': async (args = {}) => {
+      const events = await ctx.telemetryRepo.query(
+        { platform: args.platform, kind: args.kind, source: args.source, accountId: args.accountId, outcome: args.outcome, target: args.target, since: args.since ? new Date(args.since) : undefined },
+        { limit: args.limit ?? 200 }
+      );
+      return { events };
+    },
+    'telemetry.summary': async (args = {}) => {
+      const events = await ctx.telemetryRepo.query(
+        { platform: args.platform, kind: args.kind, accountId: args.accountId, since: args.since ? new Date(args.since) : undefined },
+        { limit: args.limit ?? 1000 }
+      );
+      return summarizeTelemetry(events, { platform: args.platform });
     },
 
     // ---- Observability (domain metrics read-model, TZ §15) ----------------

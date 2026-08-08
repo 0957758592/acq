@@ -65,6 +65,10 @@ export const OPERATIONS = [
   { name: 'target.score', mutating: true, roles: R.ops },
   { name: 'target.tag', mutating: true, roles: R.ops },
   { name: 'target.status', mutating: true, roles: R.ops },
+  // Parser/action telemetry stream (TZ §15) — record + query + output-max summary
+  { name: 'telemetry.record', mutating: true, roles: R.ops },
+  { name: 'telemetry.query', mutating: false, roles: R.all },
+  { name: 'telemetry.summary', mutating: false, roles: R.all },
   { name: 'email.providers', mutating: false, roles: R.all },
   { name: 'email.identity.register', mutating: true, roles: R.staff },
   { name: 'email.identity.list', mutating: false, roles: R.all },
